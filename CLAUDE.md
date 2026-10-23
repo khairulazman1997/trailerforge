@@ -26,9 +26,15 @@ Read `docs/PLAN.md` first: it holds every approved decision, the milestone plan 
 - Tests sit next to sources as `*.test.ts`; reuse `@trailerforge/schema/fixtures` `sampleProject()`.
 - Local-first: no network calls outside the `Egress` service; never upload footage or game source.
 
-## Packages (M1)
+## Packages
 
-schema · core (store, commands, events) · jobs · plugin-api · media · llm · engine (+ core plugin) · apps/cli. Anthropic API provider and the UI/MCP server arrive in M2.
+schema · core (store, commands, events) · jobs · plugin-api · media · llm · engine (+ core plugin) · apps/cli. Added in M2a: pack-game-trailer (Game Trailer plugin: video types, brief extension) · brief (completeness checker, questionnaire, brief commands, "suggest for me"). Anthropic API provider, UI and MCP server still to come in M2.
+
+## Progress
+
+- M1 complete. M2a in progress: 2a.1 and 2a.2 done; next is 2a.3 (templates, Sonnet), then 2a.4 (storyboard generation, Opus). Task list: end of `docs/PLAN.md`.
+- Record start/end times and usage readings per task in `docs/BUILD_LOG.md` (stamp with `date -u`).
+- Commit only after `pnpm check` passes: `pnpm check && git commit ...`.
 
 ## Game repo knowledge
 
