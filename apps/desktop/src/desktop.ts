@@ -24,7 +24,8 @@ export interface DesktopHost {
   openExternal(url: string): void;
   pickFolder(): Promise<string | undefined>;
   pickFile(): Promise<string | undefined>;
-  handle(channel: string, fn: () => Promise<unknown>): void;
+  /** Register an IPC handler; `senderUrl` is the URL of the frame that called. */
+  handle(channel: string, fn: (senderUrl: string) => Promise<unknown>): void;
 }
 
 export interface Desktop {
@@ -37,7 +38,13 @@ export interface Desktop {
  * window can only ever show the service; links to other sites open in the user's browser.
  */
 export async function startDesktop(host: DesktopHost): Promise<Desktop> {
-  const secrets = await openSafeSecretStore(join(host.dataDir, 'secrets.json'), host.safeStorage);
+  // Encrypted keys get their own file so the CLI (which reads secrets.json as plain) never
+  // mistakes ciphertext for a key.
+  const secrets = await openSafeSecretStore(
+    join(host.dataDir, 'secrets.safe.json'),
+    host.safeStorage,
+    join(host.dataDir, 'secrets.json'),
+  );
   const engine = await Engine.start({ home: host.dataDir, secrets });
   let svc;
   try {
@@ -48,8 +55,18 @@ export async function startDesktop(host: DesktopHost): Promise<Desktop> {
   }
   const origin = new URL(svc.url).origin;
 
-  host.handle('tforge:pick-folder', () => host.pickFolder());
-  host.handle('tforge:pick-file', () => host.pickFile());
+  const fromService = (pick: () => Promise<string | undefined>) => async (senderUrl: string) => {
+    if (!isServiceUrl(senderUrl, origin)) throw new Error('refused: not the TrailerForge window');
+    return pick();
+  };
+  host.handle(
+    'tforge:pick-folder',
+    fromService(() => host.pickFolder()),
+  );
+  host.handle(
+    'tforge:pick-file',
+    fromService(() => host.pickFile()),
+  );
 
   const win = host.createWindow();
   win.onWillNavigate((url) => {

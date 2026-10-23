@@ -7,6 +7,15 @@ export interface SafeStorageLike {
   isEncryptionAvailable(): boolean;
   encryptString(plain: string): Buffer;
   decryptString(encrypted: Buffer): string;
+  /** Linux only: 'basic_text' means a hard-coded password, i.e. no real protection. */
+  getSelectedStorageBackend?(): string;
+}
+
+/** True only when the OS really protects the data (not Electron's Linux 'basic_text' fallback). */
+export function osEncryptionAvailable(safe: SafeStorageLike): boolean {
+  if (!safe.isEncryptionAvailable()) return false;
+  const backend = safe.getSelectedStorageBackend?.();
+  return backend !== 'basic_text' && backend !== 'unknown';
 }
 
 /**
@@ -17,9 +26,10 @@ export interface SafeStorageLike {
 export async function openSafeSecretStore(
   path: string,
   safe: SafeStorageLike,
+  /** The plain owner-only file used when the OS cannot encrypt (the engine's default file). */
+  fallbackPath: string,
 ): Promise<SecretStore> {
-  if (!safe.isEncryptionAvailable())
-    return openFileSecretStore(path.replace(/\.json$/, '.plain.json'));
+  if (!osEncryptionAvailable(safe)) return openFileSecretStore(fallbackPath);
 
   const secrets = new Map<string, string>();
   try {

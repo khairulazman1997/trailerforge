@@ -20,7 +20,7 @@ async function harness() {
     decide: (_: string) => true,
     open: (_: string) => {},
     closed: () => {},
-    handlers: new Map<string, () => Promise<unknown>>(),
+    handlers: new Map<string, (senderUrl: string) => Promise<unknown>>(),
   };
   const win: WindowLike = {
     load: async (url) => void (rec.loaded = url),
@@ -68,7 +68,9 @@ describe('desktop shell', () => {
   it('exposes only the two pickers and stops the service when the window closes', async () => {
     const rec = await harness();
     expect([...rec.handlers.keys()].sort()).toEqual(['tforge:pick-file', 'tforge:pick-folder']);
-    expect(await rec.handlers.get('tforge:pick-folder')!()).toBe('/picked/folder');
+    const pickFolder = rec.handlers.get('tforge:pick-folder')!;
+    expect(await pickFolder(`${running!.url}/`)).toBe('/picked/folder');
+    await expect(pickFolder('https://evil.example/')).rejects.toThrow(/refused/);
     const url = running!.url;
     rec.closed();
     await running!.close();
