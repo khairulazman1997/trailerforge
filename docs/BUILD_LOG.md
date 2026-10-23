@@ -37,14 +37,14 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 
 ## Milestone 2a — Brief, storyboard generation, knowledge (backend)
 
-| Task                                                           | Commit        | Start    | End      | Build time | Model  | Notes                                                                                    |
-| -------------------------------------------------------------- | ------------- | -------- | -------- | ---------- | ------ | ---------------------------------------------------------------------------------------- |
-| 2a.1 Game Trailer pack + video types                           | `9246984`     | 14:08:02 | 14:10:00 | ~2 min     | Opus   |                                                                                          |
-| 2a.2 Completeness checker, questionnaire, answers, assumptions | (this commit) | 14:10:31 | 14:13:37 | ~3 min     | Opus   | design gap found: assumed fields must stay answerable                                    |
-| 2a.3 Storyboard templates (release, announcement, gameplay)    | (this commit) | 14:16:42 | 14:19:02 | ~7 min     | Sonnet | weight-based builder; optional slots appear in longer cuts; includes `pnpm install`      |
-| 2a.4 Storyboard generation, regenerate section, decision log   | (this commit) | 14:19:44 | 14:26:36 | ~12 min    | Opus   | found: timeline items reference slots, so replaced slots must be unlinked                |
-| 2a.5 Anthropic API provider                                    | (this commit) | 14:32:00 | 14:33:13 | ~8 min     | Sonnet | structured output + Zod validation; schema-rejection fallback; refusal/truncation errors |
-| 2a.6 Repo scanner + generic extractor                          | (this commit) | 14:35:40 | 14:39:32 | ~10 min    | Opus   | secrets matched by path before any open; extractor reads limited to scanned files        |
+| Task                                                           | Commit    | Start    | End      | Build time | Model  | Notes                                                                                    |
+| -------------------------------------------------------------- | --------- | -------- | -------- | ---------- | ------ | ---------------------------------------------------------------------------------------- |
+| 2a.1 Game Trailer pack + video types                           | `9246984` | 14:08:02 | 14:10:00 | ~2 min     | Opus   |                                                                                          |
+| 2a.2 Completeness checker, questionnaire, answers, assumptions | `d91e61e` | 14:10:31 | 14:13:37 | ~3 min     | Opus   | design gap found: assumed fields must stay answerable                                    |
+| 2a.3 Storyboard templates (release, announcement, gameplay)    | `4d0a7e0` | 14:16:42 | 14:19:02 | ~2 min     | Sonnet | weight-based builder; optional slots appear in longer cuts; includes `pnpm install`      |
+| 2a.4 Storyboard generation, regenerate section, decision log   | `c30c016` | 14:19:44 | 14:26:36 | ~7 min     | Opus   | found: timeline items reference slots, so replaced slots must be unlinked                |
+| 2a.5 Anthropic API provider                                    | `62e42b8` | 14:32:00 | 14:33:13 | ~1 min     | Sonnet | structured output + Zod validation; schema-rejection fallback; refusal/truncation errors |
+| 2a.6 Repo scanner + generic extractor                          | `f0ddc34` | 14:35:40 | 14:39:32 | ~4 min     | Opus   | secrets matched by path before any open; extractor reads limited to scanned files        |
 
 | When (M2a)      | Session    | Week | Note                                      |
 | --------------- | ---------- | ---- | ----------------------------------------- |
