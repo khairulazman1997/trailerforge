@@ -22,7 +22,8 @@ const KIND_WORDS: [RegExp, Kind][] = [
   [/^(achievements?|trophies)$/, 'achievement'],
 ];
 
-function kindOf(word: string): Kind | null {
+/** Map a heading, folder or key segment ("Bosses", "enemy") to an entity kind. */
+export function kindFromWord(word: string): Kind | null {
   const w = word
     .toLowerCase()
     .replace(/[^a-z ]/g, '')
@@ -103,7 +104,7 @@ function fromMarkdownSections(path: string, text: string): ExtractedEntity[] {
         if (item) out.push({ kind: section.kind, ...item, sourcePaths: [path], confidence: 0.6 });
         continue;
       }
-      const kind = kindOf(clean(heading[2]!));
+      const kind = kindFromWord(clean(heading[2]!));
       section = kind ? { kind, level } : null;
       continue;
     }
@@ -167,7 +168,7 @@ function classifyKey(key: string): { kind: Kind; stem: string; part: 'name' | 'd
       : null;
   if (!part) return null;
   for (const s of segs.slice(0, -1)) {
-    const kind = kindOf(s);
+    const kind = kindFromWord(s);
     if (kind) return { kind, stem: segs.slice(0, -1).join('.'), part };
   }
   return null;

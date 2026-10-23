@@ -156,6 +156,9 @@ importers:
 
   packages/pack-game-trailer:
     dependencies:
+      '@trailerforge/knowledge':
+        specifier: workspace:*
+        version: link:../knowledge
       '@trailerforge/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
