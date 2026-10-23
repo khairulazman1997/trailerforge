@@ -57,7 +57,7 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | 2b.8 Generate / regenerate flows                               | `c44d9d3` | 16:33:06 | 16:41:51 | ~9 min     | Sonnet | task split: settings moved to 2b.9; e2e caught a silently-dead Generate button                                 |
 | 2b.9 Settings (UI + backend)                                   | `3d8427f` | 16:51:28 | 17:05    | ~14 min    | Sonnet | key store, routes editor, Chat Handoff relay; one unreproduced e2e failure in 1 of ~6 full runs                |
 | 2b.10 Electron shell                                           | `f455b5f` | 17:08:41 | 17:20    | ~12 min    | Sonnet | main-process logic behind a fake host (tested); real launch unverified here; UI does not use the pickers yet   |
-| 2b.11 M2 hardening                                             | `pending` | 17:17:42 | 17:21    | ~5 min     | Opus   | full-flow e2e green first try; desktop review fixes: IPC sender check, basic_text, file split, quit, perms     |
+| 2b.11 M2 hardening                                             | `d3f27cb` | 17:17:42 | 17:21    | ~5 min     | Opus   | full-flow e2e green first try; desktop review fixes: IPC sender check, basic_text, file split, quit, perms     |
 
 | When (M2a)      | Session    | Week | Note                                      |
 | --------------- | ---------- | ---- | ----------------------------------------- |
