@@ -1,4 +1,5 @@
 import { briefCommands } from '@trailerforge/brief';
+import { genericExtractor } from '@trailerforge/knowledge';
 import { storyboardCommands } from '@trailerforge/storyboard';
 import { JobError, defineJob } from '@trailerforge/jobs';
 import { MediaError, makeProxy, probe } from '@trailerforge/media';
@@ -89,6 +90,7 @@ export const corePlugin = definePlugin({
     });
     for (const command of briefCommands) ctx.commands.register(command);
     for (const command of storyboardCommands) ctx.commands.register(command);
+    ctx.knowledgeExtractors.register(genericExtractor);
     ctx.jobs.register(probeJob);
     ctx.jobs.register(proxyJob);
   },

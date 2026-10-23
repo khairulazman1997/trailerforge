@@ -44,6 +44,7 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | 2a.3 Storyboard templates (release, announcement, gameplay)    | (this commit) | 14:16:42 | 14:19:02 | ~7 min     | Sonnet | weight-based builder; optional slots appear in longer cuts; includes `pnpm install`      |
 | 2a.4 Storyboard generation, regenerate section, decision log   | (this commit) | 14:19:44 | 14:26:36 | ~12 min    | Opus   | found: timeline items reference slots, so replaced slots must be unlinked                |
 | 2a.5 Anthropic API provider                                    | (this commit) | 14:32:00 | 14:33:13 | ~8 min     | Sonnet | structured output + Zod validation; schema-rejection fallback; refusal/truncation errors |
+| 2a.6 Repo scanner + generic extractor                          | (this commit) | 14:35:40 | 14:39:32 | ~10 min    | Opus   | secrets matched by path before any open; extractor reads limited to scanned files        |
 
 | When (M2a)      | Session    | Week | Note                                      |
 | --------------- | ---------- | ---- | ----------------------------------------- |
