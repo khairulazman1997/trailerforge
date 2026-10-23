@@ -21,6 +21,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.2.0",
     "@trailerforge/plugin-api": "workspace:*",
     "zod": "^4.6.7"
   }

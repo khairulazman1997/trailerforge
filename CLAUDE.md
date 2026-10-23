@@ -28,11 +28,11 @@ Read `docs/PLAN.md` first: it holds every approved decision, the milestone plan 
 
 ## Packages
 
-schema · core (store, commands, events) · jobs · plugin-api · media · llm · engine (+ core plugin) · apps/cli. Added in M2a: pack-game-trailer (Game Trailer plugin: video types, brief extension) · brief (completeness checker, questionnaire, brief commands, "suggest for me") · storyboard (LLM generation, regenerate-one-section, lock-enforcing storyboard commands). Decision log: `appendDecisions`/`readDecisions` in core. Anthropic API provider, UI and MCP server still to come in M2.
+schema · core (store, commands, events) · jobs · plugin-api · media · llm · engine (+ core plugin) · apps/cli. Added in M2a: pack-game-trailer (Game Trailer plugin: video types, brief extension) · brief (completeness checker, questionnaire, brief commands, "suggest for me") · storyboard (LLM generation, regenerate-one-section, lock-enforcing storyboard commands). Decision log: `appendDecisions`/`readDecisions` in core. Anthropic provider (`core/anthropic`, needs ANTHROPIC_API_KEY; live test: `ANTHROPIC_LIVE=1`) done; UI and MCP server still to come in M2.
 
 ## Progress
 
-- M1 complete. M2a in progress: 2a.1–2a.4 done; next is 2a.5 (Anthropic API provider, Sonnet). Task list: end of `docs/PLAN.md`.
+- M1 complete. M2a in progress: 2a.1–2a.5 done; next is 2a.6 (repo scanner, Opus). Task list: end of `docs/PLAN.md`.
 - Record start/end times and usage readings per task in `docs/BUILD_LOG.md` (stamp with `date -u`).
 - Commit only after `pnpm check` passes: `pnpm check && git commit ...`.
 
