@@ -26,6 +26,10 @@ Read `docs/PLAN.md` first: it holds every approved decision, the milestone plan 
 - Tests sit next to sources as `*.test.ts`; reuse `@trailerforge/schema/fixtures` `sampleProject()`.
 - Local-first: no network calls outside the `Egress` service; never upload footage or game source.
 
+## Packages (M1)
+
+schema · core (store, commands, events) · jobs · plugin-api · media · llm · engine (+ core plugin) · apps/cli. Anthropic API provider and the UI/MCP server arrive in M2.
+
 ## Game repo knowledge
 
 User's game is **Unity**. Extractor priority: generic + Unity first (M2); Godot/Unreal later.

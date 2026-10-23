@@ -145,7 +145,7 @@ Opus for schemas, interfaces, algorithms, determinism, crash recovery, hard debu
 
 Plan: pause after M1 tasks 1.1–1.2 to read actual plan usage % and extrapolate.
 
-## Milestone 1 — Foundations
+## Milestone 1 — Foundations ✅ complete (2026-10-23)
 
 | #    | Task                                                                                                                                                    | Acceptance                                                          |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
