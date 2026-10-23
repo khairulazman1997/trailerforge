@@ -105,6 +105,9 @@ importers:
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema
+      '@trailerforge/storyboard':
+        specifier: workspace:*
+        version: link:../storyboard
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -162,6 +165,31 @@ importers:
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+
+  packages/storyboard:
+    dependencies:
+      '@trailerforge/core':
+        specifier: workspace:*
+        version: link:../core
+      '@trailerforge/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@trailerforge/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../schema
+      immer:
+        specifier: ^11.2.9
+        version: 11.2.9
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@trailerforge/pack-game-trailer':
+        specifier: workspace:*
+        version: link:../pack-game-trailer
 
 packages:
 

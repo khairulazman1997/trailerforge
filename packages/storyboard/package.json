@@ -1,0 +1,34 @@
+{
+  "name": "@trailerforge/storyboard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "prompts"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@trailerforge/core": "workspace:*",
+    "@trailerforge/llm": "workspace:*",
+    "@trailerforge/plugin-api": "workspace:*",
+    "@trailerforge/schema": "workspace:*",
+    "immer": "^11.2.9",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@trailerforge/pack-game-trailer": "workspace:*"
+  }
+}

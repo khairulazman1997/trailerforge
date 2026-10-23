@@ -1,4 +1,5 @@
 import { briefCommands } from '@trailerforge/brief';
+import { storyboardCommands } from '@trailerforge/storyboard';
 import { JobError, defineJob } from '@trailerforge/jobs';
 import { MediaError, makeProxy, probe } from '@trailerforge/media';
 import { definePlugin, PLUGIN_API_VERSION } from '@trailerforge/plugin-api';
@@ -87,6 +88,7 @@ export const corePlugin = definePlugin({
       captions: ['srt'],
     });
     for (const command of briefCommands) ctx.commands.register(command);
+    for (const command of storyboardCommands) ctx.commands.register(command);
     ctx.jobs.register(probeJob);
     ctx.jobs.register(proxyJob);
   },
