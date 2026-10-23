@@ -4,16 +4,16 @@ Status: **approved 2026-10-23**. Model approach: **manual switching** (Opus only
 
 ## Decisions
 
-| # | Topic | Decision |
-|---|---|---|
-| 1 | Shell | Electron + React + TypeScript (Win/macOS/Linux). Engine runs as a local Node service, so the UI also runs in a browser ("web mode") for headless dev/testing. |
-| 2 | LLM | Provider-agnostic adapter: Anthropic (default), OpenAI, Ollama, deterministic Mock, and **Chat Handoff** (copy a self-contained prompt into a chat, paste the JSON reply back; validated + "fix these errors" follow-up). |
-| 3 | Paid APIs | LLM only. All analysis local (faster-whisper, PySceneDetect, librosa, OpenCV). |
-| 4 | Hardware | CPU baseline; NVENC / VideoToolbox / QSV / VAAPI used when detected. |
-| 5 | Licensing | Closed-source-compatible: system/user-installed FFmpeg detected at runtime; avoid Essentia (AGPL) and Remotion (company license); graphics via `@napi-rs/canvas`. |
-| 6 | Reference videos | Local upload primary; URL download via user-installed `yt-dlp`, explicit opt-in. Structure only. |
-| 7 | Demo assets | Procedurally generated synthetic footage + music (known ground truth for tests). |
-| 8 | Repo | pnpm + Turborepo monorepo in this repository. |
+| #   | Topic            | Decision                                                                                                                                                                                                                  |
+| --- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Shell            | Electron + React + TypeScript (Win/macOS/Linux). Engine runs as a local Node service, so the UI also runs in a browser ("web mode") for headless dev/testing.                                                             |
+| 2   | LLM              | Provider-agnostic adapter: Anthropic (default), OpenAI, Ollama, deterministic Mock, and **Chat Handoff** (copy a self-contained prompt into a chat, paste the JSON reply back; validated + "fix these errors" follow-up). |
+| 3   | Paid APIs        | LLM only. All analysis local (faster-whisper, PySceneDetect, librosa, OpenCV).                                                                                                                                            |
+| 4   | Hardware         | CPU baseline; NVENC / VideoToolbox / QSV / VAAPI used when detected.                                                                                                                                                      |
+| 5   | Licensing        | Closed-source-compatible: system/user-installed FFmpeg detected at runtime; avoid Essentia (AGPL) and Remotion (company license); graphics via `@napi-rs/canvas`.                                                         |
+| 6   | Reference videos | Local upload primary; URL download via user-installed `yt-dlp`, explicit opt-in. Structure only.                                                                                                                          |
+| 7   | Demo assets      | Procedurally generated synthetic footage + music (known ground truth for tests).                                                                                                                                          |
+| 8   | Repo             | pnpm + Turborepo monorepo in this repository.                                                                                                                                                                             |
 
 ## Repo layout
 
@@ -82,61 +82,62 @@ apps/ engine/ ui/ desktop/ cli/
 ## Model routing
 
 ### Building (Claude Code)
+
 Opus for schemas, interfaces, algorithms, determinism, crash recovery, hard debugging. Sonnet for UI, wiring, fixtures, docs, template content.
 
-| Milestone | Lead |
-|---|---|
-| M1 Foundations | Opus (~70%) |
-| M2 Intake + storyboard | Mixed |
-| M3 Capture Pack | Sonnet (~80%) |
-| M4 Ingest + auto-cut | Opus (~75%) |
-| M5 Variants + graphics | Mixed |
-| M6 Review + render | Mixed |
-| M7 Polish | Sonnet (~65%) |
-| M8 Planner scaffold | Sonnet (~85%) |
+| Milestone              | Lead          |
+| ---------------------- | ------------- |
+| M1 Foundations         | Opus (~70%)   |
+| M2 Intake + storyboard | Mixed         |
+| M3 Capture Pack        | Sonnet (~80%) |
+| M4 Ingest + auto-cut   | Opus (~75%)   |
+| M5 Variants + graphics | Mixed         |
+| M6 Review + render     | Mixed         |
+| M7 Polish              | Sonnet (~65%) |
+| M8 Planner scaffold    | Sonnet (~85%) |
 
 ### In-app defaults (`llm.routes.json`, user-editable)
 
-| Task | Model / effort |
-|---|---|
-| Brief parsing | Haiku 5.5 / low |
-| Completeness scoring | No LLM (rules) |
-| "Suggest for me" | Sonnet 5.5 / low |
-| Full storyboard | Opus 5.5 / high |
-| Section regenerate | Sonnet 5.5 / medium |
-| VO script | Opus 5.5 / medium |
-| Capture Pack | Deterministic + Sonnet 5.5 / low for tips |
-| Reference → template | Sonnet 5.5 / medium |
-| AI critique | Opus 5.5 / high |
-| Decision explanations | No LLM |
+| Task                  | Model / effort                            |
+| --------------------- | ----------------------------------------- |
+| Brief parsing         | Haiku 5.5 / low                           |
+| Completeness scoring  | No LLM (rules)                            |
+| "Suggest for me"      | Sonnet 5.5 / low                          |
+| Full storyboard       | Opus 5.5 / high                           |
+| Section regenerate    | Sonnet 5.5 / medium                       |
+| VO script             | Opus 5.5 / medium                         |
+| Capture Pack          | Deterministic + Sonnet 5.5 / low for tips |
+| Reference → template  | Sonnet 5.5 / medium                       |
+| AI critique           | Opus 5.5 / high                           |
+| Decision explanations | No LLM                                    |
 
 ## Build token estimates (rough; refined before each milestone)
 
 | Milestone | Output tokens | Total processed |
-|---|---|---|
-| M1 | 135–195k | 11–19M |
-| M2 | 180–260k | 15–25M |
-| M3 | 80–120k | 6–10M |
-| M4 | 230–345k | 23–40M |
-| M5 | 170–255k | 17–29M |
-| M6 | 230–320k | 21–35M |
-| M7 | 120–200k | 12–20M |
-| M8 | 50–80k | 4–8M |
+| --------- | ------------- | --------------- |
+| M1        | 135–195k      | 11–19M          |
+| M2        | 180–260k      | 15–25M          |
+| M3        | 80–120k       | 6–10M           |
+| M4        | 230–345k      | 23–40M          |
+| M5        | 170–255k      | 17–29M          |
+| M6        | 230–320k      | 21–35M          |
+| M7        | 120–200k      | 12–20M          |
+| M8        | 50–80k        | 4–8M            |
 
 Plan: pause after M1 tasks 1.1–1.2 to read actual plan usage % and extrapolate.
 
 ## Milestone 1 — Foundations
 
-| # | Task | Acceptance |
-|---|---|---|
-| 1.1 | Monorepo scaffold, TS strict, lint, Vitest, CI; Python sidecar (uv, pytest) | Clean `pnpm build && pnpm test`; sidecar `ping` |
-| 1.2 | `schema` package (all core schemas + campaign fields) | Round-trip/validation tests; JSON Schema export |
-| 1.3 | Versioning + migrations | v0→v1 sample migration with backup |
-| 1.4 | ProjectStore: atomic save, autosave, JSON-patch history, command bus, undo/redo | Crash-safety + undo/redo tests |
-| 1.5 | Typed event bus | Subscribe/unsubscribe/error-isolation tests |
-| 1.6 | Persistent job queue | Survives restart, resumes from checkpoint, cancel cleans temp |
-| 1.7 | Plugin API + loader | Sample plugin registers video type + preset; broken plugin isolated |
-| 1.8 | `media` wrapper: probe, capabilities/hwaccel, proxies/thumbs, filtergraph builder, typed errors, **loudness/peak measurement + Quality Gate framework** | Tests on generated fixtures; every error path tested |
-| 1.9 | `llm` adapter: providers incl. Mock + **Chat Handoff**, prompt loader, validate/repair, `llm.routes.json` | Contract tests with Mock and Handoff |
-| 1.10 | Engine + CLI (`new/open/probe/jobs`) | Smoke e2e: create → save → reload → probe |
-| 1.11 | README v0 | Setup, Mermaid architecture diagram, plugin stub guide |
+| #    | Task                                                                                                                                                    | Acceptance                                                          |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1.1  | Monorepo scaffold, TS strict, lint, Vitest, CI; Python sidecar (uv, pytest)                                                                             | Clean `pnpm build && pnpm test`; sidecar `ping`                     |
+| 1.2  | `schema` package (all core schemas + campaign fields)                                                                                                   | Round-trip/validation tests; JSON Schema export                     |
+| 1.3  | Versioning + migrations                                                                                                                                 | v0→v1 sample migration with backup                                  |
+| 1.4  | ProjectStore: atomic save, autosave, JSON-patch history, command bus, undo/redo                                                                         | Crash-safety + undo/redo tests                                      |
+| 1.5  | Typed event bus                                                                                                                                         | Subscribe/unsubscribe/error-isolation tests                         |
+| 1.6  | Persistent job queue                                                                                                                                    | Survives restart, resumes from checkpoint, cancel cleans temp       |
+| 1.7  | Plugin API + loader                                                                                                                                     | Sample plugin registers video type + preset; broken plugin isolated |
+| 1.8  | `media` wrapper: probe, capabilities/hwaccel, proxies/thumbs, filtergraph builder, typed errors, **loudness/peak measurement + Quality Gate framework** | Tests on generated fixtures; every error path tested                |
+| 1.9  | `llm` adapter: providers incl. Mock + **Chat Handoff**, prompt loader, validate/repair, `llm.routes.json`                                               | Contract tests with Mock and Handoff                                |
+| 1.10 | Engine + CLI (`new/open/probe/jobs`)                                                                                                                    | Smoke e2e: create → save → reload → probe                           |
+| 1.11 | README v0                                                                                                                                               | Setup, Mermaid architecture diagram, plugin stub guide              |
