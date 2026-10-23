@@ -2,15 +2,8 @@
  * Everything a plugin can contribute. Data-only contributions have Zod schemas and are
  * validated at registration; behavioral ones are TypeScript interfaces.
  */
-import {
-  AspectRatio,
-  KnowledgeEntityKind,
-  PluginRef,
-  Rate,
-  Resolution,
-  Storyboard,
-  type Flicks,
-} from '@trailerforge/schema';
+import type { KnowledgeEntityKind, Storyboard } from '@trailerforge/schema';
+import { AspectRatio, PluginRef, Rate, Resolution, type Flicks } from '@trailerforge/schema';
 import { z } from 'zod';
 
 // ---------------------------------------------------------------- data contributions
