@@ -41,6 +41,15 @@ tforge serve --allow-origin http://localhost:5173   # prints the URL and a fresh
 
 Loopback only, a new random token every launch (required on every request, including the event stream), Host and Origin checks against DNS rebinding and other web pages, JSON bodies with a size cap. Long operations (generate, regenerate, scan) run as cancellable tasks; edits to a project are refused while one runs on it.
 
+### The UI (web mode)
+
+```bash
+pnpm --filter @trailerforge/ui build
+node apps/cli/dist/bin.js serve --ui apps/ui/dist     # prints "Open the UI: http://127.0.0.1:<port>/#token=…"
+```
+
+Open that link in a browser. The token travels after the `#`, so it never reaches a server or log; the page reads it, removes it from the address bar, and keeps it for that tab only. For UI development run `pnpm --filter @trailerforge/ui dev` and start the service with `--allow-origin http://localhost:5173`; it prints a "Dev UI" link. Browser tests: `pnpm test:e2e` (set `TFORGE_CHROMIUM` to a Chromium executable if Playwright's own download is not installed).
+
 ### Drive a project from Claude Code (MCP)
 
 ```bash

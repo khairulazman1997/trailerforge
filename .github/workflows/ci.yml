@@ -21,6 +21,8 @@ jobs:
       - run: pnpm format:check
       - run: pnpm build
       - run: pnpm test
+      - run: pnpm --filter @trailerforge/ui exec playwright install --with-deps chromium
+      - run: pnpm --filter @trailerforge/ui test:e2e
 
   python:
     runs-on: ubuntu-latest

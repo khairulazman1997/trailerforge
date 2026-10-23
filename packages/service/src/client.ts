@@ -179,7 +179,7 @@ export class ServiceClient {
    * what you missed; a `reset` event means the gap was too long and you should refetch state.
    */
   async *events(
-    opts: { after?: number; signal?: AbortSignal } = {},
+    opts: { after?: number; signal?: AbortSignal; onOpen?: () => void } = {},
   ): AsyncGenerator<ServiceEventMessage> {
     const q = opts.after !== undefined ? `?after=${opts.after}` : '';
     const res = await this.fetchFn(`${this.opts.baseUrl}/v1/events${q}`, {
@@ -196,6 +196,7 @@ export class ServiceClient {
         data?.error?.message ?? res.statusText,
       );
     }
+    opts.onOpen?.();
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';

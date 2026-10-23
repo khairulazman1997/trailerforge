@@ -15,12 +15,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:py": "cd workers/analysis && uv run pytest",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:py"
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:py",
+    "test:e2e": "turbo run build && pnpm --filter @trailerforge/ui test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.5",
     "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "turbo": "^2.11.10",

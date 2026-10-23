@@ -1,0 +1,287 @@
+import { produceWithPatches, enablePatches } from 'immer';
+import {
+  ServiceError,
+  type ProjectView,
+  type ServiceEventMessage,
+} from '@trailerforge/service/client';
+import { describe, expect, it } from 'vitest';
+import { AppStore, busyTask, describeFailure, type ClientLike } from './store.js';
+
+enablePatches();
+
+const conn = { baseUrl: 'http://127.0.0.1:1', token: 'x'.repeat(43) };
+
+type Proj = { name: string; n: number };
+const view = (id: string, version: number, project: Proj, canUndo = false): ProjectView =>
+  ({
+    id,
+    dir: `/p/${id}`,
+    version,
+    canUndo,
+    canRedo: false,
+    busy: null,
+    project,
+  }) as unknown as ProjectView;
+
+/** An in-memory service: authoritative project copies, an event queue, and call recording. */
+class Fake {
+  projects = new Map<string, ProjectView>();
+  seq = 0;
+  eventCalls: { after: number | undefined }[] = [];
+  private waiting: ((e: ServiceEventMessage | null) => void)[] = [];
+  private queue: ServiceEventMessage[] = [];
+  failNext: ServiceError | null = null;
+  fetches = 0;
+
+  emit(type: string, data: unknown): ServiceEventMessage {
+    const e = { seq: ++this.seq, type, at: '', data };
+    const w = this.waiting.shift();
+    if (w) w(e);
+    else this.queue.push(e);
+    return e;
+  }
+  /** Apply a rename on the authoritative copy and publish the matching event. */
+  rename(id: string, name: string) {
+    const v = this.projects.get(id)!;
+    const [next, patches] = produceWithPatches(
+      v.project as unknown as Proj,
+      (d) => void (d.name = name),
+    );
+    const nv = {
+      ...v,
+      version: v.version + 1,
+      canUndo: true,
+      project: next,
+    } as unknown as ProjectView;
+    this.projects.set(id, nv);
+    return this.emit('project.changed', {
+      projectId: id,
+      version: nv.version,
+      canUndo: true,
+      canRedo: false,
+      patches,
+    });
+  }
+  end() {
+    this.waiting.shift()?.(null);
+  }
+
+  private async *stream(onOpen?: () => void): AsyncGenerator<ServiceEventMessage> {
+    onOpen?.();
+    for (;;) {
+      const e =
+        this.queue.shift() ??
+        (await new Promise<ServiceEventMessage | null>((r) => this.waiting.push(r)));
+      if (!e) return;
+      yield e;
+    }
+  }
+
+  client: ClientLike = {
+    info: async () => ({
+      apiVersion: 'v1',
+      lastSeq: this.seq,
+      videoTypes: [],
+      templates: [],
+      commands: [],
+    }),
+    listProjects: async () =>
+      [...this.projects.values()].map((v) => ({ id: v.id, name: '', dir: v.dir })),
+    getProject: async (id) => {
+      this.fetches++;
+      const v = this.projects.get(id);
+      if (!v) throw new ServiceError(404, 'not-open', 'nope');
+      return v;
+    },
+    openProject: async (dir) => [...this.projects.values()].find((v) => v.dir === dir)!,
+    createProject: async () => {
+      throw new Error('unused');
+    },
+    closeProject: async (id) => {
+      this.projects.delete(id);
+      return { closed: true };
+    },
+    command: async (id, type, payload) => {
+      if (this.failNext) throw this.failNext;
+      if (type === 'core/project.rename') this.rename(id, (payload as { name: string }).name);
+      const v = this.projects.get(id)!;
+      return { version: v.version, canUndo: v.canUndo, canRedo: v.canRedo };
+    },
+    undo: async (id) => ({
+      done: true,
+      version: this.projects.get(id)!.version,
+      canUndo: false,
+      canRedo: true,
+    }),
+    redo: async (id) => ({
+      done: false,
+      version: this.projects.get(id)!.version,
+      canUndo: true,
+      canRedo: false,
+    }),
+    startTask: async (id) => ({
+      id: 't1',
+      kind: 'generate',
+      projectId: id,
+      status: 'running',
+      startedAt: '',
+    }),
+    cancelTask: async () => ({
+      id: 't1',
+      kind: 'generate',
+      projectId: 'p',
+      status: 'cancelled',
+      startedAt: '',
+    }),
+    events: (opts) => {
+      this.eventCalls.push({ after: opts?.after });
+      return this.stream(opts?.onOpen);
+    },
+  };
+}
+
+async function setup() {
+  const fake = new Fake();
+  fake.projects.set('p1', view('p1', 0, { name: 'One', n: 0 }));
+  const store = new AppStore(() => fake.client);
+  expect(await store.connect(conn)).toBe(true);
+  return { fake, store };
+}
+const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+const name = (s: AppStore, id = 'p1') =>
+  (s.getState().projects[id]!.project as unknown as Proj).name;
+
+describe('AppStore', () => {
+  it('loads open projects on connect and reports ready', async () => {
+    const { store } = await setup();
+    expect(store.getState()).toMatchObject({ status: 'ready', order: ['p1'] });
+    store.disconnect();
+  });
+
+  it('fails cleanly when the service rejects the connection', async () => {
+    const store = new AppStore(() => ({
+      ...new Fake().client,
+      info: async () => {
+        throw new ServiceError(401, 'unauthorized', 'missing or wrong token');
+      },
+    }));
+    expect(await store.connect(conn)).toBe(false);
+    expect(store.getState()).toMatchObject({ status: 'failed', error: 'missing or wrong token' });
+  });
+
+  it('applies change events as patches, in order, and tracks undo state', async () => {
+    const { fake, store } = await setup();
+    fake.rename('p1', 'Two');
+    fake.rename('p1', 'Three');
+    await tick();
+    expect(name(store)).toBe('Three');
+    expect(store.getState().projects.p1).toMatchObject({ version: 2, canUndo: true });
+    expect(fake.fetches).toBe(1); // only the initial load: events were applied, not refetched
+    store.disconnect();
+  });
+
+  it('ignores events it already has and refetches when it missed one', async () => {
+    const { fake, store } = await setup();
+    // A change we hear about late, after having fetched past it: skipped.
+    fake.rename('p1', 'Two');
+    await tick();
+    const stale = { ...fake.rename('p1', 'Three') };
+    await tick();
+    fake.emit('project.changed', { ...(stale.data as object) }); // duplicate delivery
+    await tick();
+    expect(name(store)).toBe('Three');
+
+    // Skip one event: the next one arrives with a version gap, so the store refetches.
+    const before = fake.fetches;
+    const v = fake.projects.get('p1')!;
+    fake.projects.set('p1', {
+      ...v,
+      version: v.version + 2,
+      project: { name: 'Five', n: 0 },
+    } as unknown as ProjectView);
+    fake.emit('project.changed', {
+      projectId: 'p1',
+      version: v.version + 2,
+      canUndo: true,
+      canRedo: false,
+      patches: [],
+    });
+    await tick();
+    expect(name(store)).toBe('Five');
+    expect(fake.fetches).toBe(before + 1);
+    store.disconnect();
+  });
+
+  it('refetches everything on a reset, and removes closed projects', async () => {
+    const { fake, store } = await setup();
+    fake.projects.set('p2', view('p2', 0, { name: 'Two', n: 0 }));
+    fake.emit('reset', { reason: 'gap' });
+    await tick();
+    expect(store.getState().order.sort()).toEqual(['p1', 'p2']);
+    fake.emit('project.closed', { projectId: 'p2', dir: '/p/p2' });
+    await tick();
+    expect(Object.keys(store.getState().projects)).toEqual(['p1']);
+    store.disconnect();
+  });
+
+  it('a command resolves only after the local copy shows its result', async () => {
+    const { store } = await setup();
+    const ok = await store.command('p1', 'core/project.rename', { name: 'Renamed' });
+    expect(ok).toBe(true);
+    expect(name(store)).toBe('Renamed'); // read-your-writes
+    expect(await store.undo('p1')).toBe(true);
+    store.disconnect();
+  });
+
+  it('turns failures into toasts and reports false', async () => {
+    const { fake, store } = await setup();
+    fake.failNext = new ServiceError(409, 'locked', 'section "sec_end" is locked');
+    expect(await store.command('p1', 'core/project.rename', { name: 'x' })).toBe(false);
+    expect(store.getState().toasts.map((t) => t.message)).toEqual(['section "sec_end" is locked']);
+    store.dismissToast(store.getState().toasts[0]!.id);
+    expect(store.getState().toasts).toEqual([]);
+    store.disconnect();
+  });
+
+  it('tracks tasks, shows busy projects, and toasts failed tasks', async () => {
+    const { fake, store } = await setup();
+    const task = { id: 't1', kind: 'generate', projectId: 'p1', status: 'running', startedAt: '' };
+    fake.emit('task.updated', task);
+    await tick();
+    expect(busyTask(store.getState(), 'p1')?.id).toBe('t1');
+    fake.emit('task.updated', {
+      ...task,
+      status: 'failed',
+      error: { code: 'x', message: 'provider unavailable' },
+    });
+    await tick();
+    expect(busyTask(store.getState(), 'p1')).toBeUndefined();
+    expect(store.getState().toasts[0]!.message).toBe('generate failed: provider unavailable');
+    store.disconnect();
+  });
+
+  it('resumes the event stream from the last sequence after a drop', async () => {
+    const { fake, store } = await setup();
+    fake.rename('p1', 'Two');
+    await tick();
+    fake.end(); // server closes the stream
+    await tick(400);
+    expect(fake.eventCalls.at(-1)?.after).toBe(1);
+    expect(store.getState().status).toBe('ready');
+    fake.rename('p1', 'Three');
+    await tick();
+    expect(name(store)).toBe('Three');
+    store.disconnect();
+  });
+});
+
+describe('describeFailure', () => {
+  it('adds the first details of a rejected command', () => {
+    const err = new ServiceError(422, 'invalid', 'core/x: invalid payload', [
+      { path: 'a', message: 'Expected string' },
+      { path: 'b', message: 'Required' },
+    ]);
+    expect(describeFailure(err)).toBe('core/x: invalid payload (Expected string; Required)');
+    expect(describeFailure(new Error('boom'))).toBe('boom');
+  });
+});

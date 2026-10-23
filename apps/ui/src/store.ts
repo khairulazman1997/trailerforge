@@ -1,0 +1,371 @@
+import { applyPatches, enablePatches, type Patch } from 'immer';
+import {
+  ServiceError,
+  type ProjectView,
+  type ServiceClient,
+  type ServiceEventMessage,
+  type TaskRequest,
+  type TaskView,
+} from '@trailerforge/service/client';
+import type { Connection } from './connection.js';
+
+enablePatches();
+
+/** The slice of the service client the store uses; tests supply a fake. */
+export type ClientLike = Pick<
+  ServiceClient,
+  | 'info'
+  | 'listProjects'
+  | 'openProject'
+  | 'createProject'
+  | 'closeProject'
+  | 'getProject'
+  | 'command'
+  | 'undo'
+  | 'redo'
+  | 'startTask'
+  | 'cancelTask'
+  | 'events'
+>;
+
+export type Info = Awaited<ReturnType<ServiceClient['info']>>;
+
+export interface JobUpdate {
+  jobId: string;
+  type: string;
+  status: string;
+  progress: number;
+  projectId: string | null;
+}
+
+export interface Toast {
+  id: number;
+  kind: 'error' | 'info';
+  message: string;
+}
+
+export type ConnectionStatus = 'idle' | 'connecting' | 'ready' | 'reconnecting' | 'failed';
+
+export interface AppState {
+  status: ConnectionStatus;
+  error: string | null;
+  info: Info | null;
+  projects: Record<string, ProjectView>;
+  /** Open projects in the order they were opened. */
+  order: string[];
+  tasks: Record<string, TaskView>;
+  jobs: Record<string, JobUpdate>;
+  toasts: Toast[];
+  /** Last event sequence number applied; used to resume after a dropped stream. */
+  lastSeq: number;
+}
+
+const initial: AppState = {
+  status: 'idle',
+  error: null,
+  info: null,
+  projects: {},
+  order: [],
+  tasks: {},
+  jobs: {},
+  toasts: [],
+  lastSeq: 0,
+};
+
+interface ProjectChanged {
+  projectId: string;
+  version: number;
+  canUndo: boolean;
+  canRedo: boolean;
+  patches: Patch[];
+}
+
+const sleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => (clearTimeout(t), resolve()), { once: true });
+  });
+
+/** Human-readable text for a failed request (what a toast shows). */
+export function describeFailure(err: unknown): string {
+  if (err instanceof ServiceError) {
+    const detail = Array.isArray(err.details)
+      ? (err.details as { path?: string; message?: string; label?: string }[])
+          .slice(0, 3)
+          .map((d) => d.message ?? d.label ?? '')
+          .filter(Boolean)
+          .join('; ')
+      : '';
+    return detail ? `${err.message} (${detail})` : err.message;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Client-side mirror of the engine's state. The service is the source of truth: edits are sent
+ * as commands, and the state changes when the matching event arrives (patches applied in version
+ * order, with a refetch on any gap), so every window and tool sees the same thing.
+ */
+export class AppStore {
+  private state: AppState = initial;
+  private readonly listeners = new Set<() => void>();
+  private client: ClientLike | null = null;
+  private abort: AbortController | null = null;
+  private toastId = 0;
+
+  constructor(private readonly makeClient: (c: Connection) => ClientLike) {}
+
+  // ---- external-store plumbing (useSyncExternalStore) ----
+  getState = (): AppState => this.state;
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+  private set(patch: Partial<AppState> | ((s: AppState) => Partial<AppState>)) {
+    this.state = { ...this.state, ...(typeof patch === 'function' ? patch(this.state) : patch) };
+    for (const l of this.listeners) l();
+  }
+
+  // ---- connection ----
+  async connect(conn: Connection): Promise<boolean> {
+    this.disconnect();
+    const abort = (this.abort = new AbortController());
+    const client = (this.client = this.makeClient(conn));
+    this.set({ ...initial, status: 'connecting' });
+    try {
+      const info = await client.info();
+      this.set({ info, lastSeq: info.lastSeq });
+      await this.refetchAll();
+      this.set({ status: 'ready', error: null });
+    } catch (err) {
+      this.set({ status: 'failed', error: describeFailure(err) });
+      return false;
+    }
+    void this.pump(client, abort.signal);
+    return true;
+  }
+
+  disconnect(): void {
+    this.abort?.abort();
+    this.abort = null;
+    this.client = null;
+    this.set({ ...initial });
+  }
+
+  private async pump(client: ClientLike, signal: AbortSignal) {
+    let attempt = 0;
+    while (!signal.aborted) {
+      try {
+        const stream = client.events({
+          after: this.state.lastSeq,
+          signal,
+          onOpen: () => {
+            attempt = 0;
+            if (this.state.status !== 'ready') this.set({ status: 'ready', error: null });
+          },
+        });
+        for await (const ev of stream) await this.apply(ev);
+      } catch (err) {
+        if (signal.aborted) return;
+        if (err instanceof ServiceError && err.status === 401) {
+          this.set({
+            status: 'failed',
+            error: 'The token was rejected. Reconnect with a new link.',
+          });
+          return;
+        }
+      }
+      if (signal.aborted) return;
+      this.set({ status: 'reconnecting' });
+      await sleep(Math.min(5000, 250 * 2 ** attempt++), signal);
+    }
+  }
+
+  // ---- applying events ----
+  async apply(ev: ServiceEventMessage): Promise<void> {
+    if (ev.type === 'reset') {
+      await this.refetchAll();
+      this.set({ lastSeq: ev.seq });
+      return;
+    }
+    this.set((s) => ({ lastSeq: Math.max(s.lastSeq, ev.seq) }));
+    const data = ev.data as Record<string, unknown>;
+    switch (ev.type) {
+      case 'project.changed':
+        await this.applyChange(data as unknown as ProjectChanged);
+        break;
+      case 'project.opened': {
+        const id = String(data.projectId);
+        if (!this.state.projects[id]) await this.refetchProject(id);
+        break;
+      }
+      case 'project.closed':
+        this.removeProject(String(data.projectId));
+        break;
+      case 'task.updated': {
+        const t = data as unknown as TaskView;
+        this.set((s) => ({ tasks: { ...s.tasks, [t.id]: t } }));
+        if (t.status === 'failed') {
+          this.toast('error', `${t.kind} failed: ${t.error?.message ?? 'unknown error'}`);
+        }
+        break;
+      }
+      case 'job.updated': {
+        const j = data as unknown as JobUpdate;
+        this.set((s) => ({ jobs: { ...s.jobs, [j.jobId]: j } }));
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  private async applyChange(c: ProjectChanged) {
+    const current = this.state.projects[c.projectId];
+    if (!current) return;
+    if (c.version <= current.version) return; // already have it (we fetched after it happened)
+    if (c.version !== current.version + 1) {
+      await this.refetchProject(c.projectId); // missed one: don't guess
+      return;
+    }
+    const project = applyPatches(current.project, c.patches);
+    this.putProject({
+      ...current,
+      project,
+      version: c.version,
+      canUndo: c.canUndo,
+      canRedo: c.canRedo,
+    });
+  }
+
+  private putProject(view: ProjectView) {
+    this.set((s) => ({
+      projects: { ...s.projects, [view.id]: view },
+      order: s.order.includes(view.id) ? s.order : [...s.order, view.id],
+    }));
+  }
+
+  private removeProject(id: string) {
+    this.set((s) => {
+      const { [id]: _gone, ...projects } = s.projects;
+      return { projects, order: s.order.filter((x) => x !== id) };
+    });
+  }
+
+  private async refetchProject(id: string) {
+    if (!this.client) return;
+    try {
+      this.putProject(await this.client.getProject(id));
+    } catch (err) {
+      if (err instanceof ServiceError && err.status === 404) this.removeProject(id);
+      else throw err;
+    }
+  }
+
+  private async refetchAll() {
+    if (!this.client) return;
+    const open = await this.client.listProjects();
+    const views = await Promise.all(open.map((p) => this.client!.getProject(p.id)));
+    this.set({
+      projects: Object.fromEntries(views.map((v) => [v.id, v])),
+      order: views.map((v) => v.id),
+    });
+  }
+
+  // ---- actions (errors become toasts; each returns whether it worked) ----
+  private async run<T>(fn: (c: ClientLike) => Promise<T>): Promise<T | undefined> {
+    if (!this.client) return undefined;
+    try {
+      return await fn(this.client);
+    } catch (err) {
+      this.toast('error', describeFailure(err));
+      return undefined;
+    }
+  }
+
+  /** Resolves once the local copy has caught up to `version`, so a caller reads what it wrote. */
+  private waitForVersion(projectId: string, version: number, timeoutMs = 3000): Promise<void> {
+    const reached = () => (this.state.projects[projectId]?.version ?? 0) >= version;
+    if (reached()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => (off(), clearTimeout(timer), resolve());
+      const off = this.subscribe(() => reached() && done());
+      const timer = setTimeout(
+        () => void this.refetchProject(projectId).then(done, done),
+        timeoutMs,
+      );
+    });
+  }
+
+  async openProject(dir: string): Promise<string | null> {
+    const view = await this.run((c) => c.openProject(dir));
+    if (!view) return null;
+    this.putProject(view);
+    return view.id;
+  }
+
+  async createProject(p: {
+    dir: string;
+    name: string;
+    videoTypeId?: string;
+  }): Promise<string | null> {
+    const view = await this.run((c) => c.createProject(p));
+    if (!view) return null;
+    this.putProject(view);
+    return view.id;
+  }
+
+  async closeProject(id: string): Promise<boolean> {
+    const r = await this.run((c) => c.closeProject(id));
+    if (!r) return false;
+    this.removeProject(id);
+    return true;
+  }
+
+  async command(projectId: string, type: string, payload: unknown): Promise<boolean> {
+    const r = await this.run((c) => c.command(projectId, type, payload));
+    if (!r) return false;
+    await this.waitForVersion(projectId, r.version);
+    return true;
+  }
+
+  async undo(projectId: string): Promise<boolean> {
+    const r = await this.run((c) => c.undo(projectId));
+    if (!r) return false;
+    await this.waitForVersion(projectId, r.version);
+    return r.done;
+  }
+
+  async redo(projectId: string): Promise<boolean> {
+    const r = await this.run((c) => c.redo(projectId));
+    if (!r) return false;
+    await this.waitForVersion(projectId, r.version);
+    return r.done;
+  }
+
+  async startTask(projectId: string, req: TaskRequest): Promise<TaskView | null> {
+    const t = await this.run((c) => c.startTask(projectId, req));
+    if (!t) return null;
+    this.set((s) => ({ tasks: { ...s.tasks, [t.id]: s.tasks[t.id] ?? t } }));
+    return t;
+  }
+
+  async cancelTask(taskId: string): Promise<void> {
+    await this.run((c) => c.cancelTask(taskId));
+  }
+
+  // ---- toasts ----
+  toast(kind: Toast['kind'], message: string): void {
+    const t: Toast = { id: ++this.toastId, kind, message };
+    this.set((s) => ({ toasts: [...s.toasts.slice(-4), t] }));
+  }
+  dismissToast = (id: number): void =>
+    this.set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+}
+
+/** The task currently running on a project, if any. */
+export function busyTask(state: AppState, projectId: string): TaskView | undefined {
+  return Object.values(state.tasks).find(
+    (t) => t.projectId === projectId && t.status === 'running',
+  );
+}

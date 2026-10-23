@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { readFile, realpath, stat } from 'node:fs/promises';
+import { extname, isAbsolute, join, relative } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { resolve } from 'node:path';
 import {
@@ -46,6 +48,11 @@ export interface ServiceOptions {
   allowedOrigins?: readonly string[];
   /** Request body cap. Default 5 MiB. */
   maxBodyBytes?: number;
+  /**
+   * Folder of a built UI (index.html + assets) to serve at `/`, same origin as the API. The
+   * files are public (no token); only `/v1/*` needs one. Served with a strict CSP.
+   */
+  staticDir?: string;
 }
 
 export interface RunningService {
@@ -212,7 +219,14 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     engine.bus.on('core/project.changed', ({ projectId, change }) => {
       const version = (versions.get(projectId) ?? 0) + 1;
       versions.set(projectId, version);
-      events.emit('project.changed', { projectId, version, ...change });
+      const store = stores().find((s) => s.state.id === projectId);
+      events.emit('project.changed', {
+        projectId,
+        version,
+        canUndo: store?.canUndo ?? false,
+        canRedo: store?.canRedo ?? false,
+        ...change,
+      });
     }),
     engine.bus.on('core/project.opened', (p) => events.emit('project.opened', p)),
     engine.bus.on('core/project.closed', (p) => {
@@ -446,6 +460,9 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     ],
   ];
 
+  const staticRoot = opts.staticDir ? await realpath(resolve(opts.staticDir)) : undefined;
+  if (staticRoot) await stat(join(staticRoot, 'index.html'));
+
   let port = 0;
   const allowedOrigins = new Set<string>(opts.allowedOrigins ?? []);
   const server = createServer((req, res) => {
@@ -472,10 +489,15 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         res.end();
         return;
       }
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      // The UI bundle is public code; only the API needs the token.
+      if (staticRoot && !url.pathname.startsWith('/v1/') && url.pathname !== '/v1') {
+        await serveStatic(staticRoot, req, res, url.pathname);
+        return;
+      }
       if (!tokenMatches(bearer(req), token))
         throw new HttpError(401, 'unauthorized', 'missing or wrong token');
 
-      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       for (const [method, pattern, handler] of routes) {
         const m = pattern.exec(url.pathname);
         if (!m) continue;
@@ -529,3 +551,79 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
 }
 
 const STREAMING = Symbol('streaming');
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+};
+
+/** The UI may talk to its own origin only, load nothing from elsewhere, and not be framed. */
+export const UI_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  "connect-src 'self'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+/**
+ * Serve a built UI. Only files under the UI folder, after resolving symlinks and `..`; unknown
+ * extension-less paths get index.html so client-side routes survive a reload.
+ */
+async function serveStatic(
+  root: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+) {
+  if (req.method !== 'GET')
+    throw new HttpError(405, 'method-not-allowed', `${req.method} is not supported here`);
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    throw new HttpError(400, 'bad-request', 'malformed path');
+  }
+  if (decoded.includes('\0')) throw new HttpError(400, 'bad-request', 'malformed path');
+  const wanted = decoded.endsWith('/') ? `${decoded}index.html` : decoded;
+  const inside = (p: string) => {
+    const rel = relative(root, p);
+    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+  };
+  const find = async (rel: string): Promise<string | undefined> => {
+    try {
+      const real = await realpath(join(root, rel));
+      return inside(real) && (await stat(real)).isFile() ? real : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  let file = await find(wanted);
+  if (!file && extname(wanted) === '') file = await find('index.html');
+  if (!file) throw new HttpError(404, 'not-found', `no such file ${pathname}`);
+  const body = await readFile(file);
+  const immutable = /^\/assets\/.+-[A-Za-z0-9_-]{6,}\.\w+$/.test(decoded);
+  res.writeHead(200, {
+    'Content-Type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'Content-Length': body.length,
+    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    'Content-Security-Policy': UI_CSP,
+  });
+  res.end(body);
+}

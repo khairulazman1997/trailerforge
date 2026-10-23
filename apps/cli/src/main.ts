@@ -21,7 +21,8 @@ Usage:
   tforge storyboard generate <dir> [--duration <s>] [--template <id>] [--assume]
                                                           Generate the storyboard with the LLM
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
-  tforge serve [--port <n>] [--allow-origin <url>]...    Run the local engine service for the UI (Ctrl+C stops)
+  tforge serve [--ui <dist>] [--port <n>] [--allow-origin <url>]...
+                                                          Run the local engine service (and serve the built UI)
   tforge probe <file>                                     Inspect a media file
   tforge proxy <file> [--out <file>] [--height <px>]      Make an editing proxy (background job)
   tforge jobs [--status <status>]                         List background jobs
@@ -64,6 +65,7 @@ export async function main(
         repo: { type: 'string' },
         'repo-root': { type: 'string', multiple: true },
         port: { type: 'string' },
+        ui: { type: 'string' },
         'allow-origin': { type: 'string', multiple: true },
         duration: { type: 'string' },
         template: { type: 'string' },
@@ -151,12 +153,27 @@ export async function main(
         io.err(`--port must be 0-65535, got "${o.port}"`);
         return 2;
       }
-      const svc = await startService({ engine, port, allowedOrigins: o['allow-origin'] ?? [] });
-      // The token is the only credential; it is printed here for the person who started the service.
-      emit(`TrailerForge service on ${svc.url}\ntoken: ${svc.token}`, {
-        url: svc.url,
-        token: svc.token,
+      const svc = await startService({
+        engine,
+        port,
+        allowedOrigins: o['allow-origin'] ?? [],
+        ...(o.ui ? { staticDir: resolve(o.ui) } : {}),
       });
+      // The token goes after a `#` so it never reaches any server or log.
+      const open = o.ui ? `${svc.url}/#token=${svc.token}` : undefined;
+      const devOrigin = o['allow-origin']?.[0];
+      const dev = devOrigin
+        ? `${devOrigin}/#svc=${encodeURIComponent(svc.url)}&token=${svc.token}`
+        : undefined;
+      emit(
+        [
+          `TrailerForge service on ${svc.url}`,
+          ...(open ? [`Open the UI: ${open}`] : []),
+          ...(dev ? [`Dev UI:      ${dev}`] : []),
+          `token: ${svc.token}`,
+        ].join('\n'),
+        { url: svc.url, token: svc.token, ...(open ? { open } : {}), ...(dev ? { dev } : {}) },
+      );
       await new Promise<void>((done) => {
         process.once('SIGINT', done);
         process.once('SIGTERM', done);

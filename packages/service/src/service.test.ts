@@ -1,5 +1,5 @@
 import { request } from 'node:http';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Engine } from '@trailerforge/engine';
@@ -410,5 +410,93 @@ describe('EventLog', () => {
     written.length = 0;
     log.attach(res, 4);
     expect(written.join('').match(/event: x/g)).toHaveLength(2);
+  });
+});
+
+describe('serving a built UI', () => {
+  let ui: RunningService;
+  let dir: string;
+  beforeAll(async () => {
+    dir = join(root, 'ui-dist');
+    await mkdir(join(dir, 'assets'), { recursive: true });
+    await writeFile(
+      join(dir, 'index.html'),
+      '<!doctype html><title>UI</title><div id="root"></div>',
+    );
+    await writeFile(join(dir, 'assets', 'app-AbCdEf12.js'), 'console.log(1)');
+    await writeFile(join(root, 'secret.txt'), 'TOP SECRET');
+    await symlink(join(root, 'secret.txt'), join(dir, 'leak.txt')).catch(() => undefined);
+    ui = await startService({ engine, staticDir: dir });
+  });
+  afterAll(async () => {
+    await ui.close();
+  });
+  const get = (path: string, headers: Record<string, string> = {}) =>
+    new Promise<{
+      status: number;
+      headers: Record<string, string | string[] | undefined>;
+      body: string;
+    }>((done, fail) => {
+      request({ host: '127.0.0.1', port: ui.port, path, headers }, (res) => {
+        let body = '';
+        res.on('data', (c: Buffer) => (body += c.toString()));
+        res.on('end', () => done({ status: res.statusCode ?? 0, headers: res.headers, body }));
+      })
+        .on('error', fail)
+        .end();
+    });
+
+  it('serves the UI without a token, with a strict CSP, but the API still needs one', async () => {
+    const page = await get('/');
+    expect(page.status).toBe(200);
+    expect(page.body).toMatch(/<div id="root">/);
+    expect(page.headers['content-security-policy']).toMatch(
+      /default-src 'self'.*frame-ancestors 'none'/,
+    );
+    expect(page.headers['content-security-policy']).not.toMatch(
+      /unsafe-eval|script-src[^;]*unsafe-inline/,
+    );
+    expect(page.headers['cache-control']).toBe('no-store');
+    expect((await get('/v1/info')).status).toBe(401);
+    const asset = await get('/assets/app-AbCdEf12.js');
+    expect(asset.headers['content-type']).toMatch(/javascript/);
+    expect(asset.headers['cache-control']).toMatch(/immutable/);
+  });
+
+  it('falls back to index.html for client routes but 404s for missing files', async () => {
+    expect((await get('/p/proj_1/storyboard')).body).toMatch(/<title>UI<\/title>/);
+    expect((await get('/assets/missing.js')).status).toBe(404);
+  });
+
+  it('cannot be tricked into reading outside the UI folder', async () => {
+    for (const p of [
+      '/../secret.txt',
+      '/%2e%2e/secret.txt',
+      '/..%2fsecret.txt',
+      '/assets/../../secret.txt',
+      '/%00',
+      '/leak.txt',
+      '/%',
+    ]) {
+      const r = await get(p);
+      expect(r.body).not.toContain('TOP SECRET');
+      expect([400, 404]).toContain(
+        r.status === 200 && r.body.includes('<title>UI</title>') ? 404 : r.status,
+      );
+    }
+  });
+
+  it('still rejects foreign Hosts and POSTs to static paths', async () => {
+    expect((await get('/', { host: 'evil.example' })).status).toBe(403);
+    const post = await new Promise<number>((done) =>
+      request({ host: '127.0.0.1', port: ui.port, path: '/', method: 'POST' }, (res) =>
+        done(res.statusCode ?? 0),
+      ).end(),
+    );
+    expect(post).toBe(405);
+  });
+
+  it('refuses a UI folder without index.html', async () => {
+    await expect(startService({ engine, staticDir: join(root, 'home') })).rejects.toThrow();
   });
 });

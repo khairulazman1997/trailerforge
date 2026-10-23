@@ -3,3 +3,5 @@ dist
 .turbo
 pnpm-lock.yaml
 workers/analysis/uv.lock
+test-results
+playwright-report
