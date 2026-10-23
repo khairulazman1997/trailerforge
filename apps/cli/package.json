@@ -1,0 +1,21 @@
+{
+  "name": "@trailerforge/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "tforge": "./dist/bin.js"
+  },
+  "main": "./dist/main.js",
+  "types": "./dist/main.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@trailerforge/engine": "workspace:*",
+    "@trailerforge/media": "workspace:*",
+    "@trailerforge/plugin-api": "workspace:*"
+  }
+}

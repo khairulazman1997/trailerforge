@@ -1,0 +1,27 @@
+{
+  "name": "@trailerforge/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@trailerforge/core": "workspace:*",
+    "@trailerforge/jobs": "workspace:*",
+    "@trailerforge/media": "workspace:*",
+    "@trailerforge/plugin-api": "workspace:*",
+    "@trailerforge/schema": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

@@ -36,6 +36,18 @@ importers:
         specifier: ^5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15))
 
+  apps/cli:
+    dependencies:
+      '@trailerforge/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      '@trailerforge/media':
+        specifier: workspace:*
+        version: link:../../packages/media
+      '@trailerforge/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
+
   packages/core:
     dependencies:
       '@trailerforge/schema':
@@ -44,6 +56,27 @@ importers:
       immer:
         specifier: ^11.2.9
         version: 11.2.9
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
+  packages/engine:
+    dependencies:
+      '@trailerforge/core':
+        specifier: workspace:*
+        version: link:../core
+      '@trailerforge/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@trailerforge/media':
+        specifier: workspace:*
+        version: link:../media
+      '@trailerforge/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../schema
       zod:
         specifier: ^4.6.7
         version: 4.6.7
