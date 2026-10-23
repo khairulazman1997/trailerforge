@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { MigrationError, migrateProject } from './migrations.js';
 import { Project } from './project.js';
 
 export interface RefIssue {
@@ -29,6 +30,19 @@ export function validateProjectRefs(project: Project): RefIssue[] {
     formatIds.add(f.id);
   });
 
+  const sourceIds = new Set<string>();
+  project.sources.forEach((src, i) => {
+    claim(src.id, `sources[${i}]`);
+    sourceIds.add(src.id);
+  });
+  const entityIds = new Set<string>();
+  project.knowledge.forEach((e, i) => {
+    claim(e.id, `knowledge[${i}]`);
+    entityIds.add(e.id);
+    if (e.sourceId && !sourceIds.has(e.sourceId))
+      issue(`knowledge[${i}]`, `unknown source "${e.sourceId}"`);
+  });
+
   const sectionIds = new Set<string>();
   const slotIds = new Set<string>();
   const variantIds = new Set<string>();
@@ -42,6 +56,9 @@ export function validateProjectRefs(project: Project): RefIssue[] {
         const p = `storyboard.sections[${si}].slots[${i}]`;
         claim(slot.id, p);
         slotIds.add(slot.id);
+        slot.entityIds.forEach((id) => {
+          if (!entityIds.has(id)) issue(p, `unknown knowledge entity "${id}"`);
+        });
         if (slot.kind === 'shot')
           slot.overlays.forEach((o, oi) => claim(o.id, `${p}.overlays[${oi}]`));
       });
@@ -152,14 +169,35 @@ function findCycle(graph: Map<string, string[]>): string[] | null {
   return null;
 }
 
-export type ParseProjectResult = { ok: true; project: Project } | { ok: false; issues: RefIssue[] };
+export type ParseProjectResult =
+  | { ok: true; project: Project; migratedFrom: number | null; applied: string[] }
+  | { ok: false; issues: RefIssue[] };
 
-/** Schema validation plus cross-reference checks: the gate for loading any project file. */
+/**
+ * The gate for loading any project document: migrate to the current schema version, validate,
+ * then cross-check references. `migratedFrom` is set when migrations ran (callers back up the
+ * original file before saving the upgraded one).
+ */
 export function parseProject(input: unknown): ParseProjectResult {
-  const parsed = Project.safeParse(input);
+  let migrated;
+  try {
+    migrated = migrateProject(input);
+  } catch (err) {
+    if (err instanceof MigrationError)
+      return { ok: false, issues: [{ path: 'schemaVersion', message: err.message }] };
+    throw err;
+  }
+  const parsed = Project.safeParse(migrated.doc);
   if (!parsed.success) return { ok: false, issues: zodIssues(parsed.error) };
   const refIssues = validateProjectRefs(parsed.data);
-  return refIssues.length ? { ok: false, issues: refIssues } : { ok: true, project: parsed.data };
+  if (refIssues.length) return { ok: false, issues: refIssues };
+  const ran = migrated.applied.length > 0;
+  return {
+    ok: true,
+    project: parsed.data,
+    migratedFrom: ran ? migrated.fromVersion : null,
+    applied: migrated.applied,
+  };
 }
 
 function zodIssues(error: z.ZodError): RefIssue[] {

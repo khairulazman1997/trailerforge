@@ -119,3 +119,26 @@ describe('validateProjectRefs', () => {
     if (!r.ok) expect(r.issues[0]?.path).toBe('formatTargets.0.resolution.width');
   });
 });
+
+describe('knowledge references', () => {
+  it('reports unknown entities on slots and unknown sources on entities', () => {
+    const p = parsed();
+    p.knowledge[0]!.sourceId = 'src_gone';
+    const slot = p.storyboard!.sections[1]!.slots[0]!;
+    slot.entityIds.push('ent_gone');
+    const messages = validateProjectRefs(p).map((i) => i.message);
+    expect(messages).toEqual(
+      expect.arrayContaining(['unknown source "src_gone"', 'unknown knowledge entity "ent_gone"']),
+    );
+  });
+
+  it('defaults entity curation flags', () => {
+    const e = parsed().knowledge[1]!;
+    expect(e).toMatchObject({
+      origin: 'user',
+      excludedFromLlm: false,
+      confidence: 1,
+      sourcePaths: [],
+    });
+  });
+});

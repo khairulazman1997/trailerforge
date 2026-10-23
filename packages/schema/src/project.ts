@@ -2,11 +2,12 @@ import { z } from 'zod';
 import { Brief } from './brief.js';
 import { Extensions, Id, IsoDate, IsoDateTime, PluginRef } from './common.js';
 import { FormatTarget } from './format.js';
+import { KnowledgeEntity, KnowledgeSource } from './knowledge.js';
 import { ProjectAssetRef } from './media.js';
 import { Storyboard } from './storyboard.js';
 import { Timeline } from './timeline.js';
 
-/** Current project schema version. Bump together with a migration in `@trailerforge/core`. */
+/** Current project schema version. Bump together with a step in `migrations.ts`. */
 export const PROJECT_SCHEMA_VERSION = 1;
 
 export const PackId = z.string().regex(/^[a-z0-9-]+$/, 'pack ids are lowercase kebab-case');
@@ -43,6 +44,9 @@ export const Project = z.strictObject({
   storyboard: Storyboard.nullable().default(null),
   timelines: z.array(Timeline).default([]),
   assets: z.array(ProjectAssetRef).default([]),
+  /** Local sources (e.g. the game repo) and the curated facts extracted from them. */
+  sources: z.array(KnowledgeSource).default([]),
+  knowledge: z.array(KnowledgeEntity).default([]),
   /** Plugins (and versions) that produced this project's content, for reproducible renders. */
   plugins: z.array(z.strictObject({ id: PackId, version: z.string().min(1) })).default([]),
   extensions: Extensions.default({}),

@@ -87,6 +87,7 @@ export function sampleProject(): ProjectInput {
               title: 'Boss reveal',
               duration: { min: 2, ideal: 2.5, max: 4 },
               location: 'Forest',
+              entityIds: ['ent_warden', 'ent_forest'],
               overlays: [{ id: 'ov_name', templateId: 'core/lower-third', text: 'The Ash Warden' }],
             },
           ],
@@ -214,6 +215,27 @@ export function sampleProject(): ProjectInput {
     assets: [
       { assetId: 'asset_forest', role: 'footage', addedAt: T0 },
       { assetId: 'asset_music', role: 'music', addedAt: T0 },
+    ],
+    sources: [
+      {
+        id: 'src_repo',
+        kind: 'local-repo',
+        path: '/home/dev/ember-knight',
+        extractorIds: ['core/generic', 'game-trailer/unity'],
+        exclude: ['Builds/**'],
+      },
+    ],
+    knowledge: [
+      {
+        id: 'ent_warden',
+        kind: 'boss',
+        name: 'The Ash Warden',
+        description: 'Second-act boss; two phases.',
+        sourceId: 'src_repo',
+        sourcePaths: ['Assets/Data/Bosses/AshWarden.asset'],
+        confidence: 0.9,
+      },
+      { id: 'ent_forest', kind: 'level', name: 'Cinder Forest', origin: 'user' },
     ],
     plugins: [{ id: 'game-trailer', version: '0.0.0' }],
   };

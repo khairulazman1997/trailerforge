@@ -43,6 +43,8 @@ const SlotBase = {
   transitionIn: TransitionRef.optional(),
   transitionOut: TransitionRef.optional(),
   audioNotes: z.string().default(''),
+  /** Knowledge entities (levels, bosses, abilities...) this slot features. */
+  entityIds: z.array(Id).default([]),
   tags: z.array(z.string()).default([]),
   extensions: Extensions.default({}),
 };
