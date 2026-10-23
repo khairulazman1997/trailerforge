@@ -349,6 +349,21 @@ describe('brief data', () => {
   });
 });
 
+describe('task notices', () => {
+  it('shows the latest notice while a task runs and clears it when the task ends', async () => {
+    const { fake, store } = await setup();
+    const task = { id: 't1', kind: 'scan', projectId: 'p1', status: 'running', startedAt: '' };
+    fake.emit('task.updated', task);
+    fake.emit('task.notice', { projectId: 'p1', message: 'Deep scan: reading 12 files' });
+    await tick();
+    expect(store.getState().notices).toEqual({ p1: 'Deep scan: reading 12 files' });
+    fake.emit('task.updated', { ...task, status: 'succeeded' });
+    await tick();
+    expect(store.getState().notices).toEqual({});
+    store.disconnect();
+  });
+});
+
 describe('describeFailure', () => {
   it('adds the first details of a rejected command', () => {
     const err = new ServiceError(422, 'invalid', 'core/x: invalid payload', [

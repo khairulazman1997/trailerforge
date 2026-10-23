@@ -63,6 +63,8 @@ export interface AppState {
   jobs: Record<string, JobUpdate>;
   /** The brief screen's data per project, tagged with the project version it was read at. */
   briefs: Record<string, { version: number; form: BriefForm }>;
+  /** Latest progress message of a running task, per project (cleared when the task ends). */
+  notices: Record<string, string>;
   toasts: Toast[];
   /** Last event sequence number applied; used to resume after a dropped stream. */
   lastSeq: number;
@@ -77,6 +79,7 @@ const initial: AppState = {
   tasks: {},
   jobs: {},
   briefs: {},
+  notices: {},
   toasts: [],
   lastSeq: 0,
 };
@@ -213,10 +216,21 @@ export class AppStore {
         break;
       case 'task.updated': {
         const t = data as unknown as TaskView;
-        this.set((s) => ({ tasks: { ...s.tasks, [t.id]: t } }));
+        this.set((s) => {
+          const { [t.projectId]: _done, ...notices } = s.notices;
+          return {
+            tasks: { ...s.tasks, [t.id]: t },
+            notices: t.status === 'running' ? s.notices : notices,
+          };
+        });
         if (t.status === 'failed') {
           this.toast('error', `${t.kind} failed: ${t.error?.message ?? 'unknown error'}`);
         }
+        break;
+      }
+      case 'task.notice': {
+        const n = data as { projectId: string; message: string };
+        this.set((s) => ({ notices: { ...s.notices, [n.projectId]: n.message } }));
         break;
       }
       case 'job.updated': {
@@ -258,7 +272,8 @@ export class AppStore {
     this.set((s) => {
       const { [id]: _gone, ...projects } = s.projects;
       const { [id]: _brief, ...briefs } = s.briefs;
-      return { projects, briefs, order: s.order.filter((x) => x !== id) };
+      const { [id]: _notice, ...notices } = s.notices;
+      return { projects, briefs, notices, order: s.order.filter((x) => x !== id) };
     });
   }
 

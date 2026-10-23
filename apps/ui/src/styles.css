@@ -490,3 +490,133 @@ label.check {
   font-weight: 600;
   margin: 1rem 0 0.5rem;
 }
+
+/* knowledge */
+.grow {
+  flex: 1;
+  min-width: 12rem;
+}
+.privacy {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+  margin: 1rem 0;
+}
+.privacy p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+.sources {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.source {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+}
+.add-repo {
+  align-items: flex-end;
+  margin: 0.75rem 0;
+}
+.banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.scan-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+  margin-top: 0.75rem;
+}
+.scan-result p {
+  margin: 0.25rem 0 0;
+}
+.toolbar {
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+.entities {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.entity {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+}
+.entity.excluded {
+  border-style: dashed;
+  opacity: 0.85;
+}
+.entity.editing {
+  display: block;
+}
+.entity-main {
+  flex: 1;
+  min-width: 14rem;
+}
+.entity-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.entity-desc {
+  margin: 0.25rem 0;
+}
+.entity-paths {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.entity-paths ul {
+  margin: 0.25rem 0;
+  padding-left: 1.2rem;
+}
+.entity-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.chip.warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.chip.ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.chip.info {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.add-entry {
+  margin-top: 1rem;
+}
+.add-entry summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}

@@ -52,6 +52,8 @@ export interface ServiceOptions {
   allowedOrigins?: readonly string[];
   /** Request body cap. Default 5 MiB. */
   maxBodyBytes?: number;
+  /** Path of the `claude` CLI used by the opt-in deep scan; default `claude` on PATH. */
+  claudeBin?: string;
   /**
    * Folder of a built UI (index.html + assets) to serve at `/`, same origin as the API. The
    * files are public (no token); only `/v1/*` needs one. Served with a strict CSP.
@@ -463,6 +465,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await scanKnowledgeOp(engine, store, {
               ...t.options,
               signal,
+              ...(opts.claudeBin ? { claudeBin: opts.claudeBin } : {}),
               onNotice: (message) =>
                 events.emit('task.notice', { projectId: store.state.id, message }),
             });

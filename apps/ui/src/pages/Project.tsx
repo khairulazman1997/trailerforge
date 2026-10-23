@@ -4,6 +4,7 @@ import { ConfirmDialog } from '../components/Dialog.js';
 import { EditableText } from '../components/EditableText.js';
 import { Link, navigate, projectPath, type ProjectTab } from '../router.js';
 import { BriefPage } from './Brief.js';
+import { KnowledgePage } from './Knowledge.js';
 import { busyTask } from '../store.js';
 
 const TAB_LABEL: Record<ProjectTab, string> = {
@@ -44,6 +45,8 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
         <Overview id={id} />
       ) : tab === 'brief' ? (
         <BriefPage id={id} />
+      ) : tab === 'knowledge' ? (
+        <KnowledgePage id={id} />
       ) : (
         <Placeholder tab={tab} />
       )}

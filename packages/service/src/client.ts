@@ -2,7 +2,7 @@
 import type { Project } from '@trailerforge/schema';
 
 // Wire types come from the engine; type-only, so nothing from it reaches the browser bundle.
-export type { BriefField, BriefForm, BriefSuggestion } from '@trailerforge/engine';
+export type { BriefField, BriefForm, BriefSuggestion, ScanSummary } from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
 
 export class ServiceError extends Error {

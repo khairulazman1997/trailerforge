@@ -22,7 +22,7 @@ export interface TestService {
 }
 
 /** A real engine and service serving the built UI, with a deterministic mock LLM. */
-export async function startTestService(): Promise<TestService> {
+export async function startTestService(opts: { claudeBin?: string } = {}): Promise<TestService> {
   const root = await mkdtemp(join(tmpdir(), 'tforge-ui-e2e-'));
   const prompts: string[] = [];
   const mock = createMockProvider({
@@ -45,7 +45,11 @@ export async function startTestService(): Promise<TestService> {
     loadUserPlugins: false,
     llm,
   });
-  const svc = await startService({ engine, staticDir: resolve(import.meta.dirname, '..', 'dist') });
+  const svc = await startService({
+    engine,
+    staticDir: resolve(import.meta.dirname, '..', 'dist'),
+    ...(opts.claudeBin ? { claudeBin: opts.claudeBin } : {}),
+  });
   return {
     root,
     engine,
