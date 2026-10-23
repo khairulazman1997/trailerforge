@@ -56,3 +56,4 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | After 2a.6      | 10%        | 30%  |                                           |
 | After 2a.7      | 14%        | 31%  |                                           |
 | After 2a.8      | 21%        | 31%  |                                           |
+| After 2b.1      | 24%        | 32%  |                                           |

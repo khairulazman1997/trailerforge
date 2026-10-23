@@ -36,7 +36,7 @@ schema · core (store, commands, events) · jobs · plugin-api · media · llm �
 
 ## Progress
 
-- M1 complete. M2a in progress: M2a (backend) complete: 2a.1–2a.8 done. 2b.1 (storyboard hand-editing) done. Remaining M2: MCP server, UI shell (see `docs/PLAN.md`; M2b task list still to be broken down). Task list: end of `docs/PLAN.md`.
+- M1 complete. M2a in progress: M2a (backend) complete: 2a.1–2a.8 done. 2b.1 (storyboard hand-editing) done. Remaining M2: 2b.2–2b.10 (MCP server, service, UI, Electron) ; next is 2b.2 (MCP server, Sonnet). M2b task list: end of `docs/PLAN.md`. Task list: end of `docs/PLAN.md`.
 - Record start/end times and usage readings per task in `docs/BUILD_LOG.md` (stamp with `date -u`).
 - Commit only after `pnpm check` passes: `pnpm check && git commit ...`.
 
