@@ -76,3 +76,4 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | After 2b.8      | 81%        | 39%  | Sonnet UI task: +7% session               |
 | After 2b.9      | 88%        | 40%  | Sonnet UI + backend: +7% session          |
 | After 2b.10     | 91%        | 41%  | Sonnet Electron shell: +3% session        |
+| After 2b.11     | 94%        | 41%  | Opus hardening: +3% session               |

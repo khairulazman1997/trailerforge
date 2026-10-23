@@ -37,7 +37,7 @@ schema · core (store, commands, events) · jobs · plugin-api · media · llm �
 
 ## Progress
 
-- M1 and M2 (2a + 2b, incl. 2b.11 hardening) complete. Next: break down M3 Capture Pack (Sonnet-led) into tasks at the end of `docs/PLAN.md`, then build. Electron launch is still unverified on a real desktop.
+- M1 and M2 (2a + 2b, incl. 2b.11 hardening) complete. M3 Capture Pack is broken down at the end of `docs/PLAN.md` (3.1–3.9); next is 3.1 (Opus). Starter prompt: `docs/NEXT_SESSION.md`. Electron launch is still unverified on a real desktop.
 - Record start/end times and usage readings per task in `docs/BUILD_LOG.md` (stamp with `date -u`).
 - Commit only after `pnpm check` passes: `pnpm check && git commit ...`.
 
