@@ -107,6 +107,55 @@ describe('routes', () => {
   });
 });
 
+describe('LlmClient.describeRoute', () => {
+  const fake = (id: string, ok: boolean, offDevice: boolean) =>
+    ({
+      id,
+      name: id,
+      kind: 'api',
+      sendsDataOffDevice: offDevice,
+      available: async () => (ok ? { ok: true } : { ok: false, reason: 'nope' }),
+      generate: async () => {
+        throw new Error('describeRoute must not send anything');
+      },
+    }) as never;
+  const client = (providers: Record<string, ReturnType<typeof fake>>) =>
+    new LlmClient({
+      providers: (id) => providers[id],
+      routes: RoutesConfig.parse({
+        routes: { 'a.b': { provider: 'x/api', model: 'big', effort: 'high' } },
+        fallbacks: ['x/local'],
+      }),
+    });
+
+  it('names the provider, model and effort a task would use, without sending', async () => {
+    const r = await client({
+      'x/api': fake('x/api', true, true),
+      'x/local': fake('x/local', true, false),
+    }).describeRoute('a.b');
+    expect(r).toMatchObject({ ok: true, model: 'big', effort: 'high', fellBack: false });
+    expect(r.ok && r.provider.sendsDataOffDevice).toBe(true);
+  });
+
+  it('shows a fallback as a fallback, and says why when nothing is available', async () => {
+    const down = client({
+      'x/api': fake('x/api', false, true),
+      'x/local': fake('x/local', true, false),
+    });
+    const r = await down.describeRoute('a.b');
+    expect(r).toMatchObject({ ok: true, fellBack: true });
+    expect(r.ok && r.provider.id).toBe('x/local');
+    const none = await client({
+      'x/api': fake('x/api', false, true),
+      'x/local': fake('x/local', false, false),
+    }).describeRoute('a.b');
+    expect(none).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/no LLM provider available/),
+    });
+  });
+});
+
 describe('mock provider', () => {
   it('replays replies in order and records calls', async () => {
     const mock = createMockProvider({ 'hook.make': ['garbage', { title: 'Parry', seconds: 1.5 }] });

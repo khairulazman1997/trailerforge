@@ -563,3 +563,34 @@ describe('brief routes', () => {
     await client.waitForTask(t.id);
   });
 });
+
+describe('llm preview route', () => {
+  it('discloses the provider and request contents without sending anything', async () => {
+    const id = (
+      await client.createProject({
+        dir: join(root, 'Preview.tforge'),
+        name: 'Preview',
+        videoTypeId: 'game-trailer/release-trailer',
+      })
+    ).id;
+    await client.command(id, 'core/knowledge.add-entity', {
+      id: 'ent_x',
+      kind: 'boss',
+      name: 'Ash Warden',
+    });
+    const calls = mock.calls.length;
+    const p = await client.llmPreview(id, 'storyboard.generate');
+    expect(p).toMatchObject({
+      available: true,
+      provider: { id: 'core/mock', sendsDataOffDevice: false },
+      willSend: { knowledge: [{ name: 'Ash Warden' }], knowledgeExcluded: 0 },
+    });
+    expect(mock.calls.length).toBe(calls);
+    await expect(client.llmPreview(id, 'vo.script' as never)).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(client.llmPreview('proj_nope', 'storyboard.generate')).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+});

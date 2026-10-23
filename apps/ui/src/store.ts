@@ -3,6 +3,7 @@ import {
   ServiceError,
   type BriefForm,
   type BriefSuggestion,
+  type LlmPreview,
   type ProjectView,
   type ServiceClient,
   type ServiceEventMessage,
@@ -34,6 +35,7 @@ export type ClientLike = Pick<
   | 'assumeMissing'
   | 'suggestBrief'
   | 'decisions'
+  | 'llmPreview'
 >;
 
 export type Info = Awaited<ReturnType<ServiceClient['info']>>;
@@ -230,6 +232,17 @@ export class AppStore {
         });
         if (t.status === 'failed') {
           this.toast('error', `${t.kind} failed: ${t.error?.message ?? 'unknown error'}`);
+        } else if (t.status === 'succeeded' && t.kind === 'generate') {
+          const r = t.result as { provider: string; slots: number; seconds: number } | undefined;
+          if (r)
+            this.toast(
+              'info',
+              `Storyboard written with ${r.provider}: ${r.slots} slots, ${r.seconds} s. Undo goes back to what you had.`,
+            );
+        } else if (t.status === 'succeeded' && t.kind === 'regenerate-section') {
+          const r = t.result as { provider: string; section: { name: string } } | undefined;
+          if (r)
+            this.toast('info', `Rewrote “${r.section.name}” with ${r.provider}. Undo goes back.`);
         }
         break;
       }
@@ -430,6 +443,15 @@ export class AppStore {
     if (!r) return null;
     await this.waitForVersion(projectId, r.version);
     return r.added;
+  }
+
+  // ---- LLM disclosure ----
+  /** What a generation would send and to whom; null if the request failed (a toast says why). */
+  async llmPreview(
+    projectId: string,
+    task: 'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest',
+  ): Promise<LlmPreview | null> {
+    return (await this.run((c) => c.llmPreview(projectId, task))) ?? null;
   }
 
   // ---- decision log ----

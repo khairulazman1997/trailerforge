@@ -6,7 +6,14 @@ import { createMockProvider, LlmClient, RoutesConfig } from '@trailerforge/llm';
 import type { LlmRequest } from '@trailerforge/plugin-api';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Engine } from './engine.js';
-import { answerBriefOp, assumeMissingOp, briefForm, OpError, suggestBriefAnswerOp } from './ops.js';
+import {
+  answerBriefOp,
+  assumeMissingOp,
+  briefForm,
+  llmPreviewOp,
+  OpError,
+  suggestBriefAnswerOp,
+} from './ops.js';
 
 const mock = createMockProvider({
   'brief.suggest': (req: LlmRequest<unknown>) => ({
@@ -209,5 +216,57 @@ describe('proceeding with assumptions', () => {
     expect(
       store.state.brief.assumptions.some((a) => a.field === 'brief.extensions.game-trailer.genre'),
     ).toBe(false);
+  });
+});
+
+describe('llmPreviewOp', () => {
+  it('names the provider and lists exactly what would be sent, honouring exclusions', async () => {
+    const store = await fresh();
+    answerBriefOp(engine, store, { questionId: 'brief.title', value: 'Ember Knight' });
+    store.dispatch('core/knowledge.add-entity', { id: 'ent_a', kind: 'boss', name: 'Ash Warden' });
+    store.dispatch('core/knowledge.add-entity', {
+      id: 'ent_b',
+      kind: 'level',
+      name: 'Hidden Level',
+    });
+    store.dispatch('core/knowledge.set-excluded', { id: 'ent_b', excluded: true });
+    assumeMissingOp(engine, store);
+
+    const p = await llmPreviewOp(engine, store, 'storyboard.generate');
+    expect(p).toMatchObject({
+      task: 'storyboard.generate',
+      available: true,
+      provider: { id: 'core/mock', kind: 'mock', sendsDataOffDevice: false },
+      fellBack: false,
+    });
+    expect(p.willSend.brief).toContain('title');
+    expect(p.willSend.brief).not.toContain('videoTypeId');
+    expect(p.willSend.assumptions).toBeGreaterThan(0);
+    expect(p.willSend.knowledge).toEqual([{ id: 'ent_a', kind: 'boss', name: 'Ash Warden' }]);
+    expect(p.willSend.knowledgeExcluded).toBe(1);
+    expect(mock.calls.some((c) => c.task === 'storyboard.generate')).toBe(false); // nothing was sent
+  });
+
+  it('says so when no provider can run the task', async () => {
+    const lonely = new LlmClient({
+      providers: () => undefined,
+      routes: RoutesConfig.parse({ default: { provider: 'x/none' }, fallbacks: [] }),
+    });
+    const e2 = await Engine.start({
+      home: join(root, 'home-none'),
+      autosaveMs: 0,
+      loadUserPlugins: false,
+      llm: lonely,
+    });
+    try {
+      const store = await e2.createProject(join(root, 'None.tforge'), { name: 'N' });
+      expect(await llmPreviewOp(e2, store, 'storyboard.generate')).toMatchObject({
+        available: false,
+        reason: expect.stringMatching(/no LLM provider available/),
+        willSend: { knowledge: [], knowledgeExcluded: 0 },
+      });
+    } finally {
+      await e2.close();
+    }
   });
 });

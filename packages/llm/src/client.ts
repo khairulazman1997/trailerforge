@@ -86,6 +86,32 @@ export class LlmClient {
     }
   }
 
+  /**
+   * Which provider, model and effort would handle `task` right now? Sends nothing and never
+   * throws: when no provider is available the answer says why. This is what a "you are about to
+   * send ..." dialog shows before the user agrees.
+   */
+  async describeRoute(
+    task: string,
+  ): Promise<
+    | { ok: true; provider: LlmProvider; model?: string; effort?: string; fellBack: boolean }
+    | { ok: false; reason: string }
+  > {
+    try {
+      const route = await resolveRoute(this.opts.routes, task, (id) => this.isAvailable(id));
+      const provider = this.opts.providers(route.provider)!;
+      return {
+        ok: true,
+        provider,
+        ...(route.model ? { model: route.model } : {}),
+        ...(route.effort ? { effort: route.effort } : {}),
+        fellBack: route.fellBack,
+      };
+    } catch (err) {
+      return { ok: false, reason: (err as Error).message };
+    }
+  }
+
   private isAvailable(id: string): Promise<boolean> {
     let cached = this.availability.get(id);
     if (!cached) {

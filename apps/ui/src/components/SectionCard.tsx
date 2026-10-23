@@ -25,6 +25,7 @@ export interface SectionCardProps {
   onRename: (name: string) => void;
   onLock: (locked: boolean) => void;
   onWhy: () => void;
+  onRewrite: () => void;
   onStepSection: (delta: -1 | 1) => void;
   onRemoveSection: () => void;
   onAddSlot: (kind: 'shot' | 'card') => void;
@@ -72,6 +73,11 @@ export function SectionCard(p: SectionCardProps) {
         <button type="button" className="ghost" onClick={p.onWhy} aria-label={`Why ${s.name}?`}>
           Why?
         </button>
+        {!readOnly && (
+          <button type="button" aria-label={`Rewrite ${s.name}`} onClick={p.onRewrite}>
+            Rewrite…
+          </button>
+        )}
         <button
           type="button"
           aria-pressed={locked}

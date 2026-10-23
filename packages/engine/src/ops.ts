@@ -423,6 +423,81 @@ export async function regenerateSectionOp(
   };
 }
 
+// ------------------------------------------------------------------ LLM disclosure
+
+export interface LlmPreview {
+  task: string;
+  available: boolean;
+  /** Why no provider can run this task, when `available` is false. */
+  reason?: string;
+  provider?: { id: string; name: string; kind: string; sendsDataOffDevice: boolean };
+  model?: string;
+  effort?: string;
+  /** The routed provider was unavailable and a fallback will be used instead. */
+  fellBack?: boolean;
+  /** What the request will contain, so the user can see it before agreeing. */
+  willSend: {
+    /** Brief fields that have a value (plugin fields as `pack.field`). */
+    brief: string[];
+    assumptions: number;
+    /** Game facts an AI may see: names, kinds and short descriptions only. */
+    knowledge: { id: string; kind: string; name: string }[];
+    knowledgeExcluded: number;
+  };
+}
+
+/** Same cap the prompts apply, so the preview matches what is actually sent. */
+const PROMPT_KNOWLEDGE_CAP = 120;
+
+const filled = (v: unknown): boolean =>
+  v !== null &&
+  v !== undefined &&
+  v !== '' &&
+  !(Array.isArray(v) && v.length === 0) &&
+  !(typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0);
+
+/** Provider, model and contents of the request a task would make, without making it. */
+export async function llmPreviewOp(
+  engine: Engine,
+  store: ProjectStore,
+  task: string,
+): Promise<LlmPreview> {
+  const { assumptions, extensions, ...rest } = store.state.brief;
+  const brief = [
+    ...Object.entries(rest)
+      .filter(([k, v]) => k !== 'videoTypeId' && filled(v))
+      .map(([k]) => k),
+    ...Object.entries(extensions ?? {}).flatMap(([pack, slice]) =>
+      slice && typeof slice === 'object'
+        ? Object.entries(slice as Record<string, unknown>)
+            .filter(([, v]) => filled(v))
+            .map(([k]) => `${pack}.${k}`)
+        : [],
+    ),
+  ];
+  const shared = store.state.knowledge.filter((e) => !e.excludedFromLlm);
+  const willSend: LlmPreview['willSend'] = {
+    brief,
+    assumptions: assumptions.length,
+    knowledge: shared
+      .slice(0, PROMPT_KNOWLEDGE_CAP)
+      .map((e) => ({ id: e.id, kind: e.kind, name: e.name })),
+    knowledgeExcluded: store.state.knowledge.length - shared.length,
+  };
+  const route = await engine.llm.describeRoute(task);
+  if (!route.ok) return { task, available: false, reason: route.reason, willSend };
+  const p = route.provider;
+  return {
+    task,
+    available: true,
+    provider: { id: p.id, name: p.name, kind: p.kind, sendsDataOffDevice: p.sendsDataOffDevice },
+    ...(route.model ? { model: route.model } : {}),
+    ...(route.effort ? { effort: route.effort } : {}),
+    fellBack: route.fellBack,
+    willSend,
+  };
+}
+
 // ------------------------------------------------------------------ knowledge
 
 export const DEEP_SCAN_WARNING =

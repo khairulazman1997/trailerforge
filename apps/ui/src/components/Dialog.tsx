@@ -53,6 +53,8 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   /** `danger` styles the confirm button as destructive. */
   tone?: 'normal' | 'danger';
+  /** Keeps the confirm button off while the request is not ready to go. */
+  confirmDisabled?: boolean;
   /** Runs when confirmed; the dialog shows progress and closes when it settles. */
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
@@ -97,7 +99,9 @@ export function ConfirmDialog(props: ConfirmDialogProps & { acknowledge?: string
             type="button"
             className={tone === 'danger' ? 'danger' : 'primary'}
             onClick={() => void confirm()}
-            disabled={pending || (acknowledge !== undefined && !ticked)}
+            disabled={
+              pending || props.confirmDisabled === true || (acknowledge !== undefined && !ticked)
+            }
           >
             {pending ? 'Working…' : confirmLabel}
           </button>

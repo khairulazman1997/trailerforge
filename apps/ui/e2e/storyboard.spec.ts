@@ -201,5 +201,6 @@ test('changes made elsewhere appear live, and an empty project explains itself',
 
   const fresh = await client.createProject({ dir: join(t.root, 'Empty.tforge'), name: 'Empty' });
   await page.goto(`${t.svc.url}/p/${fresh.id}/storyboard`);
-  await expect(page.getByText('This project has no storyboard yet')).toBeVisible();
+  await expect(page.getByText('No storyboard yet.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Generate storyboard…' })).toBeVisible();
 });

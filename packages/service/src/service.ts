@@ -16,6 +16,7 @@ import {
   briefForm,
   briefStatus,
   generateStoryboardOp,
+  llmPreviewOp,
   OpError,
   regenerateSectionOp,
   scanKnowledgeOp,
@@ -371,6 +372,22 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       'GET',
       /^\/v1\/projects\/(?<id>[^/]+)\/brief-status$/,
       async ({ params }) => briefStatus(engine, storeById(params.id!)),
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/llm-preview$/,
+      async ({ params, query }) => {
+        const task = z
+          .enum(['storyboard.generate', 'storyboard.regenerate-section', 'brief.suggest'])
+          .safeParse(query.get('task'));
+        if (!task.success)
+          throw new HttpError(
+            400,
+            'bad-request',
+            'task must be storyboard.generate, storyboard.regenerate-section or brief.suggest',
+          );
+        return llmPreviewOp(engine, storeById(params.id!), task.data);
+      },
     ],
     [
       'GET',

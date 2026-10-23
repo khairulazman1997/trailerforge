@@ -808,3 +808,24 @@ input.slot-title:focus {
   font-size: 0.9rem;
   color: var(--muted);
 }
+
+/* disclosure */
+.disclosure {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.9rem;
+}
+.disclosure p {
+  margin: 0.25rem 0;
+}
+.disclosure ul {
+  margin: 0.25rem 0;
+  padding-left: 1.2rem;
+}
+.leaves {
+  color: var(--danger);
+}
+.stays {
+  color: var(--ok);
+}

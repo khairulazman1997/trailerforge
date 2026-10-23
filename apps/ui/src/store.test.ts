@@ -151,6 +151,11 @@ class Fake {
       provider: 'core/mock',
     }),
     decisions: async () => [{ id: 'd1' }],
+    llmPreview: async (_id, task) => ({
+      task,
+      available: true,
+      willSend: { brief: [], assumptions: 0, knowledge: [], knowledgeExcluded: 0 },
+    }),
     startTask: async (id) => ({
       id: 't1',
       kind: 'generate',
@@ -346,6 +351,32 @@ describe('brief data', () => {
     });
     expect(store.getState().projects.p1!.version).toBe(1);
     expect(await store.assumeMissing('p1')).toBe(2);
+    store.disconnect();
+  });
+});
+
+describe('task results', () => {
+  it('announces finished generations and rewrites, and not other tasks', async () => {
+    const { fake, store } = await setup();
+    const base = { projectId: 'p1', startedAt: '', status: 'succeeded' };
+    fake.emit('task.updated', {
+      ...base,
+      id: 'g',
+      kind: 'generate',
+      result: { provider: 'core/mock', slots: 7, seconds: 30 },
+    });
+    fake.emit('task.updated', {
+      ...base,
+      id: 'r',
+      kind: 'regenerate-section',
+      result: { provider: 'core/mock', section: { name: 'Hook' } },
+    });
+    fake.emit('task.updated', { ...base, id: 's', kind: 'scan', result: {} });
+    await tick();
+    expect(store.getState().toasts.map((t) => t.message)).toEqual([
+      'Storyboard written with core/mock: 7 slots, 30 s. Undo goes back to what you had.',
+      'Rewrote “Hook” with core/mock. Undo goes back.',
+    ]);
     store.disconnect();
   });
 });

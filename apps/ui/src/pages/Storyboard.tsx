@@ -2,6 +2,7 @@ import { useEffect, useState, type DragEvent } from 'react';
 import type { Section } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
 import { ConfirmDialog } from '../components/Dialog.js';
+import { GenerateDialog, RewriteDialog } from '../components/GenerateDialogs.js';
 import { SectionCard, type DropMark } from '../components/SectionCard.js';
 import type { SlotPatch } from '../components/SlotRow.js';
 import { TimingBar } from '../components/TimingBar.js';
@@ -25,6 +26,8 @@ export function StoryboardPage({ id }: { id: string }) {
   const [whySection, setWhySection] = useState<string | null>(null);
   const [removingSection, setRemovingSection] = useState<Section | null>(null);
   const [newSection, setNewSection] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [rewriting, setRewriting] = useState<Section | null>(null);
 
   const revision = sb?.revision;
   const hasStoryboard = sb !== null;
@@ -36,11 +39,30 @@ export function StoryboardPage({ id }: { id: string }) {
     return (
       <>
         <h1>Storyboard</h1>
-        <p>
-          This project has no storyboard yet. Generating one from the brief and game facts is coming
-          to this screen; for now you can create one with <code>tforge storyboard generate</code> or
-          from Claude Code.
-        </p>
+        {busyT?.kind === 'generate' ? (
+          <p className="banner" role="status">
+            Generating the storyboard…{' '}
+            <button type="button" onClick={() => void store.cancelTask(busyT.id)}>
+              Cancel
+            </button>
+          </p>
+        ) : (
+          <>
+            <p>
+              No storyboard yet. TrailerForge writes a first draft from your brief and game facts,
+              shaped by a template for the video type. You then edit, reorder and lock it.
+            </p>
+            <button
+              type="button"
+              className="primary"
+              disabled={busy}
+              onClick={() => setGenerating(true)}
+            >
+              Generate storyboard…
+            </button>
+          </>
+        )}
+        <GenerateDialog id={id} open={generating} onClose={() => setGenerating(false)} />
       </>
     );
   }
@@ -110,6 +132,9 @@ export function StoryboardPage({ id }: { id: string }) {
       <div className="row">
         <h1>Storyboard</h1>
         <span className="spacer" />
+        <button type="button" disabled={busy} onClick={() => setGenerating(true)}>
+          Generate again…
+        </button>
         <button
           type="button"
           aria-pressed={whyOpen && whySection === null}
@@ -128,7 +153,10 @@ export function StoryboardPage({ id }: { id: string }) {
 
       {busyT && (
         <p className="banner" role="status">
-          Working: {busyT.kind}… editing is paused.
+          Working: {busyT.kind}… editing is paused.{' '}
+          <button type="button" onClick={() => void store.cancelTask(busyT.id)}>
+            Cancel
+          </button>
         </p>
       )}
 
@@ -167,6 +195,7 @@ export function StoryboardPage({ id }: { id: string }) {
             onLock={(locked) =>
               void cmd('core/storyboard.set-section-locked', { sectionId: section.id, locked })
             }
+            onRewrite={() => setRewriting(section)}
             onWhy={() => {
               setWhySection(section.id);
               setWhyOpen(true);
@@ -219,6 +248,9 @@ export function StoryboardPage({ id }: { id: string }) {
           Add section
         </button>
       </form>
+
+      <GenerateDialog id={id} open={generating} onClose={() => setGenerating(false)} />
+      <RewriteDialog id={id} section={rewriting} onClose={() => setRewriting(null)} />
 
       <ConfirmDialog
         open={!!removingSection}

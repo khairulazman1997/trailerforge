@@ -2,7 +2,14 @@
 import type { Project } from '@trailerforge/schema';
 
 // Wire types come from the engine; type-only, so nothing from it reaches the browser bundle.
-export type { BriefField, BriefForm, BriefSuggestion, ScanSummary } from '@trailerforge/engine';
+export type {
+  BriefField,
+  BriefForm,
+  BriefSuggestion,
+  LlmPreview,
+  ScanSummary,
+} from '@trailerforge/engine';
+import type { LlmPreview } from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
 
 export class ServiceError extends Error {
@@ -112,7 +119,13 @@ export class ServiceClient {
     return this.request<{
       apiVersion: string;
       lastSeq: number;
-      videoTypes: { id: string; name: string; defaultTemplateId?: string }[];
+      videoTypes: {
+        id: string;
+        name: string;
+        description?: string;
+        defaultTemplateId?: string;
+        typicalDuration?: { min: number; max: number };
+      }[];
       templates: { id: string; videoTypeId: string; name: string }[];
       commands: string[];
     }>('GET', '/v1/info');
@@ -143,6 +156,16 @@ export class ServiceClient {
     return this.request<unknown[]>(
       'GET',
       `/v1/projects/${encodeURIComponent(id)}/decisions?limit=${limit}`,
+    );
+  }
+  /** What a task would send, to which provider, before anything is sent. */
+  llmPreview(
+    id: string,
+    task: 'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest',
+  ) {
+    return this.request<LlmPreview>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/llm-preview?task=${task}`,
     );
   }
   briefForm(id: string) {

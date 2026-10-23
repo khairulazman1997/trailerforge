@@ -22,34 +22,55 @@ export interface TestService {
 }
 
 /** A real engine and service serving the built UI, with a deterministic mock LLM. */
-export async function startTestService(opts: { claudeBin?: string } = {}): Promise<TestService> {
+export async function startTestService(
+  opts: {
+    claudeBin?: string;
+    /** Make the mock provider claim it sends data off the computer. */ offDevice?: boolean;
+  } = {},
+): Promise<TestService> {
   const root = await mkdtemp(join(tmpdir(), 'tforge-ui-e2e-'));
   const prompts: string[] = [];
   const mock = createMockProvider({
-    'storyboard.generate': {
-      rationale: 'Opens on a parry, builds to the Warden, ends on the title.',
-      sections: [
-        {
-          name: 'Hook',
-          role: 'hook',
+    'storyboard.generate': (req: LlmRequest<unknown>) => {
+      prompts.push(req.prompt);
+      return {
+        rationale: 'Opens on a parry, builds to the Warden, ends on the title.',
+        sections: [
+          {
+            name: 'Hook',
+            role: 'hook',
+            slots: [
+              {
+                kind: 'shot',
+                title: 'Perfect parry',
+                seconds: 6,
+                captureInstruction: 'Parry the Warden, no HUD.',
+                entityIds: ['ent_warden'],
+              },
+              { kind: 'shot', title: 'Forest run', seconds: 6 },
+            ],
+          },
+          {
+            name: 'Escalation',
+            role: 'escalation',
+            slots: [{ kind: 'shot', title: 'Boss reveal', seconds: 8 }],
+          },
+        ],
+        music: { direction: 'Hybrid orchestral' },
+      };
+    },
+    'storyboard.regenerate-section': (req: LlmRequest<unknown>) => {
+      prompts.push(req.prompt);
+      return {
+        rationale: 'Leads with the forest.',
+        section: {
+          name: 'Hook v2',
           slots: [
-            {
-              kind: 'shot',
-              title: 'Perfect parry',
-              seconds: 6,
-              captureInstruction: 'Parry the Warden, no HUD.',
-              entityIds: ['ent_warden'],
-            },
-            { kind: 'shot', title: 'Forest run', seconds: 6 },
+            { kind: 'shot', title: 'Warden lands', seconds: 3 },
+            { kind: 'shot', title: 'Forest ambush', seconds: 3 },
           ],
         },
-        {
-          name: 'Escalation',
-          role: 'escalation',
-          slots: [{ kind: 'shot', title: 'Boss reveal', seconds: 8 }],
-        },
-      ],
-      music: { direction: 'Hybrid orchestral' },
+      };
     },
     'brief.suggest': (req: LlmRequest<unknown>) => {
       prompts.push(req.prompt);
@@ -60,6 +81,7 @@ export async function startTestService(opts: { claudeBin?: string } = {}): Promi
       };
     },
   });
+  if (opts.offDevice) (mock as { sendsDataOffDevice: boolean }).sendsDataOffDevice = true;
   const llm = new LlmClient({
     providers: (id) => (id === 'core/mock' ? mock : undefined),
     routes: RoutesConfig.parse({ default: { provider: 'core/mock' }, fallbacks: [] }),
