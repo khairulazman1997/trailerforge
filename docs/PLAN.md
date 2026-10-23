@@ -79,6 +79,14 @@ Point a project at a local game repository; TrailerForge extracts a **Game Knowl
 - **Schema:** `project.sources[]` (path, extractor, globs, last scan, digest hash); digest entities (level, character, enemy, boss, ability, item, mechanic, quest, cutscene, achievement, music, art) with source paths and confidence; storyboard slots can reference entity ids. Digest cache lives in `cache/`; user edits to entities are saved in the project.
 - **Milestones:** schema + extractor interface in M1 (with 1.3/1.7); extractors, digest review UI and brief auto-fill in M2.
 
+## Claude Code integration
+
+1. **Claude Code LLM provider** — `providers/claude-code` calls the locally installed `claude` CLI headlessly, using the user's own Claude Code login (no API key, no per-call billing). Output is validated against the same schemas as every provider. Default route when Claude Code is installed and no API key is set. Intended for the user's own local use; distribution would require each user's own install or an API key (check Anthropic terms before shipping). Interface in 1.9, implementation in M2.
+2. **TrailerForge MCP server** — exposes typed commands as MCP tools (project/brief/storyboard read and edit, section regenerate, auto-cut, Quality Gate report, render) so Claude Code can drive projects. All edits go through the command bus, so they are validated, undoable and in version history. Core tools in M2, extended in M4–M6.
+3. **Deep repo scan via Claude Code (opt-in)** — Claude Code explores the game repo (ScriptableObjects, scripts) to build a richer knowledge digest: mechanics, boss phases, debug commands for capture setup. Sends repo contents to Anthropic, so it is off by default with an explicit warning; results go through the same digest review panel. M2.
+
+Estimated cost: ~50–80k extra output tokens (~+3–5% overall).
+
 ## General video editing extensibility (design for, don't build)
 
 - Core is domain-neutral; game-trailer specifics (video types, HUD detection, gameplay labeling, platform badges, capture tips) live in a **Game Trailer domain pack** plugin.
