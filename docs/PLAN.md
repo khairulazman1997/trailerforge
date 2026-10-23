@@ -61,6 +61,13 @@ apps/ engine/ ui/ desktop/ cli/
 - **Not in scope:** illustration/key art, recreated platform or rating logos (use official brand-kit files), generative imagery.
 - **Architecture:** each template/effect is a plugin (param schema + renderer + preview); effects are filtergraph fragments inside the deterministic render path; graphics render to alpha frame sequences composited by FFmpeg. Optional Lottie import in M7.
 
+## Motion engine (proposed, pending decision)
+
+- M1 defines a `MotionRenderer` plugin interface; built-in canvas + FFmpeg renderer is the default.
+- **EffectCraft** (storytold/effectcraft, MIT/Apache-2.0, alpha) as an optional adapter plugin: generate `.ecproj`, render headless via `effectcraft-cli render`, composite ProRes 4444 alpha with FFmpeg. Pinned version, contract tests, fallback to built-in renderer. Lottie as stable interchange. "Open in EffectCraft" for hero-shot polish.
+- 1–2 day spike before M5 (headless Linux, alpha output, determinism, speed) decides go/no-go.
+- After Effects `.jsx` export kept as a separate handoff option.
+
 ## Content Calendar Planner readiness
 
 `campaignId`, `scheduledDate`, `platformTargets[]`, `status` on every project from M1; shared tagged asset library with `reuseHistory`; `nav.planner` UI slot behind `features.planner`; stable `core.projects.createFromCalendarSlot(slot)` API.
