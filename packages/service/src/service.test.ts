@@ -594,3 +594,180 @@ describe('llm preview route', () => {
     });
   });
 });
+
+describe('settings routes', () => {
+  let e2: Engine;
+  let svc2: RunningService;
+  let c2: ServiceClient;
+  let savedEnv: string | undefined;
+
+  beforeAll(async () => {
+    savedEnv = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    // The real provider set (no injected mock), so keys, routes and handoff behave as they do live.
+    e2 = await Engine.start({
+      home: join(root, 'home-settings'),
+      autosaveMs: 0,
+      loadUserPlugins: false,
+    });
+    svc2 = await startService({ engine: e2 });
+    c2 = new ServiceClient({ baseUrl: svc2.url, token: svc2.token });
+  });
+  afterAll(async () => {
+    await svc2.close();
+    await e2.close();
+    if (savedEnv !== undefined) process.env.ANTHROPIC_API_KEY = savedEnv;
+  });
+
+  it('stores an API key without ever sending it back, and the provider becomes available', async () => {
+    const anthropic = async () => (await c2.llmProviders()).find((p) => p.id === 'core/anthropic')!;
+    expect((await anthropic()).available).toMatchObject({ ok: false });
+    expect(await c2.secrets()).toMatchObject({ anthropicApiKey: { set: false, source: null } });
+
+    const view = await c2.setApiKey('sk-ant-super-secret-key');
+    expect(view.anthropicApiKey).toEqual({ set: true, source: 'stored' });
+    expect((await anthropic()).available).toEqual({ ok: true });
+
+    // Nothing the service sends for settings contains the key.
+    const everything = JSON.stringify([
+      view,
+      await c2.secrets(),
+      await c2.llmProviders(),
+      await c2.llmRoutes(),
+    ]);
+    expect(everything).not.toContain('super-secret');
+    expect(await readFile(join(root, 'home-settings', 'secrets.json'), 'utf8')).toContain(
+      'super-secret',
+    );
+
+    await expect(c2.setApiKey('two words')).rejects.toMatchObject({ status: 400, code: 'usage' });
+    await expect(c2.setApiKey('')).rejects.toMatchObject({ status: 400 });
+    expect((await c2.clearApiKey()).anthropicApiKey.set).toBe(false);
+    expect((await anthropic()).available).toMatchObject({ ok: false });
+  });
+
+  it('edits and resets the routes, and announces the change on the event stream', async () => {
+    const ac = new AbortController();
+    const stream = c2.events({ after: (await c2.info()).lastSeq, signal: ac.signal });
+    const seen = nextEvents(stream, 1, (e) => e.type === 'settings.changed');
+    const before = await c2.llmRoutes();
+    expect(before).toMatchObject({
+      custom: false,
+      config: { default: { provider: 'core/anthropic' } },
+    });
+
+    const saved = await c2.saveRoutes({ default: { provider: 'core/claude-code' }, fallbacks: [] });
+    expect(saved).toMatchObject({
+      custom: true,
+      config: { default: { provider: 'core/claude-code' } },
+    });
+    expect((await seen)[0]!.data).toEqual({ what: 'routes' });
+    ac.abort();
+
+    await expect(c2.saveRoutes({ default: { provider: 'nope/x' } })).rejects.toMatchObject({
+      status: 400,
+      code: 'usage',
+    });
+    await expect(
+      c2.saveRoutes({ default: { provider: 'core/anthropic', effort: 'extreme' } }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect((await c2.resetRoutes()).custom).toBe(false);
+    expect((await c2.llmRoutes()).config.default?.provider).toBe('core/anthropic');
+  });
+
+  it('settings need the token like everything else', async () => {
+    const anon = new ServiceClient({ baseUrl: svc2.url, token: 'x'.repeat(43) });
+    for (const call of [
+      () => anon.secrets(),
+      () => anon.setApiKey('sk-x'),
+      () => anon.saveRoutes({}),
+      () => anon.handoffs(),
+    ]) {
+      await expect(call()).rejects.toMatchObject({ status: 401 });
+    }
+  });
+
+  it('relays Chat Handoff to the UI: prompt out, reply in, and a fix-it follow-up when it does not validate', async () => {
+    await c2.saveRoutes({ default: { provider: 'core/chat-handoff' }, fallbacks: [] });
+    expect((await c2.llmProviders()).find((p) => p.id === 'core/chat-handoff')!.available).toEqual({
+      ok: true,
+    });
+
+    const id = (
+      await c2.createProject({
+        dir: join(root, 'Handoff.tforge'),
+        name: 'Handoff',
+        videoTypeId: 'game-trailer/release-trailer',
+      })
+    ).id;
+    const ac = new AbortController();
+    const stream = c2.events({ after: (await c2.info()).lastSeq, signal: ac.signal });
+    const requested = nextEvents(stream, 2, (e) => e.type === 'handoff.requested');
+
+    // "Suggest for me" now waits for a person to paste a reply.
+    const suggestion = c2.suggestBrief(id, 'brief.title');
+    const waitFor = async (round: number) => {
+      for (let i = 0; i < 200; i++) {
+        const p = (await c2.handoffs()).find((h) => h.round === round);
+        if (p) return p;
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      throw new Error(`no handoff for round ${round}`);
+    };
+    const first = await waitFor(0);
+    expect(first.prompt).toContain('Game name');
+    await c2.replyHandoff(first.id, '{"value": 42, "reason": "wrong type"}');
+    const second = await waitFor(1);
+    expect(second.prompt).toMatch(/did not validate/);
+    await c2.replyHandoff(
+      second.id,
+      '```json\n{"value": "Ember Knight", "reason": "pasted from my chat"}\n```',
+    );
+
+    expect(await suggestion).toMatchObject({
+      value: 'Ember Knight',
+      reason: 'pasted from my chat',
+      provider: 'core/chat-handoff',
+    });
+    const events = await requested;
+    expect(events.map((e) => (e.data as { round: number }).round)).toEqual([0, 1]);
+    expect(await c2.handoffs()).toEqual([]);
+    ac.abort();
+
+    await expect(c2.replyHandoff(first.id, 'late')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('cancelling a handoff fails the waiting request cleanly', async () => {
+    const id = (await c2.listProjects()).find((p) => p.name === 'Handoff')!.id;
+    const waiting = c2.suggestBrief(id, 'brief.title');
+    let pending;
+    for (let i = 0; i < 200 && !pending; i++) {
+      pending = (await c2.handoffs())[0];
+      if (!pending) await new Promise((r) => setTimeout(r, 10));
+    }
+    await c2.cancelHandoff(pending!.id);
+    await expect(waiting).rejects.toMatchObject({ status: 409, code: 'cancelled' });
+  });
+
+  it('shutting the service down withdraws Chat Handoff and releases anything waiting', async () => {
+    const e3 = await Engine.start({
+      home: join(root, 'home-shutdown'),
+      autosaveMs: 0,
+      loadUserPlugins: false,
+    });
+    const s3 = await startService({ engine: e3 });
+    expect(e3.handoff.available).toBe(true);
+    const waiting = e3.handoff.request(
+      { task: 't', prompt: 'p', round: 0 },
+      new AbortController().signal,
+    );
+    const settled = waiting.then(
+      () => 'answered',
+      () => 'cancelled',
+    );
+    await s3.close();
+    expect(e3.handoff.available).toBe(false);
+    expect(await settled).toBe('cancelled');
+    await e3.close();
+  });
+});

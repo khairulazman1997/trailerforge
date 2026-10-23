@@ -156,6 +156,81 @@ describe('LlmClient.describeRoute', () => {
   });
 });
 
+describe('LlmClient routes and availability at runtime', () => {
+  const flaky = () => {
+    const state = { up: false, checks: 0 };
+    const provider = {
+      id: 'x/api',
+      name: 'API',
+      kind: 'api',
+      sendsDataOffDevice: true,
+      available: async () => {
+        state.checks++;
+        return state.up ? { ok: true } : { ok: false, reason: 'no key' };
+      },
+      generate: async () => ({ value: 1, model: 'm' }),
+    } as never;
+    return { state, provider };
+  };
+  const other = {
+    id: 'x/other',
+    name: 'Other',
+    kind: 'api',
+    sendsDataOffDevice: false,
+    available: async () => ({ ok: true }),
+    generate: async () => ({ value: 1, model: 'm' }),
+  } as never;
+
+  it('reuses an availability answer briefly, and invalidate() makes it fresh at once', async () => {
+    const { state, provider } = flaky();
+    const c = new LlmClient({
+      providers: (id) => (id === 'x/api' ? provider : id === 'x/other' ? other : undefined),
+      routes: RoutesConfig.parse({ default: { provider: 'x/api' }, fallbacks: ['x/other'] }),
+      availabilityTtlMs: 60_000,
+    });
+    expect((await c.describeRoute('t')).ok && (await c.describeRoute('t'))).toMatchObject({
+      fellBack: true,
+    });
+    expect(state.checks).toBe(1); // second call reused the answer
+    state.up = true; // the user saved an API key
+    expect(await c.describeRoute('t')).toMatchObject({ fellBack: true }); // still the cached "no"
+    c.invalidate();
+    expect(await c.describeRoute('t')).toMatchObject({ ok: true, fellBack: false });
+  });
+
+  it('expires availability after the TTL', async () => {
+    const { state, provider } = flaky();
+    const c = new LlmClient({
+      providers: (id) => (id === 'x/api' ? provider : other),
+      routes: RoutesConfig.parse({ default: { provider: 'x/api' }, fallbacks: ['x/other'] }),
+      availabilityTtlMs: 5,
+    });
+    await c.describeRoute('t');
+    state.up = true;
+    await new Promise((r) => setTimeout(r, 15));
+    expect(await c.describeRoute('t')).toMatchObject({ fellBack: false });
+  });
+
+  it('switches routes on setRoutes without a new client, and reports provider status', async () => {
+    const { provider } = flaky();
+    const c = new LlmClient({
+      providers: (id) => (id === 'x/api' ? provider : id === 'x/other' ? other : undefined),
+      routes: RoutesConfig.parse({ default: { provider: 'x/other' } }),
+    });
+    expect(await c.describeRoute('t')).toMatchObject({ ok: true, fellBack: false });
+    c.setRoutes(
+      RoutesConfig.parse({ default: { provider: 'x/api', model: 'big' }, fallbacks: ['x/other'] }),
+    );
+    expect(c.routesConfig.default?.model).toBe('big');
+    expect(await c.describeRoute('t')).toMatchObject({ fellBack: true });
+    expect(await c.status(['x/api', 'x/other', 'x/none'])).toMatchObject([
+      { id: 'x/api', available: { ok: false, reason: 'no key' } },
+      { id: 'x/other', name: 'Other', available: { ok: true } },
+      { id: 'x/none', kind: 'unknown', available: { ok: false } },
+    ]);
+  });
+});
+
 describe('mock provider', () => {
   it('replays replies in order and records calls', async () => {
     const mock = createMockProvider({ 'hook.make': ['garbage', { title: 'Parry', seconds: 1.5 }] });

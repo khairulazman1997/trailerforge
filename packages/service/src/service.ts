@@ -15,11 +15,19 @@ import {
   assumeMissingOp,
   briefForm,
   briefStatus,
+  clearAnthropicKey,
   generateStoryboardOp,
+  HandoffCancelled,
   llmPreviewOp,
   OpError,
+  providerStatus,
   regenerateSectionOp,
+  resetRoutes,
+  routesView,
+  saveRoutes,
   scanKnowledgeOp,
+  secretsView,
+  setAnthropicKey,
   suggestBriefAnswerOp,
   type Engine,
 } from '@trailerforge/engine';
@@ -92,6 +100,7 @@ export function describeError(err: unknown): HttpError {
     return new HttpError(status, err.code, err.message, err.details);
   }
   if (err instanceof SectionLockedError) return new HttpError(409, 'locked', err.message);
+  if (err instanceof HandoffCancelled) return new HttpError(409, 'cancelled', err.message);
   if (err instanceof ProjectLockedError) {
     return new HttpError(423, 'project-locked', err.message, err.holder);
   }
@@ -244,6 +253,19 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     engine.bus.on('core/job.updated', (p) => events.emit('job.updated', p)),
   ];
 
+  // Chat Handoff: while this service runs there is somewhere to show a prompt, so the provider is
+  // offered; requests and answers are relayed to every connected UI as events.
+  engine.handoff.available = true;
+  engine.llm.invalidate();
+  offs.push(
+    engine.handoff.onChange((c) =>
+      c.type === 'requested'
+        ? events.emit('handoff.requested', c.handoff)
+        : events.emit('handoff.resolved', { id: c.id, outcome: c.outcome }),
+    ),
+  );
+  const settingsChanged = (what: 'secrets' | 'routes') => events.emit('settings.changed', { what });
+
   const stores = () => [...engine.projects.values()];
   const storeById = (id: string): ProjectStore => {
     const store = stores().find((s) => s.state.id === id);
@@ -372,6 +394,69 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       'GET',
       /^\/v1\/projects\/(?<id>[^/]+)\/brief-status$/,
       async ({ params }) => briefStatus(engine, storeById(params.id!)),
+    ],
+    ['GET', /^\/v1\/llm\/providers$/, async () => providerStatus(engine)],
+    ['GET', /^\/v1\/llm\/routes$/, async () => routesView(engine)],
+    [
+      'PUT',
+      /^\/v1\/llm\/routes$/,
+      async ({ body }) => {
+        const view = await saveRoutes(engine, await body());
+        settingsChanged('routes');
+        return view;
+      },
+    ],
+    [
+      'DELETE',
+      /^\/v1\/llm\/routes$/,
+      async () => {
+        const view = await resetRoutes(engine);
+        settingsChanged('routes');
+        return view;
+      },
+    ],
+    ['GET', /^\/v1\/secrets$/, async () => secretsView(engine)],
+    [
+      'PUT',
+      /^\/v1\/secrets\/anthropic-api-key$/,
+      async ({ body }) => {
+        const { value } = z.strictObject({ value: z.unknown() }).parse(await body());
+        // The value is stored and never returned, logged or echoed in an error.
+        const view = await setAnthropicKey(engine, value);
+        settingsChanged('secrets');
+        return view;
+      },
+    ],
+    [
+      'DELETE',
+      /^\/v1\/secrets\/anthropic-api-key$/,
+      async () => {
+        const view = await clearAnthropicKey(engine);
+        settingsChanged('secrets');
+        return view;
+      },
+    ],
+    ['GET', /^\/v1\/handoffs$/, async () => engine.handoff.pending()],
+    [
+      'POST',
+      /^\/v1\/handoffs\/(?<id>[^/]+)\/reply$/,
+      async ({ params, body }) => {
+        const { text } = z.strictObject({ text: z.string().min(1) }).parse(await body());
+        if (!engine.handoff.reply(params.id!, text)) {
+          throw new HttpError(404, 'not-found', 'that request was already answered or cancelled');
+        }
+        return { accepted: true };
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/handoffs\/(?<id>[^/]+)\/cancel$/,
+      async ({ params }) => {
+        if (!engine.handoff.cancel(params.id!)) {
+          throw new HttpError(404, 'not-found', 'that request was already answered or cancelled');
+        }
+        return { cancelled: true };
+      },
     ],
     [
       'GET',
@@ -551,7 +636,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       if (req.method === 'OPTIONS') {
         res.writeHead(204, {
           ...SECURITY_HEADERS,
-          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'authorization, content-type, last-event-id',
           'Access-Control-Max-Age': '600',
         });
@@ -610,6 +695,9 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     token,
     events,
     async close() {
+      engine.handoff.available = false;
+      engine.llm.invalidate();
+      for (const p of engine.handoff.pending()) engine.handoff.cancel(p.id);
       await tasks.drain();
       for (const off of offs) off();
       events.closeAll();

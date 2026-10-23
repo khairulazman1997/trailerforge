@@ -7,9 +7,12 @@ export type {
   BriefForm,
   BriefSuggestion,
   LlmPreview,
+  PendingHandoff,
+  RoutesView,
   ScanSummary,
+  SecretsView,
 } from '@trailerforge/engine';
-import type { LlmPreview } from '@trailerforge/engine';
+import type { LlmPreview, PendingHandoff, RoutesView, SecretsView } from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
 
 export class ServiceError extends Error {
@@ -156,6 +159,53 @@ export class ServiceClient {
     return this.request<unknown[]>(
       'GET',
       `/v1/projects/${encodeURIComponent(id)}/decisions?limit=${limit}`,
+    );
+  }
+  llmProviders() {
+    return this.request<
+      {
+        id: string;
+        name: string;
+        kind: string;
+        sendsDataOffDevice: boolean;
+        available: { ok: true } | { ok: false; reason: string };
+      }[]
+    >('GET', '/v1/llm/providers');
+  }
+  llmRoutes() {
+    return this.request<RoutesView>('GET', '/v1/llm/routes');
+  }
+  saveRoutes(config: unknown) {
+    return this.request<RoutesView>('PUT', '/v1/llm/routes', config);
+  }
+  resetRoutes() {
+    return this.request<RoutesView>('DELETE', '/v1/llm/routes');
+  }
+  secrets() {
+    return this.request<SecretsView>('GET', '/v1/secrets');
+  }
+  /** Write-only: the service never sends a key back. */
+  setApiKey(value: string) {
+    return this.request<SecretsView>('PUT', '/v1/secrets/anthropic-api-key', { value });
+  }
+  clearApiKey() {
+    return this.request<SecretsView>('DELETE', '/v1/secrets/anthropic-api-key');
+  }
+  handoffs() {
+    return this.request<PendingHandoff[]>('GET', '/v1/handoffs');
+  }
+  replyHandoff(id: string, text: string) {
+    return this.request<{ accepted: boolean }>(
+      'POST',
+      `/v1/handoffs/${encodeURIComponent(id)}/reply`,
+      { text },
+    );
+  }
+  cancelHandoff(id: string) {
+    return this.request<{ cancelled: boolean }>(
+      'POST',
+      `/v1/handoffs/${encodeURIComponent(id)}/cancel`,
+      {},
     );
   }
   /** What a task would send, to which provider, before anything is sent. */

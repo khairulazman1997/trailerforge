@@ -13,6 +13,7 @@ import {
 import { JobQueue } from '@trailerforge/jobs';
 import {
   createAnthropicProvider,
+  createChatHandoffProvider,
   createClaudeCodeProvider,
   LlmClient,
   loadRoutesConfig,
@@ -22,6 +23,8 @@ import { PluginHost, type Plugin, type PluginStatus } from '@trailerforge/plugin
 import { PROJECT_SCHEMA_VERSION, type ProjectInput } from '@trailerforge/schema';
 import { gameTrailerPack } from '@trailerforge/pack-game-trailer';
 import { corePlugin } from './core-plugin.js';
+import { HandoffHub } from './handoff.js';
+import { openFileSecretStore, type SecretStore } from './secrets.js';
 
 export interface EngineOptions {
   /** App data dir (job DB, temp, plugins). Default: $TFORGE_HOME or ~/.trailerforge */
@@ -35,6 +38,8 @@ export interface EngineOptions {
   autosaveMs?: number;
   /** Replace the default LLM client (Anthropic API, then Claude Code) with your own. */
   llm?: LlmClient;
+  /** Where API keys are kept. Default: a file only the current user can read, under `home`. */
+  secrets?: SecretStore;
   /** Disclosure gate for the default client; called before any request leaves the machine. */
   approveSend?: LlmClientOptions['approveSend'];
 }
@@ -59,6 +64,9 @@ export class Engine {
     readonly commands: CommandRegistry,
     readonly jobs: JobQueue,
     readonly llm: LlmClient,
+    readonly secrets: SecretStore,
+    readonly handoff: HandoffHub,
+    readonly routesPath: string,
     readonly pluginStatus: PluginStatus[],
     private readonly autosaveMs: number,
   ) {}
@@ -99,18 +107,58 @@ export class Engine {
 
     // Providers are built lazily and only used if the routes pick them, so starting the engine
     // never touches the network or needs a key.
+    const secrets = opts.secrets ?? (await openFileSecretStore(join(home, 'secrets.json')));
+    const handoff = new HandoffHub();
+    const chat = createChatHandoffProvider(handoff);
     const providers = {
-      'core/anthropic': createAnthropicProvider(),
+      // A key saved in settings wins; ANTHROPIC_API_KEY is the fallback.
+      'core/anthropic': createAnthropicProvider({ apiKey: () => secrets.get('anthropic-api-key') }),
       'core/claude-code': createClaudeCodeProvider(),
+      // Only offered while something (the service) can show the prompt to a person.
+      'core/chat-handoff': {
+        ...chat,
+        available: async () =>
+          handoff.available
+            ? { ok: true as const }
+            : { ok: false as const, reason: 'Copy-to-chat needs the TrailerForge app open' },
+      },
     };
+    const routesPath = join(home, 'llm.routes.json');
     const llm =
       opts.llm ??
       new LlmClient({
         providers: (id) => providers[id as keyof typeof providers],
-        routes: await loadRoutesConfig(join(home, 'llm.routes.json')),
+        routes: await loadRoutesConfig(routesPath),
         ...(opts.approveSend ? { approveSend: opts.approveSend } : {}),
       });
-    return new Engine(home, bus, host, commands, jobs, llm, status, opts.autosaveMs ?? 2000);
+    return new Engine(
+      home,
+      bus,
+      host,
+      commands,
+      jobs,
+      llm,
+      secrets,
+      handoff,
+      routesPath,
+      status,
+      opts.autosaveMs ?? 2000,
+    );
+  }
+
+  /** Providers shown in settings and accepted in routes: the built-in ones plus any a route names. */
+  llmProviderIds(): string[] {
+    const cfg = this.llm.routesConfig;
+    return [
+      ...new Set([
+        'core/anthropic',
+        'core/claude-code',
+        'core/chat-handoff',
+        ...Object.values(cfg.routes).map((r) => r.provider),
+        ...(cfg.default ? [cfg.default.provider] : []),
+        ...cfg.fallbacks,
+      ]),
+    ];
   }
 
   async createProject(

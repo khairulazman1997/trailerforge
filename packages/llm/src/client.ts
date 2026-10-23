@@ -29,22 +29,79 @@ export interface LlmClientOptions {
    * Disclosure gate, called before any request that leaves the machine. Return false to block.
    * Default: allow (the UI wires a real prompt).
    */
+  /** How long a provider's availability answer is reused. Default 10 s. */
+  availabilityTtlMs?: number;
   approveSend?: (info: { task: string; provider: LlmProvider }) => boolean | Promise<boolean>;
   log?: (entry: LlmCallLog) => void;
 }
 
 /** Routes each task to a provider, enforces the disclosure gate and logs every call. */
 export class LlmClient {
-  private readonly availability = new Map<string, Promise<boolean>>();
+  private availability = new Map<string, { at: number; ok: Promise<boolean> }>();
+  private routes: RoutesConfig;
 
-  constructor(private readonly opts: LlmClientOptions) {}
+  constructor(private readonly opts: LlmClientOptions) {
+    this.routes = opts.routes;
+  }
+
+  /** The routes in effect (task -> provider/model/effort, default, fallbacks). */
+  get routesConfig(): RoutesConfig {
+    return this.routes;
+  }
+
+  /** Switch to new routes immediately, e.g. after the user edits `llm.routes.json`. */
+  setRoutes(routes: RoutesConfig): void {
+    this.routes = routes;
+    this.invalidate();
+  }
+
+  /** Forget cached availability, e.g. after an API key was added or removed. */
+  invalidate(): void {
+    this.availability.clear();
+  }
+
+  /** Each provider's current availability, for a settings screen. Never sends anything. */
+  async status(ids: readonly string[]): Promise<
+    {
+      id: string;
+      name: string;
+      kind: string;
+      sendsDataOffDevice: boolean;
+      available: { ok: true } | { ok: false; reason: string };
+    }[]
+  > {
+    return Promise.all(
+      ids.map(async (id) => {
+        const p = this.opts.providers(id);
+        if (!p) {
+          return {
+            id,
+            name: id,
+            kind: 'unknown',
+            sendsDataOffDevice: false,
+            available: { ok: false as const, reason: 'not installed' },
+          };
+        }
+        const available = await p
+          .available()
+          .catch((e: unknown) => ({ ok: false as const, reason: String(e) }));
+        return {
+          id,
+          name: p.name,
+          kind: p.kind,
+          sendsDataOffDevice: p.sendsDataOffDevice,
+          available,
+        };
+      }),
+    );
+  }
 
   async generate<T>(
     task: string,
     req: { system: string; prompt: string; schema: z.ZodType<T> },
     signal: AbortSignal = new AbortController().signal,
   ): Promise<LlmResult<T> & { provider: string; fellBack: boolean }> {
-    const route = await resolveRoute(this.opts.routes, task, (id) => this.isAvailable(id));
+    const route = await resolveRoute(this.routes, task, (id) => this.isAvailable(id));
     const provider = this.opts.providers(route.provider)!;
     if (
       provider.sendsDataOffDevice &&
@@ -98,7 +155,7 @@ export class LlmClient {
     | { ok: false; reason: string }
   > {
     try {
-      const route = await resolveRoute(this.opts.routes, task, (id) => this.isAvailable(id));
+      const route = await resolveRoute(this.routes, task, (id) => this.isAvailable(id));
       const provider = this.opts.providers(route.provider)!;
       return {
         ok: true,
@@ -113,17 +170,17 @@ export class LlmClient {
   }
 
   private isAvailable(id: string): Promise<boolean> {
-    let cached = this.availability.get(id);
-    if (!cached) {
-      const provider = this.opts.providers(id);
-      cached = provider
-        ? provider
-            .available()
-            .then((a) => a.ok)
-            .catch(() => false)
-        : Promise.resolve(false);
-      this.availability.set(id, cached);
-    }
-    return cached;
+    const ttl = this.opts.availabilityTtlMs ?? 10_000;
+    const hit = this.availability.get(id);
+    if (hit && Date.now() - hit.at < ttl) return hit.ok;
+    const provider = this.opts.providers(id);
+    const ok = provider
+      ? provider
+          .available()
+          .then((a) => a.ok)
+          .catch(() => false)
+      : Promise.resolve(false);
+    this.availability.set(id, { at: Date.now(), ok });
+    return ok;
   }
 }

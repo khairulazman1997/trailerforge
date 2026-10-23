@@ -53,8 +53,11 @@ export interface AnthropicLike {
 }
 
 export interface AnthropicProviderOptions {
-  /** Defaults to ANTHROPIC_API_KEY. Ignored when `client` is given. */
-  apiKey?: string;
+  /**
+   * The key, or a function returning the current one (so a key saved later in settings is
+   * picked up without a restart). Defaults to ANTHROPIC_API_KEY. Ignored when `client` is given.
+   */
+  apiKey?: string | (() => string | undefined);
   client?: AnthropicLike;
   /** Used when the route names no model. */
   model?: string;
@@ -77,12 +80,25 @@ const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
  * themselves; `effort` is the depth control.
  */
 export function createAnthropicProvider(opts: AnthropicProviderOptions = {}): LlmProvider {
-  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
+  const currentKey = (): string | undefined =>
+    (typeof opts.apiKey === 'function' ? opts.apiKey() : opts.apiKey) ??
+    process.env.ANTHROPIC_API_KEY;
   const maxTokens = opts.maxTokens ?? 16_000;
   const fallbacks = opts.fallbacks ?? 'default';
-  let client = opts.client;
-  const getClient = (): AnthropicLike =>
-    (client ??= new Anthropic({ apiKey }) as unknown as AnthropicLike);
+  const injected = opts.client;
+  let built: { key: string; client: AnthropicLike } | undefined;
+  /** One SDK client per key: replacing the key replaces the client. */
+  const getClient = (): AnthropicLike => {
+    if (injected) return injected;
+    const key = currentKey();
+    if (!built || built.key !== key) {
+      built = {
+        key: key ?? '',
+        client: new Anthropic({ apiKey: key }) as unknown as AnthropicLike,
+      };
+    }
+    return built.client;
+  };
 
   return {
     id: 'core/anthropic',
@@ -90,7 +106,7 @@ export function createAnthropicProvider(opts: AnthropicProviderOptions = {}): Ll
     kind: 'api',
     sendsDataOffDevice: true,
     async available() {
-      return opts.client || apiKey
+      return opts.client || currentKey()
         ? { ok: true }
         : { ok: false, reason: 'No Anthropic API key: set ANTHROPIC_API_KEY' };
     },

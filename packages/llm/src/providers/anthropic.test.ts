@@ -137,6 +137,22 @@ describe('Anthropic provider', () => {
     await expect(createAnthropicProvider({ client }).generate(req, sig)).rejects.toThrow('boom');
   });
 
+  it('picks up a key saved after the provider was created', async () => {
+    const saved = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      let key: string | undefined;
+      const p = createAnthropicProvider({ apiKey: () => key });
+      expect(await p.available()).toMatchObject({ ok: false });
+      key = 'sk-test';
+      expect(await p.available()).toEqual({ ok: true });
+      key = undefined;
+      expect(await p.available()).toMatchObject({ ok: false });
+    } finally {
+      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+    }
+  });
+
   it('is available only with a client or key, and it leaves the machine', async () => {
     const saved = process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
