@@ -56,6 +56,7 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | 2b.7 Storyboard UI                                             | `e84a311` | 16:11:06 | 16:18:46 | ~8 min     | Sonnet | drag-and-drop e2e needed a tall viewport (no scroll mid-drag); VO/music UI deferred                            |
 | 2b.8 Generate / regenerate flows                               | `c44d9d3` | 16:33:06 | 16:41:51 | ~9 min     | Sonnet | task split: settings moved to 2b.9; e2e caught a silently-dead Generate button                                 |
 | 2b.9 Settings (UI + backend)                                   | `3d8427f` | 16:51:28 | 17:05    | ~14 min    | Sonnet | key store, routes editor, Chat Handoff relay; one unreproduced e2e failure in 1 of ~6 full runs                |
+| 2b.10 Electron shell                                           | `pending` | 17:08:41 | 17:20    | ~12 min    | Sonnet | main-process logic behind a fake host (tested); real launch unverified here; UI does not use the pickers yet   |
 
 | When (M2a)      | Session    | Week | Note                                      |
 | --------------- | ---------- | ---- | ----------------------------------------- |
@@ -72,3 +73,4 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | After 2b.6      | 68%        | 38%  | Sonnet UI task: +5% session               |
 | After 2b.7      | 74%        | 39%  | Sonnet UI task: +6% session               |
 | After 2b.8      | 81%        | 39%  | Sonnet UI task: +7% session               |
+| After 2b.9      | 88%        | 40%  | Sonnet UI + backend: +7% session          |

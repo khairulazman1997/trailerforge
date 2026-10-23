@@ -1,0 +1,11 @@
+appId: app.trailerforge.desktop
+productName: TrailerForge
+directories:
+  output: release
+files:
+  - dist/**
+  - preload.cjs
+  - package.json
+extraResources:
+  - from: ../ui/dist
+    to: ui
