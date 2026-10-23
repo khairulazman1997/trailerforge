@@ -1,6 +1,6 @@
 # TrailerForge — Architecture Plan
 
-Status: **awaiting approval** (no code yet). This document records the decisions agreed so far.
+Status: **approved 2026-10-23**. Model approach: **manual switching** (Opus only where needed, Sonnet otherwise). Motion engine: **option A** (EffectCraft optional plugin, M5b, after spike).
 
 ## Decisions
 
@@ -61,7 +61,7 @@ apps/ engine/ ui/ desktop/ cli/
 - **Not in scope:** illustration/key art, recreated platform or rating logos (use official brand-kit files), generative imagery.
 - **Architecture:** each template/effect is a plugin (param schema + renderer + preview); effects are filtergraph fragments inside the deterministic render path; graphics render to alpha frame sequences composited by FFmpeg. Optional Lottie import in M7.
 
-## Motion engine (proposed, pending decision)
+## Motion engine (approved: option A)
 
 - M1 defines a `MotionRenderer` plugin interface; built-in canvas + FFmpeg renderer is the default.
 - **EffectCraft** (storytold/effectcraft, MIT/Apache-2.0, alpha) as an optional adapter plugin: generate `.ecproj`, render headless via `effectcraft-cli render`, composite ProRes 4444 alpha with FFmpeg. Pinned version, contract tests, fallback to built-in renderer. Lottie as stable interchange. "Open in EffectCraft" for hero-shot polish.
