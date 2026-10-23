@@ -37,20 +37,21 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 
 ## Milestone 2a — Brief, storyboard generation, knowledge (backend)
 
-| Task                                                           | Commit    | Start    | End      | Build time | Model  | Notes                                                                                                   |
-| -------------------------------------------------------------- | --------- | -------- | -------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------- |
-| 2a.1 Game Trailer pack + video types                           | `9246984` | 14:08:02 | 14:10:00 | ~2 min     | Opus   |                                                                                                         |
-| 2a.2 Completeness checker, questionnaire, answers, assumptions | `d91e61e` | 14:10:31 | 14:13:37 | ~3 min     | Opus   | design gap found: assumed fields must stay answerable                                                   |
-| 2a.3 Storyboard templates (release, announcement, gameplay)    | `4d0a7e0` | 14:16:42 | 14:19:02 | ~2 min     | Sonnet | weight-based builder; optional slots appear in longer cuts; includes `pnpm install`                     |
-| 2a.4 Storyboard generation, regenerate section, decision log   | `c30c016` | 14:19:44 | 14:26:36 | ~7 min     | Opus   | found: timeline items reference slots, so replaced slots must be unlinked                               |
-| 2a.5 Anthropic API provider                                    | `62e42b8` | 14:32:00 | 14:33:13 | ~1 min     | Sonnet | structured output + Zod validation; schema-rejection fallback; refusal/truncation errors                |
-| 2a.6 Repo scanner + generic extractor                          | `f0ddc34` | 14:35:40 | 14:39:32 | ~4 min     | Opus   | secrets matched by path before any open; extractor reads limited to scanned files                       |
-| 2a.7 Unity extractor                                           | `9d638fb` | 14:43:18 | 14:44:28 | ~1 min     | Sonnet | scenes from build list, ScriptableObjects/prefabs classified by folder                                  |
-| 2a.8 Knowledge merge, deep scan, CLI commands, E2E             | `a7bac64` | 14:46:57 | 14:56:33 | ~10 min    | Sonnet | `return await` bug in CLI dispatch caught by E2E; deep scan runs on a sandbox copy                      |
-| 2b.1 Storyboard hand-editing commands                          | `3379007` | 14:59:36 | 15:02:43 | ~3 min     | Sonnet | requested after 2a.8; regenerate keeps hand-edited slots                                                |
-| 2b.2 MCP server                                                | `bf21f59` | 15:18:46 | 15:24:31 | ~6 min     | Sonnet | CLI logic moved into engine `ops` so CLI/MCP share it; verified over real stdio                         |
-| 2b.3 Local engine service                                      | `c62b3bf` | 15:27:15 | 15:33:36 | ~6 min     | Opus   | SSE over authenticated fetch instead of WebSocket; ops gained cancellation                              |
-| 2b.4 UI scaffold + Playwright smoke                            | `76d5088` | 15:35:36 | 15:46:40 | ~11 min    | Sonnet | service now serves the built UI (CSP, no-token static); render-loop bug caught by e2e; hooks lint added |
+| Task                                                           | Commit        | Start    | End      | Build time | Model  | Notes                                                                                                          |
+| -------------------------------------------------------------- | ------------- | -------- | -------- | ---------- | ------ | -------------------------------------------------------------------------------------------------------------- |
+| 2a.1 Game Trailer pack + video types                           | `9246984`     | 14:08:02 | 14:10:00 | ~2 min     | Opus   |                                                                                                                |
+| 2a.2 Completeness checker, questionnaire, answers, assumptions | `d91e61e`     | 14:10:31 | 14:13:37 | ~3 min     | Opus   | design gap found: assumed fields must stay answerable                                                          |
+| 2a.3 Storyboard templates (release, announcement, gameplay)    | `4d0a7e0`     | 14:16:42 | 14:19:02 | ~2 min     | Sonnet | weight-based builder; optional slots appear in longer cuts; includes `pnpm install`                            |
+| 2a.4 Storyboard generation, regenerate section, decision log   | `c30c016`     | 14:19:44 | 14:26:36 | ~7 min     | Opus   | found: timeline items reference slots, so replaced slots must be unlinked                                      |
+| 2a.5 Anthropic API provider                                    | `62e42b8`     | 14:32:00 | 14:33:13 | ~1 min     | Sonnet | structured output + Zod validation; schema-rejection fallback; refusal/truncation errors                       |
+| 2a.6 Repo scanner + generic extractor                          | `f0ddc34`     | 14:35:40 | 14:39:32 | ~4 min     | Opus   | secrets matched by path before any open; extractor reads limited to scanned files                              |
+| 2a.7 Unity extractor                                           | `9d638fb`     | 14:43:18 | 14:44:28 | ~1 min     | Sonnet | scenes from build list, ScriptableObjects/prefabs classified by folder                                         |
+| 2a.8 Knowledge merge, deep scan, CLI commands, E2E             | `a7bac64`     | 14:46:57 | 14:56:33 | ~10 min    | Sonnet | `return await` bug in CLI dispatch caught by E2E; deep scan runs on a sandbox copy                             |
+| 2b.1 Storyboard hand-editing commands                          | `3379007`     | 14:59:36 | 15:02:43 | ~3 min     | Sonnet | requested after 2a.8; regenerate keeps hand-edited slots                                                       |
+| 2b.2 MCP server                                                | `bf21f59`     | 15:18:46 | 15:24:31 | ~6 min     | Sonnet | CLI logic moved into engine `ops` so CLI/MCP share it; verified over real stdio                                |
+| 2b.3 Local engine service                                      | `c62b3bf`     | 15:27:15 | 15:33:36 | ~6 min     | Opus   | SSE over authenticated fetch instead of WebSocket; ops gained cancellation                                     |
+| 2b.4 UI scaffold + Playwright smoke                            | `76d5088`     | 15:35:36 | 15:46:40 | ~11 min    | Sonnet | service now serves the built UI (CSP, no-token static); render-loop bug caught by e2e; hooks lint added        |
+| 2b.5 Brief & intake UI                                         | (this commit) | 15:49:21 | 15:58:10 | ~9 min     | Sonnet | brief form/answer/suggest/assume added to engine ops + service; date answers route to the release-window field |
 
 | When (M2a)      | Session    | Week | Note                                      |
 | --------------- | ---------- | ---- | ----------------------------------------- |
@@ -62,3 +63,4 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | After 2b.1      | 24%        | 32%  |                                           |
 | After 2b.2      | 30%        | 33%  |                                           |
 | After 2b.3      | 43%        | 34%  | Opus task: +13% session                   |
+| After 2b.4      | 56%        | 36%  | Sonnet UI task: +13% session              |

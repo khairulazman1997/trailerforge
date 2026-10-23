@@ -1,6 +1,8 @@
 import { applyPatches, enablePatches, type Patch } from 'immer';
 import {
   ServiceError,
+  type BriefForm,
+  type BriefSuggestion,
   type ProjectView,
   type ServiceClient,
   type ServiceEventMessage,
@@ -26,6 +28,10 @@ export type ClientLike = Pick<
   | 'startTask'
   | 'cancelTask'
   | 'events'
+  | 'briefForm'
+  | 'answerBrief'
+  | 'assumeMissing'
+  | 'suggestBrief'
 >;
 
 export type Info = Awaited<ReturnType<ServiceClient['info']>>;
@@ -55,6 +61,8 @@ export interface AppState {
   order: string[];
   tasks: Record<string, TaskView>;
   jobs: Record<string, JobUpdate>;
+  /** The brief screen's data per project, tagged with the project version it was read at. */
+  briefs: Record<string, { version: number; form: BriefForm }>;
   toasts: Toast[];
   /** Last event sequence number applied; used to resume after a dropped stream. */
   lastSeq: number;
@@ -68,6 +76,7 @@ const initial: AppState = {
   order: [],
   tasks: {},
   jobs: {},
+  briefs: {},
   toasts: [],
   lastSeq: 0,
 };
@@ -248,7 +257,8 @@ export class AppStore {
   private removeProject(id: string) {
     this.set((s) => {
       const { [id]: _gone, ...projects } = s.projects;
-      return { projects, order: s.order.filter((x) => x !== id) };
+      const { [id]: _brief, ...briefs } = s.briefs;
+      return { projects, briefs, order: s.order.filter((x) => x !== id) };
     });
   }
 
@@ -352,6 +362,53 @@ export class AppStore {
 
   async cancelTask(taskId: string): Promise<void> {
     await this.run((c) => c.cancelTask(taskId));
+  }
+
+  // ---- brief ----
+  private briefLoading = new Map<string, number>();
+
+  /**
+   * Make sure the brief form for the project's current version is loaded. Cheap to call on every
+   * render-effect: it does nothing when the stored form is current or a fetch for this version
+   * is already running.
+   */
+  async loadBrief(projectId: string): Promise<void> {
+    const version = this.state.projects[projectId]?.version;
+    if (version === undefined || !this.client) return;
+    if (this.state.briefs[projectId]?.version === version) return;
+    if (this.briefLoading.get(projectId) === version) return;
+    this.briefLoading.set(projectId, version);
+    try {
+      const form = await this.client.briefForm(projectId);
+      // Keep the newest read if two overlapped.
+      if ((this.state.briefs[projectId]?.version ?? -1) <= version) {
+        this.set((s) => ({ briefs: { ...s.briefs, [projectId]: { version, form } } }));
+      }
+    } catch (err) {
+      this.toast('error', describeFailure(err));
+    } finally {
+      if (this.briefLoading.get(projectId) === version) this.briefLoading.delete(projectId);
+    }
+  }
+
+  async answerBrief(projectId: string, questionId: string, value: unknown): Promise<boolean> {
+    const r = await this.run((c) => c.answerBrief(projectId, questionId, value));
+    if (!r) return false;
+    await this.waitForVersion(projectId, r.version);
+    return true;
+  }
+
+  /** A proposal for one field; nothing is saved until the user accepts it. */
+  async suggestBrief(projectId: string, questionId: string): Promise<BriefSuggestion | null> {
+    return (await this.run((c) => c.suggestBrief(projectId, questionId))) ?? null;
+  }
+
+  /** Returns how many assumptions were logged, or null if it failed. */
+  async assumeMissing(projectId: string): Promise<number | null> {
+    const r = await this.run((c) => c.assumeMissing(projectId));
+    if (!r) return null;
+    await this.waitForVersion(projectId, r.version);
+    return r.added;
   }
 
   // ---- toasts ----

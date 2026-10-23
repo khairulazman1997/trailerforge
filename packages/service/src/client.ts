@@ -1,6 +1,10 @@
 // Browser-safe: no Node imports. Used by the UI (web mode and Electron) and by tests.
 import type { Project } from '@trailerforge/schema';
 
+// Wire types come from the engine; type-only, so nothing from it reaches the browser bundle.
+export type { BriefField, BriefForm, BriefSuggestion } from '@trailerforge/engine';
+import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
+
 export class ServiceError extends Error {
   constructor(
     readonly status: number,
@@ -74,7 +78,12 @@ export class ServiceClient {
     this.fetchFn = opts.fetch ?? fetch.bind(globalThis);
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const res = await this.fetchFn(`${this.opts.baseUrl}${path}`, {
       method,
       headers: {
@@ -82,6 +91,7 @@ export class ServiceClient {
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(signal ? { signal } : {}),
     });
     const data = (await res.json().catch(() => null)) as {
       error?: { code: string; message: string; details?: unknown };
@@ -133,6 +143,35 @@ export class ServiceClient {
     return this.request<unknown[]>(
       'GET',
       `/v1/projects/${encodeURIComponent(id)}/decisions?limit=${limit}`,
+    );
+  }
+  briefForm(id: string) {
+    return this.request<BriefForm>('GET', `/v1/projects/${encodeURIComponent(id)}/brief`);
+  }
+  answerBrief(id: string, questionId: string, value: unknown) {
+    return this.request<EditResult>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/brief/answers`,
+      {
+        questionId,
+        value,
+      },
+    );
+  }
+  assumeMissing(id: string) {
+    return this.request<EditResult & { added: number }>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/brief/assume`,
+      {},
+    );
+  }
+  /** Ask the LLM for a proposal for one field. Aborting the signal cancels the request. */
+  suggestBrief(id: string, questionId: string, signal?: AbortSignal) {
+    return this.request<BriefSuggestion>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/brief/suggest`,
+      { questionId },
+      signal,
     );
   }
   command(id: string, type: string, payload: unknown) {

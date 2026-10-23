@@ -11,11 +11,15 @@ import {
   type ProjectStore,
 } from '@trailerforge/core';
 import {
+  answerBriefOp,
+  assumeMissingOp,
+  briefForm,
   briefStatus,
   generateStoryboardOp,
   OpError,
   regenerateSectionOp,
   scanKnowledgeOp,
+  suggestBriefAnswerOp,
   type Engine,
 } from '@trailerforge/engine';
 import { SectionLockedError } from '@trailerforge/storyboard';
@@ -365,6 +369,51 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       'GET',
       /^\/v1\/projects\/(?<id>[^/]+)\/brief-status$/,
       async ({ params }) => briefStatus(engine, storeById(params.id!)),
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/brief$/,
+      async ({ params }) => briefForm(engine, storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/brief\/answers$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        const { questionId, value } = z
+          .strictObject({ questionId: z.string().min(1), value: z.unknown() })
+          .parse(await body());
+        notBusy(store);
+        answerBriefOp(engine, store, { questionId, value });
+        return editResult(store);
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/brief\/assume$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        z.strictObject({}).parse(await body());
+        notBusy(store);
+        const { added } = assumeMissingOp(engine, store);
+        return { added, ...editResult(store) };
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/brief\/suggest$/,
+      async ({ params, body, res }) => {
+        const store = storeById(params.id!);
+        const { questionId } = z
+          .strictObject({ questionId: z.string().min(1) })
+          .parse(await body());
+        // Read-only, so it may run while an edit is in flight; abandoned when the caller goes away.
+        const abort = new AbortController();
+        res.on('close', () => {
+          if (!res.writableEnded) abort.abort();
+        });
+        return suggestBriefAnswerOp(engine, store, { questionId, signal: abort.signal });
+      },
     ],
     [
       'GET',

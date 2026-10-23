@@ -1,6 +1,16 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { assumptionsFor, checkCompleteness, type CompletenessReport } from '@trailerforge/brief';
+import {
+  answerCommands,
+  answerSchema,
+  assumptionsFor,
+  buildQuestionnaire,
+  checkCompleteness,
+  getAt,
+  suggestAnswer,
+  type CompletenessReport,
+  type Question,
+} from '@trailerforge/brief';
 import { appendDecisions, type ProjectStore } from '@trailerforge/core';
 import {
   deepScan,
@@ -100,6 +110,190 @@ export function briefStatus(engine: Engine, store: ProjectStore): BriefStatus {
   };
 }
 
+// ------------------------------------------------------------------ brief form
+
+export interface BriefField {
+  /** The requirement's path; answers are addressed by it. */
+  id: string;
+  label: string;
+  required: boolean;
+  input: 'text' | 'long-text' | 'list' | 'date' | 'choice' | 'multi-choice';
+  choices?: string[];
+  minItems?: number;
+  help?: string;
+  state: 'answered' | 'missing' | 'assumed';
+  /** Why it is being asked (or empty once answered). */
+  why: string;
+  /** Current value: text, a list of strings, or null when there is none. */
+  value: string | string[] | null;
+  assumption?: { value: unknown; reason: string; source: string };
+}
+
+export interface BriefForm {
+  videoTypeId: string;
+  videoTypeName: string;
+  /** 0..1, two decimals. */
+  score: number;
+  /** Every required field has a real value. */
+  complete: boolean;
+  /** Every required field has a real value or a logged assumption. */
+  canProceed: boolean;
+  /** In the video type's own order. */
+  fields: BriefField[];
+  /** Output formats already added (the "formats" answer is additive; these can be removed). */
+  formats: { id: string; name: string }[];
+}
+
+/** One Question per requirement, answered or not, so any field can be edited. */
+function allQuestions(report: CompletenessReport, vt: ResolvedVideoType): Map<string, Question> {
+  const everything: CompletenessReport = {
+    ...report,
+    satisfied: [],
+    assumed: [],
+    missing: vt.requirements.map((requirement) => ({ requirement, reason: 'missing' as const })),
+  };
+  return new Map(buildQuestionnaire(everything).map((q) => [q.id, q]));
+}
+
+const asText = (v: unknown): string | string[] | null => {
+  if (typeof v === 'string') return v.trim() ? v : null;
+  if (Array.isArray(v)) {
+    const items = v.filter((x): x is string => typeof x === 'string' && x.trim() !== '');
+    return items.length ? items : null;
+  }
+  return null;
+};
+
+/** Everything the brief screen shows: each requirement with its state, current value and prompt. */
+export function briefForm(engine: Engine, store: ProjectStore): BriefForm {
+  const vt = videoTypeOf(engine, store);
+  const project = store.state;
+  const report = checkCompleteness(project, vt);
+  const questions = allQuestions(report, vt);
+  const pending = new Map(
+    buildQuestionnaire(report, { includeAssumed: true }).map((q) => [q.id, q]),
+  );
+  const satisfied = new Set(report.satisfied.map((r) => r.field));
+  const assumed = new Set(report.assumed.map((a) => a.requirement.field));
+
+  const fields = vt.requirements.map((r): BriefField => {
+    const q = questions.get(r.field)!;
+    const state: BriefField['state'] = satisfied.has(r.field)
+      ? 'answered'
+      : assumed.has(r.field)
+        ? 'assumed'
+        : 'missing';
+    const value =
+      r.field === 'formatTargets'
+        ? asText(project.formatTargets.map((f) => f.name))
+        : asText(
+            [r.field, ...r.anyOf].map((p) => getAt(project, p)).find((v) => asText(v) !== null),
+          );
+    const a = pending.get(r.field)?.assumption;
+    return {
+      id: r.field,
+      label: r.label,
+      required: r.required,
+      input: r.input,
+      ...(q.choices ? { choices: q.choices } : {}),
+      ...(q.minItems ? { minItems: q.minItems } : {}),
+      ...(q.help ? { help: q.help } : {}),
+      state,
+      why: state === 'answered' ? '' : (pending.get(r.field)?.why ?? q.why),
+      value,
+      ...(a ? { assumption: { value: a.value, reason: a.reason, source: a.source } } : {}),
+    };
+  });
+  return {
+    videoTypeId: vt.id,
+    videoTypeName: vt.name,
+    score: Math.round(report.score * 100) / 100,
+    complete: report.complete,
+    canProceed: report.canProceed,
+    fields,
+    formats: project.formatTargets.map((f) => ({ id: f.id, name: f.name })),
+  };
+}
+
+function questionOf(engine: Engine, store: ProjectStore, questionId: string): Question {
+  const vt = videoTypeOf(engine, store);
+  const q = allQuestions(checkCompleteness(store.state, vt), vt).get(questionId);
+  if (!q) throw new OpError('not-found', `${vt.name} has no brief field "${questionId}"`);
+  return q;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Save one answer. The value is checked against the question's shape first; format answers add
+ * the chosen presets that are not already there. A date question also accepts a looser answer
+ * ("Q2 2027", "summer"): that goes to the requirement's alternative field (the release window),
+ * since the exact-date field only holds real dates.
+ */
+export function answerBriefOp(
+  engine: Engine,
+  store: ProjectStore,
+  opts: { questionId: string; value: unknown },
+): { commands: number } {
+  let q = questionOf(engine, store, opts.questionId);
+  const vt = videoTypeOf(engine, store);
+  const requirement = vt.requirements.find((r) => r.field === q.id)!;
+  if (q.input === 'date' && typeof opts.value === 'string' && !ISO_DATE.test(opts.value.trim())) {
+    const alternative = requirement.anyOf[0];
+    if (!alternative) {
+      throw new OpError('usage', `"${q.label}": use a date like 2027-02-14`);
+    }
+    q = { ...q, id: alternative, input: 'text' };
+  }
+  const parsed = answerSchema(q).safeParse(
+    typeof opts.value === 'string' ? opts.value.trim() : opts.value,
+  );
+  if (!parsed.success) {
+    throw new OpError(
+      'usage',
+      `"${q.label}": ${parsed.error.issues.map((i) => i.message).join('; ')}`,
+      parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+    );
+  }
+  const have = new Set(store.state.formatTargets.map((f) => f.id));
+  const commands = answerCommands(q, parsed.data).filter(
+    (c) =>
+      !(c.type === 'core/project.add-format-target' && have.has((c.payload as { id: string }).id)),
+  );
+  for (const c of commands) store.dispatch(c.type, c.payload);
+  return { commands: commands.length };
+}
+
+export interface BriefSuggestion {
+  questionId: string;
+  value: unknown;
+  reason: string;
+  provider: string;
+}
+
+/** "Suggest for me": an LLM proposal for one field, grounded in the brief and the game facts. */
+export async function suggestBriefAnswerOp(
+  engine: Engine,
+  store: ProjectStore,
+  opts: { questionId: string; signal?: AbortSignal | undefined },
+): Promise<BriefSuggestion> {
+  const q = questionOf(engine, store, opts.questionId);
+  const r = await suggestAnswer(engine.llm, store.state, q, opts.signal);
+  return { questionId: q.id, value: r.value, reason: r.reason, provider: r.provider };
+}
+
+/** "Proceed with assumptions": log one visible assumption per missing required field. */
+export function assumeMissingOp(engine: Engine, store: ProjectStore): { added: number } {
+  const vt = videoTypeOf(engine, store);
+  const report = checkCompleteness(store.state, vt);
+  let added = 0;
+  for (const a of assumptionsFor(report, new Map(), new Date())) {
+    store.dispatch('core/brief.add-assumption', a);
+    added++;
+  }
+  return { added };
+}
+
 // ------------------------------------------------------------------ storyboard
 
 export interface GenerateOptions {
@@ -154,10 +348,7 @@ export async function generateStoryboardOp(
         describeMissing(report).filter((m) => m.required),
       );
     }
-    for (const a of assumptionsFor(report, new Map(), new Date())) {
-      store.dispatch('core/brief.add-assumption', a);
-      assumptionsAdded++;
-    }
+    assumptionsAdded = assumeMissingOp(engine, store).added;
   }
 
   const { storyboard, decisions } = await generateStoryboard({ llm: engine.llm }, store.state, {

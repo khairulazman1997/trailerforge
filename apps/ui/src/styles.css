@@ -347,3 +347,146 @@ button.link {
     transition: none !important;
   }
 }
+
+/* brief */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.meter-box {
+  margin: 0.5rem 0 1.25rem;
+}
+.meter {
+  height: 0.75rem;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+.meter-text {
+  margin: 0.4rem 0 0;
+}
+.fields {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.field {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.field.answered {
+  border-left-color: var(--ok);
+}
+.field.assumed {
+  border-left-color: var(--accent);
+}
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.field-label {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 1rem;
+}
+.field textarea {
+  resize: vertical;
+}
+.chip {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.chip.answered {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.chip.assumed {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.choices {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.25rem 1rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0;
+}
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+}
+.formats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.formats li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.25rem 0.1rem 0.7rem;
+}
+.suggestion {
+  margin: 0;
+  min-height: 1.2em;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.assumption-note {
+  margin: 0;
+  color: var(--accent);
+}
+.assumptions ul {
+  list-style: none;
+  padding: 0;
+}
+.assumption {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.answered summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}

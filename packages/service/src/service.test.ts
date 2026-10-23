@@ -20,6 +20,7 @@ const genReply = {
 /** While set, generation waits on it: lets a test cancel or edit mid-flight. */
 let gate: Promise<void> | null = null;
 const mock = createMockProvider({
+  'brief.suggest': { value: 'Ember Knight', reason: 'from the game facts' },
   'storyboard.generate': async () => {
     if (gate) await gate;
     return genReply;
@@ -498,5 +499,67 @@ describe('serving a built UI', () => {
 
   it('refuses a UI folder without index.html', async () => {
     await expect(startService({ engine, staticDir: join(root, 'home') })).rejects.toThrow();
+  });
+});
+
+describe('brief routes', () => {
+  let id: string;
+  beforeAll(async () => {
+    id = (
+      await client.createProject({
+        dir: join(root, 'Brief.tforge'),
+        name: 'Brief',
+        videoTypeId: 'game-trailer/release-trailer',
+      })
+    ).id;
+  });
+
+  it('returns the form, saves answers, and rejects bad ones with a reason', async () => {
+    const form = await client.briefForm(id);
+    expect(form.fields[0]).toMatchObject({ id: 'brief.title', state: 'missing', required: true });
+    const edit = await client.answerBrief(id, 'brief.title', 'Ember Knight');
+    expect(edit.version).toBe(1);
+    expect((await client.briefForm(id)).fields[0]).toMatchObject({
+      state: 'answered',
+      value: 'Ember Knight',
+    });
+    await expect(client.answerBrief(id, 'brief.keySellingPoints', ['one'])).rejects.toMatchObject({
+      status: 400,
+      code: 'usage',
+    });
+    await expect(client.answerBrief(id, 'brief.nope', 'x')).rejects.toMatchObject({
+      status: 404,
+      code: 'not-found',
+    });
+    await expect(client.answerBrief(id, 'brief.title', 5)).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('suggests without changing the project, and proceeds with assumptions', async () => {
+    const before = (await client.getProject(id)).version;
+    expect(await client.suggestBrief(id, 'brief.title')).toMatchObject({
+      value: 'Ember Knight',
+      provider: 'core/mock',
+    });
+    expect((await client.getProject(id)).version).toBe(before);
+    const r = await client.assumeMissing(id);
+    expect(r.added).toBeGreaterThan(3);
+    expect(r.version).toBeGreaterThan(before);
+    expect(await client.briefForm(id)).toMatchObject({ canProceed: true, complete: false });
+    expect((await client.assumeMissing(id)).added).toBe(0);
+  });
+
+  it('refuses answers while a task is running on the project', async () => {
+    let release!: () => void;
+    gate = new Promise((r) => (release = r));
+    const t = await client.startTask(id, { kind: 'generate', options: { assume: true } });
+    await expect(client.answerBrief(id, 'brief.title', 'Other')).rejects.toMatchObject({
+      status: 409,
+      code: 'busy',
+    });
+    await expect(client.assumeMissing(id)).rejects.toMatchObject({ code: 'busy' });
+    expect((await client.briefForm(id)).fields[0]).toMatchObject({ value: 'Ember Knight' }); // reads are fine
+    gate = null;
+    release();
+    await client.waitForTask(t.id);
   });
 });

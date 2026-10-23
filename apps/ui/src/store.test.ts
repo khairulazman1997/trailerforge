@@ -32,6 +32,7 @@ class Fake {
   private queue: ServiceEventMessage[] = [];
   failNext: ServiceError | null = null;
   fetches = 0;
+  briefFetches = 0;
 
   emit(type: string, data: unknown): ServiceEventMessage {
     const e = { seq: ++this.seq, type, at: '', data };
@@ -118,6 +119,36 @@ class Fake {
       version: this.projects.get(id)!.version,
       canUndo: true,
       canRedo: false,
+    }),
+    briefForm: async (id) => {
+      this.briefFetches++;
+      return {
+        videoTypeId: 'vt',
+        videoTypeName: 'VT',
+        score: 0,
+        complete: false,
+        canProceed: false,
+        fields: [],
+        formats: [],
+        id,
+      } as never;
+    },
+    answerBrief: async (id) => ({
+      version: this.projects.get(id)!.version + 1,
+      canUndo: true,
+      canRedo: false,
+    }),
+    assumeMissing: async (id) => ({
+      added: 2,
+      version: this.projects.get(id)!.version,
+      canUndo: true,
+      canRedo: false,
+    }),
+    suggestBrief: async (_id, questionId) => ({
+      questionId,
+      value: 'x',
+      reason: 'r',
+      provider: 'core/mock',
     }),
     startTask: async (id) => ({
       id: 't1',
@@ -271,6 +302,49 @@ describe('AppStore', () => {
     fake.rename('p1', 'Three');
     await tick();
     expect(name(store)).toBe('Three');
+    store.disconnect();
+  });
+});
+
+describe('brief data', () => {
+  it('loads the form once per project version and reloads after a change', async () => {
+    const { fake, store } = await setup();
+    await Promise.all([store.loadBrief('p1'), store.loadBrief('p1')]); // overlapping calls share one fetch
+    await store.loadBrief('p1'); // current: no fetch
+    expect(fake.briefFetches).toBe(1);
+    expect(store.getState().briefs.p1?.version).toBe(0);
+
+    fake.rename('p1', 'Two');
+    await tick();
+    await store.loadBrief('p1');
+    expect(fake.briefFetches).toBe(2);
+    expect(store.getState().briefs.p1?.version).toBe(1);
+    store.disconnect();
+  });
+
+  it('drops the form when the project closes, and ignores unknown projects', async () => {
+    const { fake, store } = await setup();
+    await store.loadBrief('p1');
+    await store.loadBrief('nope');
+    expect(fake.briefFetches).toBe(1);
+    fake.emit('project.closed', { projectId: 'p1', dir: '/p/p1' });
+    await tick();
+    expect(store.getState().briefs).toEqual({});
+    store.disconnect();
+  });
+
+  it('answers wait for the local copy, suggestions change nothing, assumptions report a count', async () => {
+    const { fake, store } = await setup();
+    const answering = store.answerBrief('p1', 'brief.title', 'Ember');
+    fake.rename('p1', 'After answer'); // the service publishes the change the answer caused
+    expect(await answering).toBe(true);
+    expect(store.getState().projects.p1!.version).toBe(1);
+    expect(await store.suggestBrief('p1', 'brief.title')).toMatchObject({
+      value: 'x',
+      provider: 'core/mock',
+    });
+    expect(store.getState().projects.p1!.version).toBe(1);
+    expect(await store.assumeMissing('p1')).toBe(2);
     store.disconnect();
   });
 });
