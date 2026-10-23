@@ -68,6 +68,17 @@ apps/ engine/ ui/ desktop/ cli/
 - 1–2 day spike before M5 (headless Linux, alpha output, determinism, speed) decides go/no-go.
 - After Effects `.jsx` export kept as a separate handoff option.
 
+## Game repo knowledge (local)
+
+Point a project at a local game repository; TrailerForge extracts a **Game Knowledge digest** that feeds brief auto-fill, storyboard generation and the capture pack (real level, boss, ability and item names; scene-based capture grouping; setup hints such as debug commands or save files).
+
+- **Read-only and local:** never writes to the game repo; respects `.gitignore`, user include/exclude globs, size caps; skips binaries and LFS pointers; secret files (`.env`, keys, credentials) are always excluded. Incremental re-scan by file hash.
+- **What leaves the machine:** only the digest (names + short descriptions), never source code. The digest is shown in a review panel with per-entry toggles before any LLM call; Chat Handoff and Ollama keep it fully local.
+- **Extractor plugins** (`KnowledgeExtractor` interface): generic (README, design docs, localization CSV/PO/JSON, achievements, store text), Unity (product name, build scenes, ScriptableObjects, prefab names), Godot (`project.godot`, `.tscn`, `.tres`), Unreal (`.uproject`, `DefaultGame.ini`, map/asset names from paths, exported DataTables).
+- **Git-aware (optional):** "what changed since tag X" for update/DLC and feature-spotlight trailers.
+- **Schema:** `project.sources[]` (path, extractor, globs, last scan, digest hash); digest entities (level, character, enemy, boss, ability, item, mechanic, quest, cutscene, achievement, music, art) with source paths and confidence; storyboard slots can reference entity ids. Digest cache lives in `cache/`; user edits to entities are saved in the project.
+- **Milestones:** schema + extractor interface in M1 (with 1.3/1.7); extractors, digest review UI and brief auto-fill in M2.
+
 ## General video editing extensibility (design for, don't build)
 
 - Core is domain-neutral; game-trailer specifics (video types, HUD detection, gameplay labeling, platform badges, capture tips) live in a **Game Trailer domain pack** plugin.
