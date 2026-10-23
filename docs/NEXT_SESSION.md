@@ -17,4 +17,4 @@ Constraints that matter: derived capture data is computed from `project.json`, n
 
 Parked idea (not planned): built-in recording/OBS control is listed under "Potential extensions" in `docs/PLAN.md`; do not build it.
 
-Known open item from M2: the Electron app (`apps/desktop`) has never been launched on a real desktop (`pnpm approve-builds` for `electron`, then `pnpm --filter @trailerforge/desktop start`), and the UI does not use the native pickers yet (task 3.8 picks that up).
+Electron (`apps/desktop`) was launched successfully on the user's Windows desktop. Open desktop polish, to fold into task 3.8 or a small Sonnet task: use the preload folder/file pickers (Browse buttons on the open/new project and add-repo forms), hide the "Disconnect" button and the default File/Edit/View/Window menu in desktop mode, and show Windows-style path placeholders.
