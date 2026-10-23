@@ -68,6 +68,13 @@ apps/ engine/ ui/ desktop/ cli/
 - 1–2 day spike before M5 (headless Linux, alpha output, determinism, speed) decides go/no-go.
 - After Effects `.jsx` export kept as a separate handoff option.
 
+## General video editing extensibility (design for, don't build)
+
+- Core is domain-neutral; game-trailer specifics (video types, HUD detection, gameplay labeling, platform badges, capture tips) live in a **Game Trailer domain pack** plugin.
+- Timeline schema is a general multi-track model (video/audio/graphics tracks, nested sequences, keyframes on any property); storyboard slots are a layer on top of it, not the timeline itself.
+- Media layer handles camera/phone footage: rotation metadata, VFR, HDR/log, mixed fps, multi-channel audio, audio-based multicam sync (later).
+- Future "General Editing pack": full NLE tools (ripple/roll/slip/slide, multicam, color, audio mixer).
+
 ## Content Calendar Planner readiness
 
 `campaignId`, `scheduledDate`, `platformTargets[]`, `status` on every project from M1; shared tagged asset library with `reuseHistory`; `nav.planner` UI slot behind `features.planner`; stable `core.projects.createFromCalendarSlot(slot)` API.
