@@ -37,7 +37,8 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 
 ## Milestone 2a — Brief, storyboard generation, knowledge (backend)
 
-| Task                                                           | Commit        | Start    | End      | Build time | Model | Notes                                                 |
-| -------------------------------------------------------------- | ------------- | -------- | -------- | ---------- | ----- | ----------------------------------------------------- |
-| 2a.1 Game Trailer pack + video types                           | `9246984`     | 14:08:02 | 14:10:00 | ~2 min     | Opus  |                                                       |
-| 2a.2 Completeness checker, questionnaire, answers, assumptions | (this commit) | 14:10:31 | 14:13:37 | ~3 min     | Opus  | design gap found: assumed fields must stay answerable |
+| Task                                                           | Commit        | Start    | End      | Build time | Model  | Notes                                                                               |
+| -------------------------------------------------------------- | ------------- | -------- | -------- | ---------- | ------ | ----------------------------------------------------------------------------------- |
+| 2a.1 Game Trailer pack + video types                           | `9246984`     | 14:08:02 | 14:10:00 | ~2 min     | Opus   |                                                                                     |
+| 2a.2 Completeness checker, questionnaire, answers, assumptions | (this commit) | 14:10:31 | 14:13:37 | ~3 min     | Opus   | design gap found: assumed fields must stay answerable                               |
+| 2a.3 Storyboard templates (release, announcement, gameplay)    | (this commit) | 14:16:42 | 14:19:02 | ~7 min     | Sonnet | weight-based builder; optional slots appear in longer cuts; includes `pnpm install` |

@@ -1,8 +1,10 @@
 import { definePlugin, PLUGIN_API_VERSION } from '@trailerforge/plugin-api';
 import { PACK_ID } from './brief-ext.js';
+import { storyboardTemplates } from './templates.js';
 import { videoTypes } from './video-types.js';
 
 export * from './brief-ext.js';
+export * from './templates.js';
 export * from './video-types.js';
 
 /** Game Trailer domain pack: everything game-specific lives here, not in the core. */
@@ -14,5 +16,6 @@ export const gameTrailerPack = definePlugin({
   dependsOn: ['core'],
   register(ctx) {
     for (const vt of videoTypes) ctx.videoTypes.register(vt);
+    for (const t of storyboardTemplates) ctx.templates.register(t);
   },
 });

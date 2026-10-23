@@ -32,7 +32,7 @@ schema · core (store, commands, events) · jobs · plugin-api · media · llm �
 
 ## Progress
 
-- M1 complete. M2a in progress: 2a.1 and 2a.2 done; next is 2a.3 (templates, Sonnet), then 2a.4 (storyboard generation, Opus). Task list: end of `docs/PLAN.md`.
+- M1 complete. M2a in progress: 2a.1–2a.3 done; next is 2a.4 (storyboard generation, Opus). Task list: end of `docs/PLAN.md`.
 - Record start/end times and usage readings per task in `docs/BUILD_LOG.md` (stamp with `date -u`).
 - Commit only after `pnpm check` passes: `pnpm check && git commit ...`.
 
