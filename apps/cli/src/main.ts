@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { Engine, type EngineOptions } from '@trailerforge/engine';
+import { createMcpServer, serveStdio } from '@trailerforge/mcp';
 import { MediaError, probe } from '@trailerforge/media';
 import { briefCheck, knowledgeScan, storyboardGenerate, type CmdCtx } from './m2.js';
 
@@ -18,6 +19,7 @@ Usage:
   tforge knowledge scan <dir> [--repo <path>] [--force]   Scan a game repo into the knowledge base
   tforge storyboard generate <dir> [--duration <s>] [--template <id>] [--assume]
                                                           Generate the storyboard with the LLM
+  tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
   tforge probe <file>                                     Inspect a media file
   tforge proxy <file> [--out <file>] [--height <px>]      Make an editing proxy (background job)
   tforge jobs [--status <status>]                         List background jobs
@@ -58,6 +60,7 @@ export async function main(
         height: { type: 'string' },
         status: { type: 'string' },
         repo: { type: 'string' },
+        'repo-root': { type: 'string', multiple: true },
         duration: { type: 'string' },
         template: { type: 'string' },
         assume: { type: 'boolean', default: false },
@@ -113,7 +116,8 @@ export async function main(
 
   const engine = await Engine.start({
     ...(o.home ? { home: o.home } : env.TFORGE_HOME ? { home: env.TFORGE_HOME } : {}),
-    autosaveMs: 0,
+    // One-shot commands save on exit; the long-running MCP server also saves in the background.
+    autosaveMs: cmd === 'mcp' ? 2000 : 0,
     approveSend: ({ task, provider }) => {
       io.err(`Sending "${task}" to ${provider.name}: the brief and game facts leave this machine.`);
       return true;
@@ -137,6 +141,17 @@ export async function main(
     },
   };
   try {
+    if (cmd === 'mcp') {
+      // stdout is the protocol channel: nothing else may print there.
+      await serveStdio(
+        createMcpServer({
+          engine,
+          ...(arg ? { defaultProject: resolve(arg) } : {}),
+          repoRoots: o['repo-root'] ?? [],
+        }),
+      );
+      return 0;
+    }
     switch (cmd) {
       // `return await`, not `return`: the finally block must not close the engine mid-command.
       case 'brief check':
