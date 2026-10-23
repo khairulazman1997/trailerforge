@@ -48,6 +48,28 @@ importers:
         specifier: workspace:*
         version: link:../../packages/plugin-api
 
+  packages/brief:
+    dependencies:
+      '@trailerforge/core':
+        specifier: workspace:*
+        version: link:../core
+      '@trailerforge/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@trailerforge/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../schema
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@trailerforge/pack-game-trailer':
+        specifier: workspace:*
+        version: link:../pack-game-trailer
+
   packages/core:
     dependencies:
       '@trailerforge/schema':
@@ -62,6 +84,9 @@ importers:
 
   packages/engine:
     dependencies:
+      '@trailerforge/brief':
+        specifier: workspace:*
+        version: link:../brief
       '@trailerforge/core':
         specifier: workspace:*
         version: link:../core

@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@trailerforge/brief": "workspace:*",
     "@trailerforge/core": "workspace:*",
     "@trailerforge/jobs": "workspace:*",
     "@trailerforge/media": "workspace:*",

@@ -31,6 +31,8 @@ export const BriefRequirement = z.strictObject({
   weight: z.number().positive().default(1),
 });
 export type BriefRequirement = z.input<typeof BriefRequirement>;
+/** Requirement with defaults applied, as stored in the registry. */
+export type ResolvedBriefRequirement = z.output<typeof BriefRequirement>;
 
 export const VideoTypeDef = z.strictObject({
   id: PluginRef,
@@ -44,6 +46,7 @@ export const VideoTypeDef = z.strictObject({
     .optional(),
 });
 export type VideoTypeDef = z.input<typeof VideoTypeDef>;
+export type ResolvedVideoType = z.output<typeof VideoTypeDef>;
 
 export const SafeArea = z.strictObject({
   top: z.number().min(0).max(0.5),

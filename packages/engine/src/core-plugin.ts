@@ -1,3 +1,4 @@
+import { briefCommands } from '@trailerforge/brief';
 import { JobError, defineJob } from '@trailerforge/jobs';
 import { MediaError, makeProxy, probe } from '@trailerforge/media';
 import { definePlugin, PLUGIN_API_VERSION } from '@trailerforge/plugin-api';
@@ -85,6 +86,7 @@ export const corePlugin = definePlugin({
       platformId: 'core/youtube',
       captions: ['srt'],
     });
+    for (const command of briefCommands) ctx.commands.register(command);
     ctx.jobs.register(probeJob);
     ctx.jobs.register(proxyJob);
   },
