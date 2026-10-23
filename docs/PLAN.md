@@ -51,6 +51,16 @@ apps/ engine/ ui/ desktop/ cli/
 - **NLE handoff:** FCPXML / EDL / OpenTimelineIO export (M6).
 - **Evaluation loop:** fixed brief corpus re-rendered on every cut-logic change, with metric regressions; human review of M4/M6 cuts.
 
+## Effects & vector graphics
+
+- **Vectors:** SVG templates rendered via resvg (MPL-2.0): title/tagline cards, end slates, laurels, lower-thirds, CTAs, caption boxes, icons. Brand tokens drive colors, fonts, logo.
+- **Animation:** keyframe system with easing curves (position, scale, opacity, mask reveals, stroke draw-on, per-letter/per-word text).
+- **Transitions:** cut, dip, flash, whip (motion blur), zoom punch, glitch, speed ramp, plus FFmpeg `xfade` set.
+- **Finishing FX:** grain, vignette, chromatic aberration, impact shake, procedural light leaks/flares, letterbox, highlight glow. Subtle defaults.
+- **SFX:** procedural whoosh/riser/impact/sub-drop; first-class support for licensed/CC0 SFX packs placed on hit-points.
+- **Not in scope:** illustration/key art, recreated platform or rating logos (use official brand-kit files), generative imagery.
+- **Architecture:** each template/effect is a plugin (param schema + renderer + preview); effects are filtergraph fragments inside the deterministic render path; graphics render to alpha frame sequences composited by FFmpeg. Optional Lottie import in M7.
+
 ## Content Calendar Planner readiness
 
 `campaignId`, `scheduledDate`, `platformTargets[]`, `status` on every project from M1; shared tagged asset library with `reuseHistory`; `nav.planner` UI slot behind `features.planner`; stable `core.projects.createFromCalendarSlot(slot)` API.
