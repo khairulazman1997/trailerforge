@@ -55,7 +55,7 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | 2b.6 Knowledge UI                                              | `e3365bf` | 16:00:45 | 16:06:40 | ~6 min     | Sonnet | exclude switch made optimistic after e2e caught a flicker/race; service gained claudeBin seam                  |
 | 2b.7 Storyboard UI                                             | `e84a311` | 16:11:06 | 16:18:46 | ~8 min     | Sonnet | drag-and-drop e2e needed a tall viewport (no scroll mid-drag); VO/music UI deferred                            |
 | 2b.8 Generate / regenerate flows                               | `c44d9d3` | 16:33:06 | 16:41:51 | ~9 min     | Sonnet | task split: settings moved to 2b.9; e2e caught a silently-dead Generate button                                 |
-| 2b.9 Settings (UI + backend)                                   | `pending` | 16:51:28 | 17:05    | ~14 min    | Sonnet | key store, routes editor, Chat Handoff relay; one unreproduced e2e failure in 1 of ~6 full runs                |
+| 2b.9 Settings (UI + backend)                                   | `3d8427f` | 16:51:28 | 17:05    | ~14 min    | Sonnet | key store, routes editor, Chat Handoff relay; one unreproduced e2e failure in 1 of ~6 full runs                |
 
 | When (M2a)      | Session    | Week | Note                                      |
 | --------------- | ---------- | ---- | ----------------------------------------- |
