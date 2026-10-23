@@ -1,7 +1,10 @@
-Rewrite one section of a {{videoType}} storyboard. The new section replaces "{{sectionName}}" (role: {{role}}) and must fill {{budget}} seconds. Every other section stays as it is, so the new one has to fit between its neighbours.
+Rewrite one section of a {{videoType}} storyboard. The new section replaces "{{sectionName}}" (role: {{role}}) and must fill {{budget}} seconds, not counting any fixed slots listed below. Every other section stays as it is, so the new one has to fit between its neighbours.
 
 Current storyboard (the section to rewrite is marked >>>):
 {{outline}}
+
+Slots the user edited by hand stay exactly as they are, in the positions shown, and are added back automatically. Do not write them again, and don't repeat them; write the other slots so the section still flows. Fixed slots:
+{{pinned}}
 
 What the user wants changed:
 {{instruction}}

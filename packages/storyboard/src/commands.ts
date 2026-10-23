@@ -1,14 +1,15 @@
 import { defineCommand, type CommandDef } from '@trailerforge/core';
-import { Id, Section, Storyboard, VoLine, type Project } from '@trailerforge/schema';
-import type { Draft } from 'immer';
+import { Id, Section, Storyboard, VoLine } from '@trailerforge/schema';
 import { z } from 'zod';
+import { storyboardEditCommands } from './edit.js';
+import {
+  cleanupRemovedSlots,
+  SectionLockedError,
+  slotIdsOf,
+  unlinkTimelineItems,
+} from './shared.js';
 
-export class SectionLockedError extends Error {
-  constructor(readonly sectionId: string) {
-    super(`section "${sectionId}" is locked`);
-    this.name = 'SectionLockedError';
-  }
-}
+export { SectionLockedError };
 
 /** Key-order-independent JSON, so a locked section compares equal however it was built. */
 function canonical(v: unknown): string {
@@ -21,17 +22,6 @@ function canonical(v: unknown): string {
   }
   return JSON.stringify(v);
 }
-
-/** Timeline footage outlives the slot it filled: unlink items whose slot no longer exists. */
-function unlinkTimelineItems(d: Draft<Project>, gone: ReadonlySet<string>) {
-  if (gone.size === 0) return;
-  for (const tl of d.timelines)
-    for (const track of tl.tracks)
-      for (const item of track.items) if (item.slotId && gone.has(item.slotId)) delete item.slotId;
-}
-
-const slotIdsOf = (sections: readonly { slots: readonly { id: string }[] }[]) =>
-  new Set(sections.flatMap((s) => s.slots.map((x) => x.id)));
 
 /** Replace the whole storyboard. Every locked section must come through unchanged. */
 export const setStoryboard = defineCommand({
@@ -74,14 +64,8 @@ export const replaceSection = defineCommand({
     const gone = new Set(old.slots.map((s) => s.id).filter((id) => !kept.has(id)));
 
     sb.sections[idx] = { ...section, id: sectionId, locked: false };
-    sb.voLines = sb.voLines
-      .filter((v) => v.linkedSlotIds.length === 0 || v.linkedSlotIds.some((id) => !gone.has(id)))
-      .map((v) => ({ ...v, linkedSlotIds: v.linkedSlotIds.filter((id) => !gone.has(id)) }));
+    cleanupRemovedSlots(d, gone);
     sb.voLines.push(...voLines);
-    sb.music.hitPoints = sb.music.hitPoints.filter((h) => !gone.has(h.slotId));
-    sb.music.sfxCues = sb.music.sfxCues.filter((c) => !gone.has(c.slotId));
-    for (const v of sb.variants) for (const id of gone) delete v.overrides[id];
-    unlinkTimelineItems(d, gone);
     sb.revision += 1;
   },
 });
@@ -102,4 +86,5 @@ export const storyboardCommands = [
   setStoryboard,
   replaceSection,
   setSectionLocked,
+  ...storyboardEditCommands,
 ] as unknown as readonly CommandDef<unknown>[];

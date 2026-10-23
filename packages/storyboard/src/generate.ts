@@ -14,6 +14,7 @@ import {
   type VoLine,
 } from '@trailerforge/schema';
 import { SectionLockedError } from './commands.js';
+import { userEditedFields } from './user-edits.js';
 import { convertSections, sectionSeconds, type ConvertContext } from './convert.js';
 import { GeneratedSection, GeneratedStoryboard } from './output.js';
 
@@ -232,7 +233,16 @@ export interface RegenerateSectionResult {
 export async function regenerateSection(
   deps: GenerateDeps,
   project: Project,
-  opts: { sectionId: string; instruction?: string; signal?: AbortSignal },
+  opts: {
+    sectionId: string;
+    instruction?: string;
+    /**
+     * Keep slots the user edited or added by hand (default true). They stay at their positions
+     * and the model writes only the rest, in the time that is left.
+     */
+    keepEdited?: boolean;
+    signal?: AbortSignal;
+  },
 ): Promise<RegenerateSectionResult> {
   const sb = project.storyboard;
   const target = sb?.sections.find((s) => s.id === opts.sectionId);
@@ -241,7 +251,24 @@ export async function regenerateSection(
 
   const others = sb.sections.filter((s) => s !== target);
   const free = round1(sb.meta.targetDuration - others.reduce((a, s) => a + sectionSeconds(s), 0));
-  const budget = sectionSeconds(target) || Math.max(free, 1);
+  const total = sectionSeconds(target) || Math.max(free, 1);
+
+  const pinned =
+    opts.keepEdited === false
+      ? []
+      : target.slots
+          .map((slot, index) => ({ slot, index }))
+          .filter(({ slot }) => userEditedFields(slot).length > 0);
+  if (pinned.length > 0 && pinned.length === target.slots.length) {
+    throw new Error(
+      `every slot in "${target.name}" was edited by hand, so there is nothing to regenerate; ` +
+        'delete the ones you do not want, or pass keepEdited: false to rewrite them all',
+    );
+  }
+  const budget = round1(total - pinned.reduce((a, { slot }) => a + slot.duration.ideal, 0));
+  if (budget < 0.1 * Math.max(1, target.slots.length - pinned.length)) {
+    throw new RangeError(`the slots you edited already fill the ${total} s of "${target.name}"`);
+  }
 
   const ctx = promptContext(project);
   const system = await systemPrompt(project);
@@ -252,6 +279,13 @@ export async function regenerateSection(
       sectionName: target.name,
       role: target.role ?? 'unspecified',
       budget: String(budget),
+      pinned:
+        pinned
+          .map(
+            ({ slot, index }) =>
+              `- #${index + 1} ${slot.title || slot.id} (${slot.kind}, ${slot.duration.ideal}s)`,
+          )
+          .join('\n') || '(none)',
       outline: sb.sections.map((s) => outlineSection(s, s === target)).join('\n'),
       instruction: opts.instruction?.trim() || '(nothing specific; make it stronger)',
       brief: ctx.brief,
@@ -278,6 +312,7 @@ export async function regenerateSection(
     },
   });
   taken.add(target.id);
+  for (const { slot } of pinned) taken.add(slot.id);
   const converted = convertSections(
     [r.value.section],
     budget,
@@ -289,6 +324,9 @@ export async function regenerateSection(
     ...converted.sections[0]!,
     ...(target.role !== undefined && { role: target.role }),
   };
+  // Hand-edited slots go back where they were, so the model's slots fill the gaps around them.
+  for (const { slot, index } of pinned)
+    section.slots.splice(Math.min(index, section.slots.length), 0, slot);
 
   const at = (deps.now ?? (() => new Date()))();
   const decisions = [
@@ -304,6 +342,7 @@ export async function regenerateSection(
         model: r.model,
         fellBack: r.fellBack,
         budget,
+        pinnedSlotIds: pinned.map(({ slot }) => slot.id),
         requestedSeconds: converted.requestedSeconds,
         instruction: opts.instruction ?? null,
         replacedSlotIds: [...oldSlotIds],
