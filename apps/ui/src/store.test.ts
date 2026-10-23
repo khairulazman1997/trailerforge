@@ -33,6 +33,8 @@ class Fake {
   failNext: ServiceError | null = null;
   fetches = 0;
   briefFetches = 0;
+  handoffList: unknown[] = [];
+  keySet = false;
 
   emit(type: string, data: unknown): ServiceEventMessage {
     const e = { seq: ++this.seq, type, at: '', data };
@@ -151,6 +153,35 @@ class Fake {
       provider: 'core/mock',
     }),
     decisions: async () => [{ id: 'd1' }],
+    handoffs: async () => this.handoffList as never,
+    replyHandoff: async () => ({ accepted: true }),
+    cancelHandoff: async () => ({ cancelled: true }),
+    llmProviders: async () => [
+      {
+        id: 'core/mock',
+        name: 'Mock',
+        kind: 'mock',
+        sendsDataOffDevice: false,
+        available: { ok: true },
+      },
+    ],
+    llmRoutes: async () =>
+      ({ config: {}, defaults: {}, custom: false, tasks: [], providers: [], models: [] }) as never,
+    saveRoutes: async () => ({}) as never,
+    resetRoutes: async () => ({}) as never,
+    secrets: async () =>
+      ({
+        anthropicApiKey: { set: this.keySet, source: this.keySet ? 'stored' : null },
+        storage: 'memory',
+      }) as never,
+    setApiKey: async () => {
+      this.keySet = true;
+      return {} as never;
+    },
+    clearApiKey: async () => {
+      this.keySet = false;
+      return {} as never;
+    },
     llmPreview: async (_id, task) => ({
       task,
       available: true,
@@ -351,6 +382,67 @@ describe('brief data', () => {
     });
     expect(store.getState().projects.p1!.version).toBe(1);
     expect(await store.assumeMissing('p1')).toBe(2);
+    store.disconnect();
+  });
+});
+
+describe('Copy-to-chat requests', () => {
+  const h = (id: string, round = 0) => ({
+    id,
+    task: 'brief.suggest',
+    prompt: 'p',
+    round,
+    createdAt: '',
+  });
+
+  it('loads waiting requests on connect, then follows requests and answers in order', async () => {
+    const fake = new Fake();
+    fake.projects.set('p1', view('p1', 0, { name: 'One', n: 0 }));
+    fake.handoffList = [h('early')];
+    const store = new AppStore(() => fake.client);
+    await store.connect(conn);
+    expect(store.getState().handoffs.map((x) => x.id)).toEqual(['early']);
+
+    fake.emit('handoff.requested', h('a'));
+    fake.emit('handoff.requested', h('a')); // duplicate delivery does not duplicate the request
+    fake.emit('handoff.requested', h('b', 1));
+    await tick();
+    expect(store.getState().handoffs.map((x) => x.id)).toEqual(['early', 'a', 'b']);
+    fake.emit('handoff.resolved', { id: 'early', outcome: 'replied' });
+    await tick();
+    expect(store.getState().handoffs.map((x) => x.id)).toEqual(['a', 'b']);
+    expect(await store.replyHandoff('a', 'text')).toBe(true);
+    expect(await store.cancelHandoff('b')).toBe(true);
+    store.disconnect();
+  });
+});
+
+describe('settings', () => {
+  it('loads once asked, and re-reads when the service says settings changed', async () => {
+    const { fake, store } = await setup();
+    expect(store.getState().settings).toBeNull();
+    await store.loadSettings();
+    expect(store.getState().settings?.secrets.anthropicApiKey.set).toBe(false);
+
+    expect(await store.setApiKey('sk-x')).toBe(true);
+    expect(store.getState().settings?.secrets.anthropicApiKey).toEqual({
+      set: true,
+      source: 'stored',
+    });
+    fake.keySet = false;
+    fake.emit('settings.changed', { what: 'secrets' }); // changed elsewhere
+    await tick();
+    expect(store.getState().settings?.secrets.anthropicApiKey.set).toBe(false);
+    expect(await store.saveRoutes({})).toBe(true);
+    expect(await store.resetRoutes()).toBe(true);
+    store.disconnect();
+  });
+
+  it('does not fetch settings nobody is looking at', async () => {
+    const { fake, store } = await setup();
+    fake.emit('settings.changed', { what: 'routes' });
+    await tick();
+    expect(store.getState().settings).toBeNull();
     store.disconnect();
   });
 });

@@ -24,7 +24,12 @@ export function Disclosure({ preview }: { preview: LlmPreview | null }) {
         {preview.effort ? ` · ${preview.effort} effort` : ''}
         {preview.fellBack ? ' (your first choice is unavailable, so a fallback is used)' : ''}
         {' — '}
-        {provider.sendsDataOffDevice ? (
+        {provider.kind === 'interactive' ? (
+          <span className="stays">
+            you copy this request into a chat yourself and paste the reply back; nothing is sent
+            automatically
+          </span>
+        ) : provider.sendsDataOffDevice ? (
           <strong className="leaves">this leaves your computer</strong>
         ) : (
           <span className="stays">this stays on your computer</span>

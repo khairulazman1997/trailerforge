@@ -26,6 +26,8 @@ export async function startTestService(
   opts: {
     claudeBin?: string;
     /** Make the mock provider claim it sends data off the computer. */ offDevice?: boolean;
+    /** Use the engine's real providers and default routes instead of the mock LLM. */
+    realProviders?: boolean;
   } = {},
 ): Promise<TestService> {
   const root = await mkdtemp(join(tmpdir(), 'tforge-ui-e2e-'));
@@ -90,7 +92,7 @@ export async function startTestService(
     home: join(root, 'home'),
     autosaveMs: 0,
     loadUserPlugins: false,
-    llm,
+    ...(opts.realProviders ? {} : { llm }),
   });
   const svc = await startService({
     engine,

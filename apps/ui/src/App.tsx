@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAppState, useStore } from './app-context.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { HandoffHost } from './components/HandoffHost.js';
 import { Toasts } from './components/Toasts.js';
 import { clearConnection } from './connection.js';
 import { ConnectPage } from './pages/Connect.js';
@@ -124,6 +125,7 @@ function Shell({ store }: { store: AppStore }) {
             </button>
           </div>
         )}
+        <HandoffHost />
         <span className={`status ${status}`} role="status" data-testid="connection-status">
           <span className="dot" aria-hidden="true" />
           {STATUS_TEXT[status]}

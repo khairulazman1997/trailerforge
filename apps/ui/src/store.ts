@@ -4,6 +4,9 @@ import {
   type BriefForm,
   type BriefSuggestion,
   type LlmPreview,
+  type PendingHandoff,
+  type RoutesView,
+  type SecretsView,
   type ProjectView,
   type ServiceClient,
   type ServiceEventMessage,
@@ -36,7 +39,25 @@ export type ClientLike = Pick<
   | 'suggestBrief'
   | 'decisions'
   | 'llmPreview'
+  | 'handoffs'
+  | 'replyHandoff'
+  | 'cancelHandoff'
+  | 'llmProviders'
+  | 'llmRoutes'
+  | 'saveRoutes'
+  | 'resetRoutes'
+  | 'secrets'
+  | 'setApiKey'
+  | 'clearApiKey'
 >;
+
+export type ProviderStatus = Awaited<ReturnType<ServiceClient['llmProviders']>>[number];
+
+export interface SettingsData {
+  providers: ProviderStatus[];
+  routes: RoutesView;
+  secrets: SecretsView;
+}
 
 export type Info = Awaited<ReturnType<ServiceClient['info']>>;
 
@@ -71,6 +92,10 @@ export interface AppState {
   notices: Record<string, string>;
   /** Why the storyboard looks the way it does: automated decisions, oldest first. */
   decisions: Record<string, DecisionRecord[]>;
+  /** Copy-to-chat requests waiting for a pasted reply, oldest first. */
+  handoffs: PendingHandoff[];
+  /** Providers, routes and key status; null until the Settings screen asks for them. */
+  settings: SettingsData | null;
   toasts: Toast[];
   /** Last event sequence number applied; used to resume after a dropped stream. */
   lastSeq: number;
@@ -87,6 +112,8 @@ const initial: AppState = {
   briefs: {},
   notices: {},
   decisions: {},
+  handoffs: [],
+  settings: null,
   toasts: [],
   lastSeq: 0,
 };
@@ -155,7 +182,7 @@ export class AppStore {
       const info = await client.info();
       this.set({ info, lastSeq: info.lastSeq });
       await this.refetchAll();
-      this.set({ status: 'ready', error: null });
+      this.set({ handoffs: await client.handoffs(), status: 'ready', error: null });
     } catch (err) {
       this.set({ status: 'failed', error: describeFailure(err) });
       return false;
@@ -204,6 +231,7 @@ export class AppStore {
   async apply(ev: ServiceEventMessage): Promise<void> {
     if (ev.type === 'reset') {
       await this.refetchAll();
+      if (this.client) this.set({ handoffs: await this.client.handoffs() });
       this.set({ lastSeq: ev.seq });
       return;
     }
@@ -251,6 +279,20 @@ export class AppStore {
         this.set((s) => ({ notices: { ...s.notices, [n.projectId]: n.message } }));
         break;
       }
+      case 'handoff.requested': {
+        const h = data as unknown as PendingHandoff;
+        this.set((s) => ({ handoffs: [...s.handoffs.filter((x) => x.id !== h.id), h] }));
+        break;
+      }
+      case 'handoff.resolved': {
+        const id = String(data.id);
+        this.set((s) => ({ handoffs: s.handoffs.filter((x) => x.id !== id) }));
+        break;
+      }
+      case 'settings.changed':
+        // Someone (this window, another one, Claude Code) changed keys or routes: re-read them.
+        if (this.state.settings) await this.loadSettings();
+        break;
       case 'job.updated': {
         const j = data as unknown as JobUpdate;
         this.set((s) => ({ jobs: { ...s.jobs, [j.jobId]: j } }));
@@ -443,6 +485,57 @@ export class AppStore {
     if (!r) return null;
     await this.waitForVersion(projectId, r.version);
     return r.added;
+  }
+
+  // ---- settings ----
+  async loadSettings(): Promise<void> {
+    const data = await this.run(async (c) => {
+      const [providers, routes, secrets] = await Promise.all([
+        c.llmProviders(),
+        c.llmRoutes(),
+        c.secrets(),
+      ]);
+      return { providers, routes, secrets } satisfies SettingsData;
+    });
+    if (data) this.set({ settings: data });
+  }
+
+  /** The key is sent once and never read back. */
+  async setApiKey(value: string): Promise<boolean> {
+    const r = await this.run((c) => c.setApiKey(value));
+    if (!r) return false;
+    await this.loadSettings();
+    return true;
+  }
+
+  async clearApiKey(): Promise<boolean> {
+    const r = await this.run((c) => c.clearApiKey());
+    if (!r) return false;
+    await this.loadSettings();
+    return true;
+  }
+
+  async saveRoutes(config: unknown): Promise<boolean> {
+    const r = await this.run((c) => c.saveRoutes(config));
+    if (!r) return false;
+    await this.loadSettings();
+    return true;
+  }
+
+  async resetRoutes(): Promise<boolean> {
+    const r = await this.run((c) => c.resetRoutes());
+    if (!r) return false;
+    await this.loadSettings();
+    return true;
+  }
+
+  // ---- Copy prompt to chat ----
+  async replyHandoff(id: string, text: string): Promise<boolean> {
+    return !!(await this.run((c) => c.replyHandoff(id, text)));
+  }
+
+  async cancelHandoff(id: string): Promise<boolean> {
+    return !!(await this.run((c) => c.cancelHandoff(id)));
   }
 
   // ---- LLM disclosure ----
