@@ -26,6 +26,31 @@ export async function startTestService(opts: { claudeBin?: string } = {}): Promi
   const root = await mkdtemp(join(tmpdir(), 'tforge-ui-e2e-'));
   const prompts: string[] = [];
   const mock = createMockProvider({
+    'storyboard.generate': {
+      rationale: 'Opens on a parry, builds to the Warden, ends on the title.',
+      sections: [
+        {
+          name: 'Hook',
+          role: 'hook',
+          slots: [
+            {
+              kind: 'shot',
+              title: 'Perfect parry',
+              seconds: 6,
+              captureInstruction: 'Parry the Warden, no HUD.',
+              entityIds: ['ent_warden'],
+            },
+            { kind: 'shot', title: 'Forest run', seconds: 6 },
+          ],
+        },
+        {
+          name: 'Escalation',
+          role: 'escalation',
+          slots: [{ kind: 'shot', title: 'Boss reveal', seconds: 8 }],
+        },
+      ],
+      music: { direction: 'Hybrid orchestral' },
+    },
     'brief.suggest': (req: LlmRequest<unknown>) => {
       prompts.push(req.prompt);
       const field = /^Field: .*\(([^()\s]+)\)$/m.exec(req.prompt)?.[1] ?? '';

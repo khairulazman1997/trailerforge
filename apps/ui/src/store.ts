@@ -9,6 +9,7 @@ import {
   type TaskRequest,
   type TaskView,
 } from '@trailerforge/service/client';
+import type { DecisionRecord } from '@trailerforge/schema';
 import type { Connection } from './connection.js';
 
 enablePatches();
@@ -32,6 +33,7 @@ export type ClientLike = Pick<
   | 'answerBrief'
   | 'assumeMissing'
   | 'suggestBrief'
+  | 'decisions'
 >;
 
 export type Info = Awaited<ReturnType<ServiceClient['info']>>;
@@ -65,6 +67,8 @@ export interface AppState {
   briefs: Record<string, { version: number; form: BriefForm }>;
   /** Latest progress message of a running task, per project (cleared when the task ends). */
   notices: Record<string, string>;
+  /** Why the storyboard looks the way it does: automated decisions, oldest first. */
+  decisions: Record<string, DecisionRecord[]>;
   toasts: Toast[];
   /** Last event sequence number applied; used to resume after a dropped stream. */
   lastSeq: number;
@@ -80,6 +84,7 @@ const initial: AppState = {
   jobs: {},
   briefs: {},
   notices: {},
+  decisions: {},
   toasts: [],
   lastSeq: 0,
 };
@@ -273,7 +278,8 @@ export class AppStore {
       const { [id]: _gone, ...projects } = s.projects;
       const { [id]: _brief, ...briefs } = s.briefs;
       const { [id]: _notice, ...notices } = s.notices;
-      return { projects, briefs, notices, order: s.order.filter((x) => x !== id) };
+      const { [id]: _why, ...decisions } = s.decisions;
+      return { projects, briefs, notices, decisions, order: s.order.filter((x) => x !== id) };
     });
   }
 
@@ -424,6 +430,17 @@ export class AppStore {
     if (!r) return null;
     await this.waitForVersion(projectId, r.version);
     return r.added;
+  }
+
+  // ---- decision log ----
+  async loadDecisions(projectId: string): Promise<void> {
+    if (!this.client || !this.state.projects[projectId]) return;
+    try {
+      const list = (await this.client.decisions(projectId, 100)) as DecisionRecord[];
+      this.set((s) => ({ decisions: { ...s.decisions, [projectId]: list } }));
+    } catch (err) {
+      this.toast('error', describeFailure(err));
+    }
   }
 
   // ---- toasts ----

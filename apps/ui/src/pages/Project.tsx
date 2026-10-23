@@ -5,6 +5,7 @@ import { EditableText } from '../components/EditableText.js';
 import { Link, navigate, projectPath, type ProjectTab } from '../router.js';
 import { BriefPage } from './Brief.js';
 import { KnowledgePage } from './Knowledge.js';
+import { StoryboardPage } from './Storyboard.js';
 import { busyTask } from '../store.js';
 
 const TAB_LABEL: Record<ProjectTab, string> = {
@@ -47,6 +48,8 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
         <BriefPage id={id} />
       ) : tab === 'knowledge' ? (
         <KnowledgePage id={id} />
+      ) : tab === 'storyboard' ? (
+        <StoryboardPage id={id} />
       ) : (
         <Placeholder tab={tab} />
       )}

@@ -150,6 +150,7 @@ class Fake {
       reason: 'r',
       provider: 'core/mock',
     }),
+    decisions: async () => [{ id: 'd1' }],
     startTask: async (id) => ({
       id: 't1',
       kind: 'generate',
@@ -360,6 +361,19 @@ describe('task notices', () => {
     fake.emit('task.updated', { ...task, status: 'succeeded' });
     await tick();
     expect(store.getState().notices).toEqual({});
+    store.disconnect();
+  });
+});
+
+describe('decision log', () => {
+  it('loads decisions for an open project and drops them when it closes', async () => {
+    const { fake, store } = await setup();
+    await store.loadDecisions('p1');
+    await store.loadDecisions('nope'); // not open: ignored
+    expect(Object.keys(store.getState().decisions)).toEqual(['p1']);
+    fake.emit('project.closed', { projectId: 'p1', dir: '/p/p1' });
+    await tick();
+    expect(store.getState().decisions).toEqual({});
     store.disconnect();
   });
 });

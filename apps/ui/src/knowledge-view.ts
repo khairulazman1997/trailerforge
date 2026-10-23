@@ -1,4 +1,5 @@
 import type { KnowledgeEntity, KnowledgeEntityKind } from '@trailerforge/schema';
+import { makeId } from './ids.js';
 
 export const KINDS = [
   'title',
@@ -105,15 +106,5 @@ export function entityBadges(e: KnowledgeEntity): Badge[] {
   return out;
 }
 
-export function makeEntityId(
-  name: string,
-  rand: () => string = () => crypto.randomUUID().slice(0, 6),
-): string {
-  const slug =
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 40) || 'x';
-  return `ent_${slug}_${rand()}`;
-}
+export const makeEntityId = (name: string, rand?: () => string): string =>
+  makeId('ent', name, rand);

@@ -52,6 +52,8 @@ Open that link in a browser. The Brief tab walks through what the video type nee
 
 The Game knowledge tab scans your repo (secrets and ignored files are never read), lists what it found with a per-entry "Exclude from AI" switch, lets you edit, add and remove entries, and offers the opt-in deep scan behind an explicit confirmation.
 
+The Storyboard tab shows sections and slots with a length bar against the target. Edit titles and lengths in place, open a slot's details, add or delete shots, cards and sections, reorder with buttons or by dragging, lock sections so neither you nor the AI changes them, undo anything, and ask "Why?" to see the recorded reason behind each generated section.
+
 ### Drive a project from Claude Code (MCP)
 
 ```bash
