@@ -54,6 +54,21 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
+  packages/plugin-api:
+    dependencies:
+      '@trailerforge/core':
+        specifier: workspace:*
+        version: link:../core
+      '@trailerforge/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../schema
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
   packages/schema:
     dependencies:
       zod:
