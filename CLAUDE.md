@@ -28,15 +28,15 @@ Read `docs/PLAN.md` first: it holds every approved decision, the milestone plan 
 
 ## Packages
 
-schema · core (store, commands, events) · jobs · plugin-api · media · llm · engine (+ core plugin) · apps/cli. Added in M2a: pack-game-trailer (Game Trailer plugin: video types, brief extension, storyboard templates, `game-trailer/unity` extractor) · brief (completeness checker, questionnaire, brief commands, "suggest for me") · storyboard (LLM generation, regenerate-one-section that keeps hand-edited slots, lock-enforcing storyboard commands, hand-edit commands `core/storyboard.update-slot|add-slot|remove-slot|move-slot|add-section|...`). knowledge (read-only repo scanner with secret exclusion and incremental hashing, `core/generic` extractor, knowledge merge commands that preserve user edits, opt-in deep scan via Claude Code in a sandbox copy). Decision log: `appendDecisions`/`readDecisions` in core. Anthropic provider (`core/anthropic`, needs ANTHROPIC_API_KEY; live test: `ANTHROPIC_LIVE=1`) done; mcp (MCP server: read/action/command tools, `tforge mcp`); engine `ops` (brief status, generate/regenerate storyboard, knowledge scan) shared by CLI, MCP and the future service. UI still to come in M2.
+schema · core (store, commands, events) · jobs · plugin-api · media · llm · engine (+ core plugin) · apps/cli. Added in M2a: pack-game-trailer (Game Trailer plugin: video types, brief extension, storyboard templates, `game-trailer/unity` extractor) · brief (completeness checker, questionnaire, brief commands, "suggest for me") · storyboard (LLM generation, regenerate-one-section that keeps hand-edited slots, lock-enforcing storyboard commands, hand-edit commands `core/storyboard.update-slot|add-slot|remove-slot|move-slot|add-section|...`). knowledge (read-only repo scanner with secret exclusion and incremental hashing, `core/generic` extractor, knowledge merge commands that preserve user edits, opt-in deep scan via Claude Code in a sandbox copy). Decision log: `appendDecisions`/`readDecisions` in core. Anthropic provider (`core/anthropic`, needs ANTHROPIC_API_KEY; live test: `ANTHROPIC_LIVE=1`) done; mcp (MCP server: read/action/command tools, `tforge mcp`); engine `ops` (brief status, generate/regenerate storyboard, knowledge scan; cancellable) shared by CLI, MCP and service. service (`tforge serve`: loopback HTTP API + SSE event stream, token/Host/Origin checks, tasks; browser-safe `@trailerforge/service/client`). UI still to come in M2.
 
 ## CLI
 
-`tforge new|info|probe|proxy|jobs|plugins` plus `knowledge scan`, `brief check`, `storyboard generate`, `mcp` (see README). The engine owns the LLM client (`engine.llm`, routes from `<home>/llm.routes.json`).
+`tforge new|info|probe|proxy|jobs|plugins` plus `knowledge scan`, `brief check`, `storyboard generate`, `mcp`, `serve` (see README). The engine owns the LLM client (`engine.llm`, routes from `<home>/llm.routes.json`).
 
 ## Progress
 
-- M1 complete. M2a in progress: M2a (backend) complete: 2a.1–2a.8 done. 2b.1 (storyboard hand-editing) done. Remaining M2: 2b.2–2b.10 (MCP server, service, UI, Electron) ; 2b.2 (MCP server) done; next is 2b.3 (local engine service, **Opus**). M2b task list: end of `docs/PLAN.md`. Task list: end of `docs/PLAN.md`.
+- M1 complete. M2a in progress: M2a (backend) complete: 2a.1–2a.8 done. 2b.1 (storyboard hand-editing) done. Remaining M2: 2b.2–2b.10 (MCP server, service, UI, Electron) ; 2b.2 (MCP server) and 2b.3 (local engine service) done; next is 2b.4 (UI scaffold, Sonnet). M2b task list: end of `docs/PLAN.md`. Task list: end of `docs/PLAN.md`.
 - Record start/end times and usage readings per task in `docs/BUILD_LOG.md` (stamp with `date -u`).
 - Commit only after `pnpm check` passes: `pnpm check && git commit ...`.
 

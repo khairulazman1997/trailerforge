@@ -109,6 +109,8 @@ export interface GenerateOptions {
   template?: string | undefined;
   /** Proceed with logged assumptions when required brief fields are missing. */
   assume?: boolean | undefined;
+  /** Cancels the LLM call; a cancelled generation never writes to the project. */
+  signal?: AbortSignal | undefined;
 }
 
 export interface GenerateOutcome {
@@ -161,7 +163,9 @@ export async function generateStoryboardOp(
   const { storyboard, decisions } = await generateStoryboard({ llm: engine.llm }, store.state, {
     template,
     targetDuration: duration,
+    ...(opts.signal ? { signal: opts.signal } : {}),
   });
+  opts.signal?.throwIfAborted();
   store.dispatch('core/storyboard.set', storyboard);
   await appendDecisions(store.paths.decisions, decisions);
 
@@ -197,7 +201,12 @@ export interface RegenerateOutcome {
 export async function regenerateSectionOp(
   engine: Engine,
   store: ProjectStore,
-  opts: { sectionId: string; instruction?: string | undefined; keepEdited?: boolean | undefined },
+  opts: {
+    sectionId: string;
+    instruction?: string | undefined;
+    keepEdited?: boolean | undefined;
+    signal?: AbortSignal | undefined;
+  },
 ): Promise<RegenerateOutcome> {
   if (!store.state.storyboard) {
     throw new OpError('not-found', 'this project has no storyboard yet; generate one first');
@@ -206,7 +215,9 @@ export async function regenerateSectionOp(
     sectionId: opts.sectionId,
     ...(opts.instruction ? { instruction: opts.instruction } : {}),
     ...(opts.keepEdited !== undefined ? { keepEdited: opts.keepEdited } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
   });
+  opts.signal?.throwIfAborted();
   store.dispatch('core/storyboard.replace-section', payload);
   await appendDecisions(store.paths.decisions, decisions);
   return {
@@ -239,6 +250,8 @@ export interface ScanOptions {
   claudeBin?: string | undefined;
   /** Progress notices worth showing before a slow or sensitive step. */
   onNotice?: (message: string) => void;
+  /** Cancels the scan; nothing is merged once cancelled. */
+  signal?: AbortSignal | undefined;
 }
 
 export interface ScanSummary {
@@ -314,7 +327,9 @@ export async function scanKnowledgeOp(
   const result = await scanSource(source, (id) => extractors.get(id), {
     ...(previous ? { previous } : {}),
     skipIfDigest: opts.force || opts.deep ? null : source.digestHash,
+    ...(opts.signal ? { signal: opts.signal } : {}),
   });
+  opts.signal?.throwIfAborted();
   const { scan } = result;
 
   const skipped: Record<string, number> = {};
@@ -340,7 +355,9 @@ export async function scanKnowledgeOp(
       consent: true,
       gameName: store.state.name,
       ...(opts.claudeBin ? { claudeBin: opts.claudeBin } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
     });
+    opts.signal?.throwIfAborted();
     store.dispatch('core/knowledge.apply-scan', {
       sourceId: source.id,
       scope: 'deep',

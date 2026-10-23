@@ -1,0 +1,36 @@
+{
+  "name": "@trailerforge/service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@trailerforge/core": "workspace:*",
+    "@trailerforge/engine": "workspace:*",
+    "@trailerforge/schema": "workspace:*",
+    "@trailerforge/storyboard": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@trailerforge/llm": "workspace:*"
+  }
+}

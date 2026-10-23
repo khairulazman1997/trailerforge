@@ -3,6 +3,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { Engine, type EngineOptions } from '@trailerforge/engine';
 import { createMcpServer, serveStdio } from '@trailerforge/mcp';
 import { MediaError, probe } from '@trailerforge/media';
+import { startService } from '@trailerforge/service';
 import { briefCheck, knowledgeScan, storyboardGenerate, type CmdCtx } from './m2.js';
 
 export interface Io {
@@ -20,6 +21,7 @@ Usage:
   tforge storyboard generate <dir> [--duration <s>] [--template <id>] [--assume]
                                                           Generate the storyboard with the LLM
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
+  tforge serve [--port <n>] [--allow-origin <url>]...    Run the local engine service for the UI (Ctrl+C stops)
   tforge probe <file>                                     Inspect a media file
   tforge proxy <file> [--out <file>] [--height <px>]      Make an editing proxy (background job)
   tforge jobs [--status <status>]                         List background jobs
@@ -61,6 +63,8 @@ export async function main(
         status: { type: 'string' },
         repo: { type: 'string' },
         'repo-root': { type: 'string', multiple: true },
+        port: { type: 'string' },
+        'allow-origin': { type: 'string', multiple: true },
         duration: { type: 'string' },
         template: { type: 'string' },
         assume: { type: 'boolean', default: false },
@@ -117,7 +121,7 @@ export async function main(
   const engine = await Engine.start({
     ...(o.home ? { home: o.home } : env.TFORGE_HOME ? { home: env.TFORGE_HOME } : {}),
     // One-shot commands save on exit; the long-running MCP server also saves in the background.
-    autosaveMs: cmd === 'mcp' ? 2000 : 0,
+    autosaveMs: cmd === 'mcp' || cmd === 'serve' ? 2000 : 0,
     approveSend: ({ task, provider }) => {
       io.err(`Sending "${task}" to ${provider.name}: the brief and game facts leave this machine.`);
       return true;
@@ -141,6 +145,25 @@ export async function main(
     },
   };
   try {
+    if (cmd === 'serve') {
+      const port = o.port === undefined ? 0 : Number(o.port);
+      if (!Number.isInteger(port) || port < 0 || port > 65535) {
+        io.err(`--port must be 0-65535, got "${o.port}"`);
+        return 2;
+      }
+      const svc = await startService({ engine, port, allowedOrigins: o['allow-origin'] ?? [] });
+      // The token is the only credential; it is printed here for the person who started the service.
+      emit(`TrailerForge service on ${svc.url}\ntoken: ${svc.token}`, {
+        url: svc.url,
+        token: svc.token,
+      });
+      await new Promise<void>((done) => {
+        process.once('SIGINT', done);
+        process.once('SIGTERM', done);
+      });
+      await svc.close();
+      return 0;
+    }
     if (cmd === 'mcp') {
       // stdout is the protocol channel: nothing else may print there.
       await serveStdio(

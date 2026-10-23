@@ -33,6 +33,14 @@ tforge brief check ./Ember.tforge                                  # what the vi
 tforge storyboard generate ./Ember.tforge --duration 60 --assume   # --assume logs assumptions for missing fields
 ```
 
+### Local engine service (for the UI)
+
+```bash
+tforge serve --allow-origin http://localhost:5173   # prints the URL and a fresh token
+```
+
+Loopback only, a new random token every launch (required on every request, including the event stream), Host and Origin checks against DNS rebinding and other web pages, JSON bodies with a size cap. Long operations (generate, regenerate, scan) run as cancellable tasks; edits to a project are refused while one runs on it.
+
 ### Drive a project from Claude Code (MCP)
 
 ```bash
