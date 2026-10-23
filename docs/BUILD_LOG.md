@@ -45,7 +45,7 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | 2a.4 Storyboard generation, regenerate section, decision log   | `c30c016` | 14:19:44 | 14:26:36 | ~7 min     | Opus   | found: timeline items reference slots, so replaced slots must be unlinked                |
 | 2a.5 Anthropic API provider                                    | `62e42b8` | 14:32:00 | 14:33:13 | ~1 min     | Sonnet | structured output + Zod validation; schema-rejection fallback; refusal/truncation errors |
 | 2a.6 Repo scanner + generic extractor                          | `f0ddc34` | 14:35:40 | 14:39:32 | ~4 min     | Opus   | secrets matched by path before any open; extractor reads limited to scanned files        |
-| 2a.7 Unity extractor                                           | `00ff1f0` | 14:43:18 | 14:44:28 | ~1 min     | Sonnet | scenes from build list, ScriptableObjects/prefabs classified by folder                   |
+| 2a.7 Unity extractor                                           | `9d638fb` | 14:43:18 | 14:44:28 | ~1 min     | Sonnet | scenes from build list, ScriptableObjects/prefabs classified by folder                   |
 
 | When (M2a)      | Session    | Week | Note                                      |
 | --------------- | ---------- | ---- | ----------------------------------------- |
