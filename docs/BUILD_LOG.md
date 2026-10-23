@@ -50,3 +50,6 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | When (M2a)      | Session    | Week | Note                                      |
 | --------------- | ---------- | ---- | ----------------------------------------- |
 | After 2a.1–2a.4 | 0% (reset) | 29%  | session window rolled over before reading |
+| After 2a.5      | 3%         | 29%  |                                           |
+| After 2a.6      | 10%        | 30%  |                                           |
+| After 2a.7      | 14%        | 31%  |                                           |
