@@ -13,12 +13,13 @@ import {
 import { JobQueue } from '@trailerforge/jobs';
 import { PluginHost, type Plugin, type PluginStatus } from '@trailerforge/plugin-api';
 import { PROJECT_SCHEMA_VERSION, type ProjectInput } from '@trailerforge/schema';
+import { gameTrailerPack } from '@trailerforge/pack-game-trailer';
 import { corePlugin } from './core-plugin.js';
 
 export interface EngineOptions {
   /** App data dir (job DB, temp, plugins). Default: $TFORGE_HOME or ~/.trailerforge */
   home?: string;
-  /** Extra plugins (after the built-in core plugin). */
+  /** Extra plugins (after the built-in core plugin and Game Trailer pack). */
   plugins?: Plugin[];
   /** Also load drop-in plugins from `<home>/plugins`. Default true. */
   loadUserPlugins?: boolean;
@@ -58,7 +59,7 @@ export class Engine {
     });
     const host = new PluginHost({ events: bus, featureFlags: opts.featureFlags ?? [] });
     const status = [
-      ...(await host.load([corePlugin, ...(opts.plugins ?? [])])),
+      ...(await host.load([corePlugin, gameTrailerPack, ...(opts.plugins ?? [])])),
       ...(opts.loadUserPlugins === false
         ? []
         : await host.loadFromDirectory(join(home, 'plugins'))),

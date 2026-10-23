@@ -20,6 +20,7 @@
     "@trailerforge/core": "workspace:*",
     "@trailerforge/jobs": "workspace:*",
     "@trailerforge/media": "workspace:*",
+    "@trailerforge/pack-game-trailer": "workspace:*",
     "@trailerforge/plugin-api": "workspace:*",
     "@trailerforge/schema": "workspace:*",
     "zod": "^4.6.7"

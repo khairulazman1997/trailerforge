@@ -71,6 +71,9 @@ importers:
       '@trailerforge/media':
         specifier: workspace:*
         version: link:../media
+      '@trailerforge/pack-game-trailer':
+        specifier: workspace:*
+        version: link:../pack-game-trailer
       '@trailerforge/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
@@ -101,6 +104,18 @@ importers:
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema
+
+  packages/pack-game-trailer:
+    dependencies:
+      '@trailerforge/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../schema
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/plugin-api:
     dependencies:

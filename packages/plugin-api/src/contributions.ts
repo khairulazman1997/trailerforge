@@ -8,17 +8,29 @@ import { z } from 'zod';
 
 // ---------------------------------------------------------------- data contributions
 
-/** A brief field a video type needs, used by the completeness checker (M2). */
+/**
+ * Something a video type needs before generation, checked by the completeness checker. Paths
+ * are rooted at the project, dotted, with `[key=value]` to select an array entry:
+ * `brief.title`, `brief.keyDates[label=Release].date`, `formatTargets`,
+ * `brief.extensions.game-trailer.gamePlatforms`.
+ */
 export const BriefRequirement = z.strictObject({
-  /** Dotted path into the brief, e.g. `title`, `keyDates`, `extensions.game-trailer.genre`. */
   field: z.string().min(1),
   label: z.string().min(1),
+  /** Optional fields raise the score but never block generation. */
+  required: z.boolean().default(true),
+  /** Alternative paths that also satisfy this requirement (e.g. a release window instead of a date). */
+  anyOf: z.array(z.string().min(1)).default([]),
   /** For arrays: minimum number of entries (e.g. 3 selling points). */
   minItems: z.int().positive().optional(),
-  /** Multiple-choice options offered in the questionnaire; "suggest for me" is always added. */
+  /** Questionnaire input kind; "suggest for me" is always offered too. */
+  input: z.enum(['text', 'long-text', 'list', 'date', 'choice', 'multi-choice']).default('text'),
   choices: z.array(z.string()).optional(),
+  /** One-line hint shown under the question. */
+  help: z.string().optional(),
+  weight: z.number().positive().default(1),
 });
-export type BriefRequirement = z.infer<typeof BriefRequirement>;
+export type BriefRequirement = z.input<typeof BriefRequirement>;
 
 export const VideoTypeDef = z.strictObject({
   id: PluginRef,
