@@ -213,3 +213,9 @@ Design decisions to confirm with the user before building (defaults in brackets)
 | 3.9 | **Hardening and docs**: end-to-end (storyboard → capture → tick → export), accessibility pass on the new screens, README capture guide, update this plan and BUILD_LOG; run the desktop smoke on a real machine if available                                                                                             | Opus   | `pnpm check` and `pnpm test:e2e` green; review findings fixed                                                                  |
 
 Rough budget: 3.1 and 3.9 Opus, the rest Sonnet (~80% of the milestone); about 80–120k output tokens. Suggested sessions: (1) 3.1 alone on Opus; (2) 3.2–3.4; (3) 3.5–3.7; (4) 3.8; (5) 3.9 on Opus.
+
+## Potential extensions (not scheduled, not in any milestone)
+
+Ideas recorded so they are not lost. None of these is planned work; do not build them or design around them without the user asking.
+
+- **Built-in recording / OBS control** (parked 2026-10-23): a plugin that drives a recorder (for example OBS over its WebSocket API) so a capture checklist item can start, stop and name a recording, and the file attaches to its slot. Today "capture" means the checklist only (M3); the user records in their own tool and M4 imports the files. If ever built, it must stay local-only, be opt-in, and use the same plugin API and typed commands as everything else.

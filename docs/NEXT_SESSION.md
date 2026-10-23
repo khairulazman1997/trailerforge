@@ -15,4 +15,6 @@ Do this, in order:
 
 Constraints that matter: derived capture data is computed from `project.json`, never stored as a second copy; user edits go through typed commands and are undoable; anything sent to an LLM must exclude entities the user marked excluded; no network calls outside the `Egress` service. Keep turns lean (I am on Claude Pro) and prefer targeted reads over re-reading large files.
 
+Parked idea (not planned): built-in recording/OBS control is listed under "Potential extensions" in `docs/PLAN.md`; do not build it.
+
 Known open item from M2: the Electron app (`apps/desktop`) has never been launched on a real desktop (`pnpm approve-builds` for `electron`, then `pnpm --filter @trailerforge/desktop start`), and the UI does not use the native pickers yet (task 3.8 picks that up).
