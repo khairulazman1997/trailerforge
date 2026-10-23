@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 
 const Effort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
@@ -63,4 +64,16 @@ export async function resolveRoute(
   throw new Error(
     `no LLM provider available for task "${task}" (tried ${[route?.provider, ...config.fallbacks].filter(Boolean).join(', ')})`,
   );
+}
+
+/** Read `llm.routes.json`; a missing file means the defaults. A malformed file is an error. */
+export async function loadRoutesConfig(path: string): Promise<RoutesConfig> {
+  let text: string;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return RoutesConfig.parse(DEFAULT_ROUTES);
+    throw err;
+  }
+  return RoutesConfig.parse(JSON.parse(text));
 }

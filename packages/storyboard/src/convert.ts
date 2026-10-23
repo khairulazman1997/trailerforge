@@ -1,4 +1,4 @@
-import type { CardSlot, Section, Slot, VoLine } from '@trailerforge/schema';
+import { mintId, type CardSlot, type Section, type Slot, type VoLine } from '@trailerforge/schema';
 import type { GenSection, GenSlot } from './output.js';
 
 type CardKind = CardSlot['cardKind'];
@@ -13,25 +13,6 @@ export interface ConvertContext {
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
-
-export function slug(s: string): string {
-  return (
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 40) || 'x'
-  );
-}
-
-/** `prefix_slug`, suffixed `_2`, `_3`... until unused; registers the result in `taken`. */
-export function mintId(prefix: string, name: string, taken: Set<string>): string {
-  const base = `${prefix}_${slug(name)}`.slice(0, 56);
-  let id = base;
-  for (let n = 2; taken.has(id); n++) id = `${base}_${n}`;
-  taken.add(id);
-  return id;
-}
 
 /**
  * Scale positive values so they sum to `budget`, in 0.1 s steps, each at least 0.1 s. Rounding
@@ -147,18 +128,6 @@ export function convertSections(
     };
   });
   return { sections, voLines, requestedSeconds: round1(flat.reduce((a, s) => a + s.seconds, 0)) };
-}
-
-/** Every `id` string anywhere in a JSON-like value. */
-export function collectIds(value: unknown, into = new Set<string>()): Set<string> {
-  if (Array.isArray(value)) for (const v of value) collectIds(v, into);
-  else if (value && typeof value === 'object') {
-    for (const [k, v] of Object.entries(value)) {
-      if (k === 'id' && typeof v === 'string') into.add(v);
-      else collectIds(v, into);
-    }
-  }
-  return into;
 }
 
 export function sectionSeconds(s: Section): number {

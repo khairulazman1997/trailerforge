@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { BUILTIN_PROMPTS_DIR, loadPrompt, type LlmClient } from '@trailerforge/llm';
 import type { StoryboardTemplate } from '@trailerforge/plugin-api';
 import {
+  collectIds,
   DecisionRecord,
+  mintId,
   Storyboard,
   type CardSlot,
   type Project,
@@ -12,13 +14,7 @@ import {
   type VoLine,
 } from '@trailerforge/schema';
 import { SectionLockedError } from './commands.js';
-import {
-  collectIds,
-  convertSections,
-  mintId,
-  sectionSeconds,
-  type ConvertContext,
-} from './convert.js';
+import { convertSections, sectionSeconds, type ConvertContext } from './convert.js';
 import { GeneratedSection, GeneratedStoryboard } from './output.js';
 
 export const STORYBOARD_PROMPTS_DIR = resolve(

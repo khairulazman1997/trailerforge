@@ -10,11 +10,11 @@ import {
 } from '@trailerforge/core';
 import { createMockProvider, LlmClient, RoutesConfig } from '@trailerforge/llm';
 import { releaseTemplate } from '@trailerforge/pack-game-trailer';
-import { parseProject, Project, type Storyboard } from '@trailerforge/schema';
+import { mintId, parseProject, Project, type Storyboard } from '@trailerforge/schema';
 import { sampleProject } from '@trailerforge/schema/fixtures';
 import { describe, expect, it } from 'vitest';
 import { storyboardCommands } from './commands.js';
-import { fitToBudget, mintId } from './convert.js';
+import { fitToBudget } from './convert.js';
 import { generateStoryboard, regenerateSection } from './generate.js';
 
 const NOW = () => new Date('2026-10-23T12:00:00Z');

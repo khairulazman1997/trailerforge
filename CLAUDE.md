@@ -28,11 +28,15 @@ Read `docs/PLAN.md` first: it holds every approved decision, the milestone plan 
 
 ## Packages
 
-schema · core (store, commands, events) · jobs · plugin-api · media · llm · engine (+ core plugin) · apps/cli. Added in M2a: pack-game-trailer (Game Trailer plugin: video types, brief extension, storyboard templates, `game-trailer/unity` extractor) · brief (completeness checker, questionnaire, brief commands, "suggest for me") · storyboard (LLM generation, regenerate-one-section, lock-enforcing storyboard commands). knowledge (read-only repo scanner with secret exclusion and incremental hashing, `core/generic` extractor). Decision log: `appendDecisions`/`readDecisions` in core. Anthropic provider (`core/anthropic`, needs ANTHROPIC_API_KEY; live test: `ANTHROPIC_LIVE=1`) done; UI and MCP server still to come in M2.
+schema · core (store, commands, events) · jobs · plugin-api · media · llm · engine (+ core plugin) · apps/cli. Added in M2a: pack-game-trailer (Game Trailer plugin: video types, brief extension, storyboard templates, `game-trailer/unity` extractor) · brief (completeness checker, questionnaire, brief commands, "suggest for me") · storyboard (LLM generation, regenerate-one-section, lock-enforcing storyboard commands). knowledge (read-only repo scanner with secret exclusion and incremental hashing, `core/generic` extractor, knowledge merge commands that preserve user edits, opt-in deep scan via Claude Code in a sandbox copy). Decision log: `appendDecisions`/`readDecisions` in core. Anthropic provider (`core/anthropic`, needs ANTHROPIC_API_KEY; live test: `ANTHROPIC_LIVE=1`) done; UI and MCP server still to come in M2.
+
+## CLI
+
+`tforge new|info|probe|proxy|jobs|plugins` plus `knowledge scan`, `brief check`, `storyboard generate` (see README). The engine owns the LLM client (`engine.llm`, routes from `<home>/llm.routes.json`).
 
 ## Progress
 
-- M1 complete. M2a in progress: 2a.1–2a.7 done; next is 2a.8 (knowledge merge commands, deep scan opt-in, CLI commands, Sonnet). Task list: end of `docs/PLAN.md`.
+- M1 complete. M2a in progress: M2a (backend) complete: 2a.1–2a.8 done. Remaining M2: MCP server, Claude Code provider polish, UI shell (see `docs/PLAN.md`). Task list: end of `docs/PLAN.md`.
 - Record start/end times and usage readings per task in `docs/BUILD_LOG.md` (stamp with `date -u`).
 - Commit only after `pnpm check` passes: `pnpm check && git commit ...`.
 

@@ -11,6 +11,13 @@ import {
   type CoreEvents,
 } from '@trailerforge/core';
 import { JobQueue } from '@trailerforge/jobs';
+import {
+  createAnthropicProvider,
+  createClaudeCodeProvider,
+  LlmClient,
+  loadRoutesConfig,
+  type LlmClientOptions,
+} from '@trailerforge/llm';
 import { PluginHost, type Plugin, type PluginStatus } from '@trailerforge/plugin-api';
 import { PROJECT_SCHEMA_VERSION, type ProjectInput } from '@trailerforge/schema';
 import { gameTrailerPack } from '@trailerforge/pack-game-trailer';
@@ -26,6 +33,10 @@ export interface EngineOptions {
   featureFlags?: string[];
   jobConcurrency?: number;
   autosaveMs?: number;
+  /** Replace the default LLM client (Anthropic API, then Claude Code) with your own. */
+  llm?: LlmClient;
+  /** Disclosure gate for the default client; called before any request leaves the machine. */
+  approveSend?: LlmClientOptions['approveSend'];
 }
 
 export function defaultHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -47,6 +58,7 @@ export class Engine {
     readonly plugins: PluginHost,
     readonly commands: CommandRegistry,
     readonly jobs: JobQueue,
+    readonly llm: LlmClient,
     readonly pluginStatus: PluginStatus[],
     private readonly autosaveMs: number,
   ) {}
@@ -84,7 +96,21 @@ export class Engine {
       }),
     );
     jobs.start();
-    return new Engine(home, bus, host, commands, jobs, status, opts.autosaveMs ?? 2000);
+
+    // Providers are built lazily and only used if the routes pick them, so starting the engine
+    // never touches the network or needs a key.
+    const providers = {
+      'core/anthropic': createAnthropicProvider(),
+      'core/claude-code': createClaudeCodeProvider(),
+    };
+    const llm =
+      opts.llm ??
+      new LlmClient({
+        providers: (id) => providers[id as keyof typeof providers],
+        routes: await loadRoutesConfig(join(home, 'llm.routes.json')),
+        ...(opts.approveSend ? { approveSend: opts.approveSend } : {}),
+      });
+    return new Engine(home, bus, host, commands, jobs, llm, status, opts.autosaveMs ?? 2000);
   }
 
   async createProject(

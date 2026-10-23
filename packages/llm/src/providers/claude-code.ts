@@ -6,6 +6,13 @@ export interface ClaudeCodeOptions {
   /** Path to the `claude` CLI. Default: `claude` on PATH. */
   bin?: string;
   timeoutMs?: number;
+  /**
+   * Tools Claude Code may use. Default none (pure text in, JSON out). The deep repo scan passes
+   * read-only tools; never pass Bash/Write/Edit/web tools from here.
+   */
+  tools?: string[];
+  /** Working directory of the CLI process (where its tools can see files). */
+  cwd?: string;
 }
 
 interface CliResult {
@@ -47,7 +54,7 @@ export function createClaudeCodeProvider(opts: ClaudeCodeOptions = {}): LlmProvi
         '--system-prompt',
         request.system,
         '--tools',
-        '',
+        (opts.tools ?? []).join(','),
         '--no-session-persistence',
       ];
       if (request.model) base.push('--model', request.model);
@@ -58,7 +65,9 @@ export function createClaudeCodeProvider(opts: ClaudeCodeOptions = {}): LlmProvi
         async (prompt, attempt) => {
           // Each call is stateless, so a repair round repeats the request plus the issues.
           const input = attempt === 0 ? prompt : `${request.prompt}\n\n${prompt}`;
-          const out = JSON.parse(await run(bin, base, input, timeoutMs, signal)) as CliResult;
+          const out = JSON.parse(
+            await run(bin, base, input, timeoutMs, signal, opts.cwd),
+          ) as CliResult;
           if (out.is_error)
             throw new Error(`Claude Code returned an error: ${out.result ?? 'unknown'}`);
           usage = {
@@ -80,9 +89,14 @@ function run(
   stdin: string,
   timeoutMs: number,
   signal?: AbortSignal,
+  cwd?: string,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(bin, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+      ...(cwd ? { cwd } : {}),
+    });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d));

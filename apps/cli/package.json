@@ -14,8 +14,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@trailerforge/brief": "workspace:*",
+    "@trailerforge/core": "workspace:*",
     "@trailerforge/engine": "workspace:*",
+    "@trailerforge/knowledge": "workspace:*",
+    "@trailerforge/llm": "workspace:*",
     "@trailerforge/media": "workspace:*",
-    "@trailerforge/plugin-api": "workspace:*"
+    "@trailerforge/plugin-api": "workspace:*",
+    "@trailerforge/schema": "workspace:*",
+    "@trailerforge/storyboard": "workspace:*"
   }
 }

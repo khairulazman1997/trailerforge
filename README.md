@@ -25,6 +25,16 @@ node apps/cli/dist/bin.js jobs
 node apps/cli/dist/bin.js plugins
 ```
 
+From a game repo to a storyboard (the LLM step uses `ANTHROPIC_API_KEY`, or falls back to your Claude Code login):
+
+```bash
+tforge knowledge scan ./Ember.tforge --repo ~/Games/EmberKnight   # read-only; secrets and ignored files are never read
+tforge brief check ./Ember.tforge                                  # what the video type still needs (exit 1 if incomplete)
+tforge storyboard generate ./Ember.tforge --duration 60 --assume   # --assume logs assumptions for missing fields
+```
+
+`knowledge scan --deep --allow-deep-scan` additionally lets Claude Code read a temporary copy of the repo's text files (no secrets, no ignored files); this sends file contents to Anthropic, so it is off unless you confirm it.
+
 App data (job database, temp files, drop-in plugins) lives in `$TFORGE_HOME` (default `~/.trailerforge`).
 
 ## Architecture

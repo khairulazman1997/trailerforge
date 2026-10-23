@@ -1,7 +1,8 @@
 import { parseArgs } from 'node:util';
 import { basename, dirname, extname, join, resolve } from 'node:path';
-import { Engine } from '@trailerforge/engine';
+import { Engine, type EngineOptions } from '@trailerforge/engine';
 import { MediaError, probe } from '@trailerforge/media';
+import { briefCheck, knowledgeScan, storyboardGenerate, type CmdCtx } from './m2.js';
 
 export interface Io {
   out(line: string): void;
@@ -13,6 +14,10 @@ const HELP = `tforge — TrailerForge command line
 Usage:
   tforge new <dir> --name <name> [--type <videoTypeId>]   Create a project folder
   tforge info <dir>                                       Show a project summary
+  tforge brief check <dir>                                Check the brief against its video type
+  tforge knowledge scan <dir> [--repo <path>] [--force]   Scan a game repo into the knowledge base
+  tforge storyboard generate <dir> [--duration <s>] [--template <id>] [--assume]
+                                                          Generate the storyboard with the LLM
   tforge probe <file>                                     Inspect a media file
   tforge proxy <file> [--out <file>] [--height <px>]      Make an editing proxy (background job)
   tforge jobs [--status <status>]                         List background jobs
@@ -20,14 +25,24 @@ Usage:
 
 Options:
   --json         Machine-readable output
+  --assume       storyboard generate: proceed despite a missing brief, logging assumptions
+  --deep --allow-deep-scan
+                 knowledge scan: also let Claude Code read the repo (sends file contents to Anthropic)
   --home <dir>   App data directory (default: $TFORGE_HOME or ~/.trailerforge)
   -h, --help     Show this help`;
 
-/** Exit codes: 0 ok, 1 operation failed, 2 usage error. */
+/** Test seams: engine overrides (e.g. a mock LLM client) and the Claude Code binary. */
+export interface MainExt {
+  engine?: Partial<EngineOptions>;
+  claudeBin?: string;
+}
+
+/** Exit codes: 0 ok, 1 operation failed (or `brief check` found gaps), 2 usage error. */
 export async function main(
   argv: string[],
   io: Io,
   env: NodeJS.ProcessEnv = process.env,
+  ext: MainExt = {},
 ): Promise<number> {
   let parsed;
   try {
@@ -42,6 +57,13 @@ export async function main(
         out: { type: 'string' },
         height: { type: 'string' },
         status: { type: 'string' },
+        repo: { type: 'string' },
+        duration: { type: 'string' },
+        template: { type: 'string' },
+        assume: { type: 'boolean', default: false },
+        deep: { type: 'boolean', default: false },
+        'allow-deep-scan': { type: 'boolean', default: false },
+        force: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
     });
@@ -49,10 +71,11 @@ export async function main(
     io.err((err as Error).message);
     return 2;
   }
-  const {
-    values: o,
-    positionals: [cmd, arg],
-  } = parsed;
+  const { values: o, positionals } = parsed;
+  // `brief check`, `knowledge scan` and `storyboard generate` are two-word commands.
+  const twoWord = ['brief', 'knowledge', 'storyboard'].includes(positionals[0] ?? '');
+  const cmd = twoWord ? `${positionals[0]} ${positionals[1] ?? ''}`.trim() : positionals[0];
+  const arg = positionals[twoWord ? 2 : 1];
   if (o.help || !cmd) {
     io.out(HELP);
     return o.help ? 0 : 2;
@@ -91,9 +114,37 @@ export async function main(
   const engine = await Engine.start({
     ...(o.home ? { home: o.home } : env.TFORGE_HOME ? { home: env.TFORGE_HOME } : {}),
     autosaveMs: 0,
+    approveSend: ({ task, provider }) => {
+      io.err(`Sending "${task}" to ${provider.name}: the brief and game facts leave this machine.`);
+      return true;
+    },
+    ...ext.engine,
   });
+  const ctx: CmdCtx = {
+    engine,
+    io,
+    emit,
+    claudeBin: ext.claudeBin,
+    flags: {
+      json: o.json,
+      repo: o.repo,
+      duration: o.duration,
+      template: o.template,
+      assume: o.assume,
+      deep: o.deep,
+      allowDeepScan: o['allow-deep-scan'],
+      force: o.force,
+    },
+  };
   try {
     switch (cmd) {
+      // `return await`, not `return`: the finally block must not close the engine mid-command.
+      case 'brief check':
+        return need(arg, '<dir>') ? await briefCheck(ctx, arg) : 2;
+      case 'knowledge scan':
+        return need(arg, '<dir>') ? await knowledgeScan(ctx, arg) : 2;
+      case 'storyboard generate':
+        return need(arg, '<dir>') ? await storyboardGenerate(ctx, arg) : 2;
       case 'new': {
         if (!need(arg, '<dir>') || !need(o.name, '--name')) return 2;
         const store = await engine.createProject(arg, {

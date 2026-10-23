@@ -21,6 +21,7 @@
     "@trailerforge/core": "workspace:*",
     "@trailerforge/jobs": "workspace:*",
     "@trailerforge/knowledge": "workspace:*",
+    "@trailerforge/llm": "workspace:*",
     "@trailerforge/media": "workspace:*",
     "@trailerforge/pack-game-trailer": "workspace:*",
     "@trailerforge/plugin-api": "workspace:*",
