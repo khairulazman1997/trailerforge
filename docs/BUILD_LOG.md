@@ -144,5 +144,6 @@ Planned: 14 tasks (4.1–4.14), about 270–400k output tokens, ~75% Opus, six s
 | Before breakdown             | —       | —    | user to report     |
 | After breakdown / before 4.1 | 2%      | 50%  | new session window |
 | After 4.1                    | —       | —    | user to report     |
+| After 4.14 (M4 done)         | 0%      | 68%  | new session window |
 
-M4 summary: 14 planned tasks (4.1–4.14) plus 4.5b (pinning the vision model) and the 4.11a/b split, from 02:48 to about 14:30 UTC across four session windows; session readings 2% → 88% (window 1), 3% → 17%+ (window 2), week 50% → 65%+. Planned 270–400k output tokens over 2–3 windows and 18–30% of the week. Left: 4.12b (vision wiring, watched-folder setting, previews on screen), the live vision download test (blocked by the network policy), a human review of a cut and the Windows checks in `docs/NEXT_SESSION.md`.
+M4 summary: 14 planned tasks (4.1–4.14) plus 4.5b (pinning the vision model) and the 4.11a/b split, from 02:48 to about 14:30 UTC across four session windows; session readings 2% → 88% (window 1), 3% → 17%+ (window 2), week 50% → 68% (reading after 4.14, new window at 0%). Planned 270–400k output tokens over 2–3 windows and 18–30% of the week. Left: 4.12b (vision wiring, watched-folder setting, previews on screen), the live vision download test (blocked by the network policy), a human review of a cut and the Windows checks in `docs/NEXT_SESSION.md`.
