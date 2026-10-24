@@ -5,3 +5,4 @@ export * from './capture-ops.js';
 export * from './secrets.js';
 export * from './handoff.js';
 export * from './settings.js';
+export * from './footage-ops.js';

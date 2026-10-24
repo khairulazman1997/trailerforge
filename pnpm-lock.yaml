@@ -188,12 +188,21 @@ importers:
 
   packages/engine:
     dependencies:
+      '@trailerforge/analysis':
+        specifier: workspace:*
+        version: link:../analysis
       '@trailerforge/brief':
         specifier: workspace:*
         version: link:../brief
       '@trailerforge/core':
         specifier: workspace:*
         version: link:../core
+      '@trailerforge/cut':
+        specifier: workspace:*
+        version: link:../cut
+      '@trailerforge/ingest':
+        specifier: workspace:*
+        version: link:../ingest
       '@trailerforge/jobs':
         specifier: workspace:*
         version: link:../jobs

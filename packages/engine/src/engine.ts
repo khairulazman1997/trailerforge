@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { CommandRegistry } from '@trailerforge/core';
+import { LibraryStore, type CommandRegistry } from '@trailerforge/core';
+import { registerAnalysisJobs } from '@trailerforge/analysis';
+import { Ingestor, registerIngestJobs } from '@trailerforge/ingest';
 import {
   bridgeProjectStore,
   coreCommands,
@@ -63,6 +65,8 @@ export class Engine {
     readonly plugins: PluginHost,
     readonly commands: CommandRegistry,
     readonly jobs: JobQueue,
+    readonly library: LibraryStore,
+    readonly ingestor: Ingestor,
     readonly llm: LlmClient,
     readonly secrets: SecretStore,
     readonly handoff: HandoffHub,
@@ -94,6 +98,12 @@ export class Engine {
       concurrency: opts.jobConcurrency ?? 2,
     });
     for (const { def } of host.registries.jobs.list()) jobs.register(def);
+    // Footage ingest and local analysis: registered before the queue starts, so a job left
+    // running by a crash resumes at startup.
+    const library = await LibraryStore.open(home);
+    registerIngestJobs({ library, queue: jobs, home });
+    registerAnalysisJobs(jobs);
+    const ingestor = new Ingestor({ queue: jobs });
     jobs.subscribe(({ job }) =>
       bus.emit('core/job.updated', {
         jobId: job.id,
@@ -137,6 +147,8 @@ export class Engine {
       host,
       commands,
       jobs,
+      library,
+      ingestor,
       llm,
       secrets,
       handoff,

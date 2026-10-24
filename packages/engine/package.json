@@ -17,8 +17,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@trailerforge/analysis": "workspace:*",
     "@trailerforge/brief": "workspace:*",
     "@trailerforge/core": "workspace:*",
+    "@trailerforge/cut": "workspace:*",
+    "@trailerforge/ingest": "workspace:*",
     "@trailerforge/jobs": "workspace:*",
     "@trailerforge/knowledge": "workspace:*",
     "@trailerforge/llm": "workspace:*",
