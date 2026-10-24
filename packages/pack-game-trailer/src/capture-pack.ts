@@ -6,7 +6,13 @@ import {
   DEBUG_COMMAND_TAG,
   SAVE_FILE_TAG,
 } from './capture-hints.js';
-import { excludedTerms, readCaptureTips, redactor, resolveCaptureTips } from './capture-tips.js';
+import {
+  excludedTerms,
+  readCaptureTips,
+  redactor,
+  resolveCaptureTips,
+  textLeaves,
+} from './capture-tips.js';
 import { buildCapturePlan, type CaptureGroup } from './capture.js';
 import { resolveRecordingSettings, RecordingSettings } from './recording.js';
 
@@ -221,6 +227,22 @@ export function buildCapturePack(project: Project, opts: CapturePackOptions = {}
 }
 
 const OMITTED = '(omitted)';
+/** Fields that hold enums, ids or settings rather than text a person wrote. */
+const STRUCTURAL = new Set([
+  'format',
+  'id',
+  'videoTypeId',
+  'slotId',
+  'key',
+  'status',
+  'priority',
+  'hud',
+  'kind',
+  'settings',
+  'sources',
+  'code',
+  'severity',
+]);
 
 /**
  * A shareable copy: every string loses the name, id and source path of each entity the user
@@ -231,21 +253,27 @@ function omitExcludedFrom(pack: CapturePack, project: Project): CapturePack {
   const terms = excludedTerms(project.knowledge);
   if (terms.length === 0) return pack;
   const redact = redactor(terms, OMITTED);
+  // Only free text is rewritten; enums, ids and settings keep their values so the pack stays
+  // valid even when an excluded name is a short word like "Off".
   const walk = (v: unknown): unknown =>
     typeof v === 'string'
       ? redact(v)
       : Array.isArray(v)
         ? v.map(walk)
         : v && typeof v === 'object'
-          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]))
+          ? Object.fromEntries(
+              Object.entries(v).map(([k, x]) => [k, STRUCTURAL.has(k) ? x : walk(x)]),
+            )
           : v;
   const clean = walk(pack) as CapturePack;
   clean.groups.forEach((g, i) => {
     g.key = `group-${i + 1}`;
   });
   const out = CapturePack.parse(clean);
-  const json = JSON.stringify(out).toLowerCase();
-  if (terms.some((t) => json.includes(t.toLowerCase()))) {
+  const text = textLeaves(out, [...STRUCTURAL])
+    .join('\n')
+    .toLowerCase();
+  if (terms.some((t) => text.includes(t.toLowerCase()))) {
     throw new Error('refusing to export: excluded knowledge is still present in the pack');
   }
   return out;

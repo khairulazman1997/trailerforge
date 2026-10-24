@@ -177,6 +177,37 @@ describe('generateCaptureTips', () => {
     expect(sent).toContain('[redacted]');
   });
 
+  it('is not blocked by a short excluded name that also occurs in the prompt template', async () => {
+    const p = project();
+    // "Key" and "Any" are ordinary words in the template and HUD values, and real item names.
+    p.knowledge.push(
+      {
+        ...p.knowledge[0]!,
+        id: 'ent_key',
+        kind: 'item',
+        name: 'Key',
+        excludedFromLlm: true,
+        sourcePaths: [],
+      },
+      {
+        ...p.knowledge[0]!,
+        id: 'ent_any',
+        kind: 'item',
+        name: 'Any',
+        excludedFromLlm: true,
+        sourcePaths: [],
+      },
+    );
+    const shot = p.storyboard!.sections[0]!.slots[0]!;
+    if (shot.kind !== 'shot') throw new Error('expected a shot');
+    shot.captureInstruction = 'Pick up the Key, then parry.';
+    const mock = createMockProvider({ 'capture.tips': replyAll });
+    const r = await generateCaptureTips({ llm: clientFor(mock), now: NOW }, p);
+    expect(r.apply.groups.length).toBeGreaterThan(0);
+    const sent = mock.calls.map((c) => c.prompt).join('\n');
+    expect(sent).toContain('Pick up the [redacted], then parry.');
+  });
+
   it('works through Chat Handoff', async () => {
     const seen: string[] = [];
     const handoff = createChatHandoffProvider({

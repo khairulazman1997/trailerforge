@@ -29,7 +29,7 @@ function HintList({ label, hints }: { label: string; hints: CaptureHint[] }) {
   if (hints.length === 0) return null;
   return (
     <div className="cap-hints">
-      <h4>{label}</h4>
+      <h3>{label}</h3>
       <ul>
         {hints.map((h) => (
           <li key={h.entityId}>

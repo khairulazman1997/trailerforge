@@ -62,7 +62,7 @@ The Settings page shows which AI providers are available and why not, takes an A
 
 ### Desktop app (Electron)
 
-`apps/desktop` runs the engine and service inside the app and opens a window on them. API keys are encrypted with the OS credential store (Electron `safeStorage`, kept in `secrets.safe.json`; when the OS offers no real encryption, including Linux's `basic_text` fallback, it uses the plain owner-only `secrets.json` and says so in Settings). The window can only show the local service (navigations and redirects elsewhere are blocked; other web links open in your browser), grants no device permissions, refuses `<webview>`, and its file pickers answer only that window. Quitting waits for the engine to save and release project locks. Run it on a desktop machine: `pnpm approve-builds` (allow `electron`), then `pnpm --filter @trailerforge/desktop start`. Packaging config is `apps/desktop/electron-builder.yml`. Not verified in the cloud container (no display); the main-process logic is tested with a fake host. The preload exposes native folder/file pickers (`window.trailerforgeDesktop`); the UI does not use them yet.
+`apps/desktop` runs the engine and service inside the app and opens a window on them. API keys are encrypted with the OS credential store (Electron `safeStorage`, kept in `secrets.safe.json`; when the OS offers no real encryption, including Linux's `basic_text` fallback, it uses the plain owner-only `secrets.json` and says so in Settings). The window can only show the local service (navigations and redirects elsewhere are blocked; other web links open in your browser), grants no device permissions, refuses `<webview>`, and its file pickers answer only that window. Quitting waits for the engine to save and release project locks. Run it on a desktop machine: `pnpm approve-builds` (allow `electron`), then `pnpm --filter @trailerforge/desktop start`. Packaging config is `apps/desktop/electron-builder.yml`. Not verified in the cloud container (no display); the main-process logic is tested with a fake host. The preload exposes native folder/file pickers (`window.trailerforgeDesktop`); the UI does not use them yet. Downloads (such as "Download Markdown" on the Capture tab) use Electron's own Save dialog.
 
 ### Drive a project from Claude Code (MCP)
 
@@ -70,11 +70,33 @@ The Settings page shows which AI providers are available and why not, takes an A
 claude mcp add trailerforge -- node /path/to/trailerforge/apps/cli/dist/bin.js mcp ./Ember.tforge
 ```
 
-Then ask Claude Code things like "show me the storyboard", "make the hook shot 3 seconds and add a capture note", or "regenerate the escalation section with more forest". It gets read tools (`project_summary`, `brief_get`, `knowledge_list`, `storyboard_get`, `decision_log`), `undo`/`redo`, `knowledge_scan`, `storyboard_generate`, `storyboard_regenerate_section`, and one tool per editing command. Every edit is validated, saved immediately and undoable, and locked sections refuse changes.
+Then ask Claude Code things like "show me the capture checklist", "show me the storyboard", "make the hook shot 3 seconds and add a capture note", or "regenerate the escalation section with more forest". It gets read tools (`project_summary`, `brief_get`, `knowledge_list`, `storyboard_get`, `decision_log`), `undo`/`redo`, `knowledge_scan`, `storyboard_generate`, `storyboard_regenerate_section`, the capture tools (`capture_plan`, `capture_status`, `capture_settings`, `capture_tips`, `capture_export`), and one tool per editing command (including `game-trailer_capture_set-status` and friends for ticking shots off). Every edit is validated, saved immediately and undoable, and locked sections refuse changes.
 
 What the server deliberately will not do on its own: run the deep repo scan (it sends file contents to Anthropic, so it needs you at the CLI with `--allow-deep-scan`), or register a new game repo, unless you start it with `--repo-root <folder>` (repos under that folder are allowed). `storyboard_generate` sends the brief and non-excluded game facts to the configured LLM provider.
 
 `knowledge scan --deep --allow-deep-scan` additionally lets Claude Code read a temporary copy of the repo's text files (no secrets, no ignored files); this sends file contents to Anthropic, so it is off unless you confirm it.
+
+### Recording the footage (capture pack)
+
+Once the storyboard is written, the **Capture** tab turns it into a recording checklist:
+
+- **Grouped by where you record**: location, then setup, then the featured boss or character, so each level load and setup change happens once. Each shot says what to do, the framing, HUD on or off, and how long to record ("record 7 s" for a 2.5 s cut, so the edit has handles). Cards (title, end slate) are generated, so they are not on the list.
+- **Tick shots off** as you record them, or set them to approved or "rejected, record again". Count takes, write notes, skip a shot you will not record, and reorder shots within a group (↑/↓ or drag). Everything is undoable and none of it changes the storyboard.
+- **Recording settings** are worked out from the platforms in the brief, the video type, the shots' HUD needs and your output formats: resolution, frame rate, bitrate, codec, container, HUD and HDR. Change any value to override it (marked "Your override", with a reset). Warnings cover the usual ways a recording goes wrong: variable frame rate (Game Bar, GPU overlays, phone recorders), compressed console clips, 30 fps games, a capture smaller than the export.
+- **Setup hints** come from your game knowledge: the level, the featured entities, and debug commands and save files. For a Unity project the scan finds console commands (`[ConsoleMethod]`, `[ConsoleCommand]`, `[Command]`, `[Cheat]`, `AddCommand(...)`) and where the game saves (`persistentDataPath` files, Easy Save, PlayerPrefs), with the Windows path. You can add your own as game facts tagged `debug-command` or `save-file` (add `all-levels` if they work everywhere).
+- **Tips (optional, AI)**: a few tips and risks per group. You see which provider is used and what is sent first; your notes are never sent, and game facts you excluded are removed from the request (and the request is refused if any would slip through). Tips show "Out of date" when a group changes, and tips you edit are never replaced unless you say so.
+- **Share the pack**: write `capture-pack.md` (a checklist), `capture-pack.html` (a self-contained printable page: no scripts, no network) and `capture-pack.json` (for the footage import in M4) to the project's `exports/capture/` folder, or save a copy through your browser's download (in the desktop app, its Save dialog). "Leave out anything about game facts I excluded" makes a copy safe to share.
+
+The same from the command line:
+
+```bash
+tforge capture plan ./Ember.tforge            # the checklist (--todo for what is left)
+tforge capture mark ./Ember.tforge shot_parry --status recorded --takes 2 --note "use take 2"
+tforge capture settings ./Ember.tforge --set fps=30 --set resolution=2560x1440   # --unset fps, --reset
+tforge capture tips ./Ember.tforge            # --group <key>, --force, --overwrite-edited
+tforge capture export ./Ember.tforge --format md,html --omit-excluded
+tforge capture status ./Ember.tforge --json
+```
 
 App data (job database, temp files, drop-in plugins) lives in `$TFORGE_HOME` (default `~/.trailerforge`).
 

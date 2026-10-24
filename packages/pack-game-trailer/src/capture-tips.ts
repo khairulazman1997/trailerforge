@@ -57,6 +57,16 @@ export function excludedTerms(knowledge: readonly KnowledgeEntity[]): string[] {
   return [...new Set(terms)].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
 }
 
+/** Every string in `v`, skipping the named keys (enums and ids, not free text). */
+export function textLeaves(v: unknown, skip: readonly string[] = []): string[] {
+  if (typeof v === 'string') return [v];
+  if (Array.isArray(v)) return v.flatMap((x) => textLeaves(x, skip));
+  if (v && typeof v === 'object') {
+    return Object.entries(v).flatMap(([k, x]) => (skip.includes(k) ? [] : textLeaves(x, skip)));
+  }
+  return [];
+}
+
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export function redactor(terms: string[], replacement = REDACTED): (text: string) => string {
@@ -270,7 +280,13 @@ export async function generateCaptureTips(
       },
       [CAPTURE_TIPS_PROMPTS_DIR],
     );
-    const leaked = inputs.terms.find((t) => prompt.toLowerCase().includes(t.toLowerCase()));
+    // Check the project data that goes in, not the fixed template: a short excluded name such as
+    // "Key" is also an ordinary word there. HUD values are enums, not text the user wrote.
+    const sentText = batch
+      .flatMap((b) => textLeaves(b.input, ['hud']))
+      .join('\n')
+      .toLowerCase();
+    const leaked = inputs.terms.find((t) => sentText.includes(t.toLowerCase()));
     if (leaked !== undefined) {
       throw new Error(
         'refusing to send: the prompt still contains knowledge excluded from LLM use',

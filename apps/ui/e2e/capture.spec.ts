@@ -102,7 +102,7 @@ test('tick shots off, count takes, write notes, skip, reorder, and undo', async 
   await undo(page).click();
   await expect.poll(() => titles(page)).toEqual(['Perfect parry', 'Boss reveal']);
   await page
-    .getByRole('button', { name: 'Drag Boss reveal to reorder' })
+    .locator('[data-slot="shot_boss"] .handle')
     .dragTo(page.locator('[data-slot="shot_parry"]'), { targetPosition: { x: 40, y: 2 } });
   await expect.poll(() => titles(page)).toEqual(['Boss reveal', 'Perfect parry']);
 

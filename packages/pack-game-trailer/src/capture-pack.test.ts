@@ -191,6 +191,38 @@ describe('capture pack', () => {
     expect(buildCapturePack(p, { omitExcluded: true })).toEqual(buildCapturePack(p));
   });
 
+  it('omits short excluded names without breaking settings, statuses or ids', () => {
+    const p = goldenProject();
+    p.knowledge.push(
+      {
+        ...p.knowledge[0]!,
+        id: 'ent_off',
+        kind: 'item',
+        name: 'Off',
+        excludedFromLlm: true,
+        sourcePaths: [],
+      },
+      {
+        ...p.knowledge[0]!,
+        id: 'ent_mkv',
+        kind: 'item',
+        name: 'mkv',
+        excludedFromLlm: true,
+        sourcePaths: [],
+      },
+    );
+    p.storyboard!.sections[0]!.slots[0]!.title = 'Take off the helmet';
+    const shared = buildCapturePack(p, { omitExcluded: true });
+    expect(shared.recording.settings.container).toBe('mkv');
+    expect(
+      shared.groups.flatMap((g) => g.items).find((i) => i.slotId === 'shot_parry'),
+    ).toMatchObject({
+      hud: 'off',
+      title: 'Take (omitted) the helmet',
+    });
+    expect(CapturePack.parse(JSON.parse(capturePackJson(shared)))).toEqual(shared);
+  });
+
   it('handles an empty storyboard and refuses a missing one', () => {
     const p = goldenProject();
     p.storyboard!.sections = [];

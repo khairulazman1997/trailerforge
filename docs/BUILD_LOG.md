@@ -94,6 +94,7 @@ Design defaults confirmed by the user before 3.1: Markdown + printable HTML (PDF
 | 3.7 Engine ops, service, CLI, MCP       | `c6b0354` | 01:16:39 | 01:22:08 | ~6 min     | Sonnet | `capture-ops.ts` (view/status/settings/mark/tips/export), service routes + `capture-tips` task + `capture.tips` preview, `tforge capture ...`, 5 MCP tools; mutating commands reuse the generic command route and MCP command tools                                                                                                                                                                                                                       |
 | 3.8a Capture UI: checklist and settings | `164a9db` | 01:23:19 | 01:31:30 | ~8 min     | Sonnet | UI computes the plan from its own project copy via a browser-safe `@trailerforge/pack-game-trailer/browser` entry (no extra fetch, no lag); `usePending` keeps a chosen value on screen until the command is applied (e2e caught a snap-back on the HDR checkbox); move up/down buttons and drag handle; 3 e2e specs                                                                                                                                      |
 | 3.8b Capture UI: tips and export        | `c98ffff` | 01:50:55 | 02:02:00 | ~11 min    | Sonnet | tip dialog reuses the disclosure/consent flow (disclosure now describes the recording plan for `capture.tips`); stored tips read from the project, freshness from the engine; export = write to `exports/capture/` plus browser download via a new `capture/render` route (Electron shows its own save dialog for downloads, unverified here); fixed the API-key box keeping the key until save returned (cause of the intermittent settings e2e failure) |
+| 3.9 Hardening and docs                  | `HASH`    | 02:17:06 | ENDT     | ~ENDM min  | Opus   | review found two exclusion-guard bugs with short names (template words like "Key" blocked tips; enum fields like `hud: off` broke `omitExcluded`), fixed with tests; axe (`@axe-core/playwright`) on the Capture screen and dialogs found low-contrast warning/ok text, fixed; drag handle hidden from keyboard/AT (↑/↓ are the keyboard path); end-to-end storyboard → capture → keyboard tick → export; README capture guide                            |
 
 | When (M3)  | Session | Week | Note           |
 | ---------- | ------- | ---- | -------------- |
@@ -108,3 +109,8 @@ Design defaults confirmed by the user before 3.1: Markdown + printable HTML (PDF
 | After 3.7  | —       | —    | user to report |
 | After 3.8a | —       | —    | user to report |
 | After 3.8b | —       | —    | user to report |
+| After 3.9  | —       | —    | user to report |
+
+M3 summary: 11 tasks (3.1–3.9 plus 3.4b and the 3.8a/b split) in one long session, about 2 hours of wall time (00:25–02:24 UTC); usage went from 0% to 43%+ of a session window and 42% to 47% of the week. Desktop smoke (including the Save As dialog for downloads) still needs a real Windows machine.
+
+Twice during M3 a full `pnpm check` failed in packages the change did not touch (first run of 3.1; 3.9: a vitest worker in `apps/desktop` killed by SIGINT, which nothing in the repo sends). Both passed on the next runs; it looks like the container, not the code. Watch for it on a real machine.

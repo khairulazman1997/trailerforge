@@ -202,17 +202,17 @@ export function CaptureItemRow({
           </div>
         </div>
         {count > 1 && !disabled && (
-          <button
-            type="button"
+          // Mouse-only shortcut: keyboard and screen-reader users have the ↑/↓ buttons.
+          <span
             className="ghost handle"
             draggable
-            aria-label={`Drag ${name} to reorder`}
+            aria-hidden="true"
             title="Drag to reorder within this group"
             onDragStart={h.onDragStart}
             onDragEnd={h.onDragEnd}
           >
             ⠿
-          </button>
+          </span>
         )}
       </div>
     </li>

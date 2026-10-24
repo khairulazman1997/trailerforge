@@ -8,7 +8,10 @@
   --accent-text: #ffffff;
   --danger: #c92a2a;
   --ok: #2b8a3e;
+  --ok-text: #1f6b30;
   --warn: #e67700;
+  /* Text in the warning colour needs more contrast than a border or icon does. */
+  --warn-text: #9c4a00;
   --radius: 8px;
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light dark;
@@ -24,7 +27,9 @@
     --accent-text: #0e1116;
     --danger: #ff8787;
     --ok: #69db7c;
+    --ok-text: #69db7c;
     --warn: #ffa94d;
+    --warn-text: #ffa94d;
   }
 }
 * {
@@ -601,7 +606,7 @@ label.check {
   flex-wrap: wrap;
 }
 .chip.warn {
-  color: var(--warn);
+  color: var(--warn-text);
   border-color: var(--warn);
 }
 .chip.ok {
@@ -827,7 +832,7 @@ input.slot-title:focus {
   color: var(--danger);
 }
 .stays {
-  color: var(--ok);
+  color: var(--ok-text);
 }
 
 /* settings */
@@ -938,9 +943,9 @@ table.routes thead th {
   padding: 0.25rem 0;
 }
 .cap-advice li.warn strong {
-  color: var(--warn);
+  color: var(--warn-text);
 }
-.cap-hints h4 {
+.cap-hints h3 {
   margin: 0.5rem 0 0.1rem;
   font-size: 0.85rem;
   color: var(--muted);
@@ -1013,7 +1018,7 @@ table.routes thead th {
   align-items: center;
 }
 .chip.warn {
-  color: var(--warn);
+  color: var(--warn-text);
   border-color: var(--warn);
 }
 .cap-skipped {
@@ -1043,4 +1048,9 @@ table.routes thead th {
   border: 0;
   padding: 0;
   margin: 0.5rem 0;
+}
+span.handle {
+  cursor: grab;
+  padding: 0.2rem 0.4rem;
+  user-select: none;
 }
