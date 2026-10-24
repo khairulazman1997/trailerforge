@@ -42,7 +42,15 @@ const genReply = {
       role: 'escalation',
       slots: [
         { kind: 'shot', title: 'Forest run', seconds: 4, entityIds: ['ent_forest'] },
-        { kind: 'shot', title: 'Boss reveal', seconds: 5 },
+        {
+          kind: 'shot',
+          title: 'Boss reveal',
+          seconds: 5,
+          onScreenText: [
+            { text: 'The Ash Warden', style: 'name', fromSeconds: 1 },
+            { text: 'Learn its rhythm', fromSeconds: 20, seconds: 1.5 },
+          ],
+        },
       ],
     },
     {
@@ -141,6 +149,17 @@ describe('generateStoryboard', () => {
     const card = slots.at(-1);
     expect(card?.kind === 'card' && card.templateId).toBe('core/title-card'); // from the template
     expect(storyboard.voLines[0]?.linkedSlotIds).toEqual([slots[0]?.id]);
+    // On-screen text only where the reply asked for it: a name label and a callout.
+    const shots = slots.filter((s) => s.kind === 'shot');
+    expect(shots.filter((s) => s.overlays.length > 0).map((s) => s.title)).toEqual(['Boss reveal']);
+    const boss = shots.find((s) => s.title === 'Boss reveal')!;
+    expect(boss.overlays.map((o) => [o.templateId, o.text])).toEqual([
+      ['core/lower-third', 'The Ash Warden'],
+      ['core/caption', 'Learn its rhythm'],
+    ]);
+    expect(boss.overlays[1]!.offset).toBeLessThanOrEqual(boss.duration.ideal / 2); // kept in the shot
+    expect(boss.overlays[1]!.duration).toBe(1.5);
+    expect(boss.overlays[0]!.duration).toBeUndefined(); // until the shot ends
     expect(storyboard.music.bpm).toEqual({ min: 120, max: 140 });
 
     const prompt = mock.calls[0]!.prompt;

@@ -73,7 +73,15 @@ function convertSlot(g: GenSlot, ideal: number, ctx: ConvertContext): Slot {
     location: g.location,
     hud: g.hud,
     alternates: g.alternates,
-    overlays: [],
+    // Starts are kept inside the shot as rescaled; the cut trims anything past its end.
+    overlays: g.onScreenText.map((t) => ({
+      id: mintId('ov', t.text, ctx.taken),
+      templateId: t.style === 'name' ? 'core/lower-third' : 'core/caption',
+      text: t.text.trim(),
+      params: {},
+      offset: Math.floor(Math.min(t.fromSeconds, ideal / 2) * 10) / 10,
+      ...(t.seconds !== undefined ? { duration: t.seconds } : {}),
+    })),
     status: 'empty',
     takes: [],
   };

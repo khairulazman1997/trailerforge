@@ -15,6 +15,7 @@ Rules:
 - Prefer real places, characters, enemies and mechanics from the game facts. Put their ids in entityIds; never invent ids.
 - Do not repeat shots that already appear in other sections.
 - "seconds" is the on-screen time of each slot.
+- On-screen text over a shot ("onScreenText") only where the viewer needs words: a short feature callout, or style "name" the first time a boss or character appears. Leave it out of every other shot.
 
 Brief (JSON):
 {{brief}}
