@@ -71,7 +71,8 @@ beforeAll(async () => {
     await mkdir(dirname(join(root, p)), { recursive: true });
     await writeFile(join(root, p), content);
   }
-  await symlink(outside, join(root, 'linked'));
+  // 'junction' is ignored off Windows; on Windows it needs no admin rights
+  await symlink(outside, join(root, 'linked'), 'junction');
 });
 
 /** Wraps the real fs and records every path whose metadata or contents were touched. */

@@ -17,7 +17,9 @@ const KILL_GRACE_MS = 2000;
 
 /**
  * Run ffmpeg/ffprobe without a shell (arguments are passed verbatim, so paths with spaces or
- * quotes are safe). Aborting sends SIGTERM, then SIGKILL after a grace period.
+ * quotes are safe). Aborting sends SIGTERM, then SIGKILL after a grace period. On Windows it ends
+ * the whole process tree at once: package-manager shims (Chocolatey, Scoop) start the real
+ * ffmpeg.exe as a child, which would otherwise keep running and hold the pipes open.
  */
 export function runTool(bin: string, args: string[], opts: RunOptions = {}): Promise<RunResult> {
   return new Promise((resolve, reject) => {
@@ -54,6 +56,13 @@ export function runTool(bin: string, args: string[], opts: RunOptions = {}): Pro
 
     const stop = (reason: 'cancelled' | 'timeout') => {
       stopReason = reason;
+      if (process.platform === 'win32' && child.pid !== undefined) {
+        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+          stdio: 'ignore',
+          windowsHide: true,
+        }).on('error', () => child.kill());
+        return;
+      }
       child.kill('SIGTERM');
       setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS).unref();
     };

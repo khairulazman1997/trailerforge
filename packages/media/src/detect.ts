@@ -50,7 +50,7 @@ export async function detectCapabilities(
   ]);
   const version = /ffmpeg version (\S+)/.exec(ver.stdout)?.[1] ?? 'unknown';
   const encoders = new Set(listNames(enc.stdout, /^\s*[VAS][A-Z.]{5}\s+(\S+)/));
-  const filters = new Set(listNames(fil.stdout, /^\s*[TSC.]{3}\s+(\S+)\s/));
+  const filters = new Set(listNames(fil.stdout, /^\s*[TSC.]{2,3}\s+(\S+)\s/));
   const candidates = Object.values(HW_H264).filter((e) => encoders.has(e));
   const results = await Promise.all(candidates.map((e) => testEncoder(tools, e)));
   return {

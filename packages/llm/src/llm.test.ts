@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { LlmProvider } from '@trailerforge/plugin-api';
@@ -266,12 +266,12 @@ describe('claude code provider', () => {
   /** A fake `claude` that records argv/stdin and replies from a script. */
   async function fakeClaude(replies: object[]) {
     const dir = await mkdtemp(join(tmpdir(), 'tforge-fake-claude-'));
-    const bin = join(dir, 'claude');
+    // Run as `node claude.js` so the fake works on Windows too (no shebang there).
+    const script = join(dir, 'claude.js');
     await writeFile(join(dir, 'replies.json'), JSON.stringify(replies));
     await writeFile(
-      bin,
-      `#!${process.execPath}
-const fs = require('fs'); const path = require('path');
+      script,
+      `const fs = require('fs'); const path = require('path');
 const dir = ${JSON.stringify(dir)};
 if (process.argv.includes('--version')) { console.log('9.9.9 (Claude Code)'); process.exit(0); }
 let stdin = ''; process.stdin.on('data', d => stdin += d).on('end', () => {
@@ -281,13 +281,12 @@ let stdin = ''; process.stdin.on('data', d => stdin += d).on('end', () => {
   console.log(JSON.stringify(replies[Math.min(n, replies.length - 1)]));
 });`,
     );
-    await chmod(bin, 0o755);
     const call = async (n: number) =>
       JSON.parse(await readFile(join(dir, `call-${n}.json`), 'utf8')) as {
         argv: string[];
         stdin: string;
       };
-    return { bin, call };
+    return { bin: process.execPath, binArgs: [script], call };
   }
 
   it('reports unavailability when the CLI is missing', async () => {
@@ -305,7 +304,7 @@ let stdin = ''; process.stdin.on('data', d => stdin += d).on('end', () => {
         usage: { input_tokens: 100, output_tokens: 20 },
       },
     ]);
-    const provider = createClaudeCodeProvider({ bin: fake.bin });
+    const provider = createClaudeCodeProvider({ bin: fake.bin, binArgs: fake.binArgs });
     expect(await provider.available()).toEqual({ ok: true });
     const r = await provider.generate(
       {
@@ -346,7 +345,7 @@ let stdin = ''; process.stdin.on('data', d => stdin += d).on('end', () => {
       { is_error: false, result: '{"title":"Parry","seconds":10}' },
       { is_error: false, result: '```json\n{"title":"Parry","seconds":2}\n```' },
     ]);
-    const r = await createClaudeCodeProvider({ bin: fake.bin }).generate(
+    const r = await createClaudeCodeProvider({ bin: fake.bin, binArgs: fake.binArgs }).generate(
       { task: 't', system: 's', prompt: 'Make a hook', schema: Hook },
       new AbortController().signal,
     );
@@ -355,7 +354,7 @@ let stdin = ''; process.stdin.on('data', d => stdin += d).on('end', () => {
 
     const failing = await fakeClaude([{ is_error: true, result: 'Not logged in' }]);
     await expect(
-      createClaudeCodeProvider({ bin: failing.bin }).generate(
+      createClaudeCodeProvider({ bin: failing.bin, binArgs: failing.binArgs }).generate(
         { task: 't', system: 's', prompt: 'p', schema: Hook },
         new AbortController().signal,
       ),

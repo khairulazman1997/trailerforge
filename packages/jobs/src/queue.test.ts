@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { JobQueue } from './queue.js';
@@ -348,7 +348,7 @@ describe('resume', () => {
 
   it('survives the process being killed and resumes after restart', async () => {
     const here = dirname(fileURLToPath(import.meta.url));
-    const tsx = createRequire(import.meta.url).resolve('tsx');
+    const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
     const dbPath = join(root, 'jobs.sqlite');
     const tempRoot = join(root, 'tmp');
     await new Promise<void>((resolve, reject) => {

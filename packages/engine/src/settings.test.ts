@@ -19,8 +19,13 @@ import {
 
 let root: string;
 let savedEnv: string | undefined;
+/** A stand-in Claude Code CLI, so the tests do not depend on one being installed. */
+let claudeCode: { bin: string; binArgs: string[] };
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'tforge-settings-'));
+  const fake = join(root, 'claude.js');
+  await writeFile(fake, "console.log('9.9.9 (Claude Code)');");
+  claudeCode = { bin: process.execPath, binArgs: [fake] };
   savedEnv = process.env.ANTHROPIC_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
 });
@@ -58,6 +63,7 @@ describe('API key and provider availability', () => {
       home: join(root, 'h1'),
       autosaveMs: 0,
       loadUserPlugins: false,
+      claudeCode,
     });
     try {
       const anthropic = async () =>
@@ -111,7 +117,7 @@ describe('API key and provider availability', () => {
 describe('routes', () => {
   it('saves valid routes, uses them immediately, survives a restart, and resets', async () => {
     const home = join(root, 'h3');
-    const engine = await Engine.start({ home, autosaveMs: 0, loadUserPlugins: false });
+    const engine = await Engine.start({ home, autosaveMs: 0, loadUserPlugins: false, claudeCode });
     try {
       expect(await routesView(engine)).toMatchObject({
         custom: false,

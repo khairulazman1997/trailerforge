@@ -24,6 +24,11 @@ async function file(name: string, data: Buffer | string = randomBytes(1024)) {
   return p;
 }
 
+// Windows allows file symlinks only with admin rights or Developer Mode; Linux CI covers the case.
+const windowsWithoutSymlinks = (e: NodeJS.ErrnoException) => {
+  if (process.platform !== 'win32' || e.code !== 'EPERM') throw e;
+};
+
 describe('quick hash', () => {
   it('hashes small files whole and is stable', async () => {
     const data = Buffer.from('hello');
@@ -118,7 +123,7 @@ describe('LibraryStore', () => {
     await mkdir(join(root, 'elsewhere', '.hidden'));
     await rename(b.asset.uri, join(root, 'elsewhere', '.hidden', 'b.wav'));
     await writeFile(join(elsewhere, 'decoy.mp4'), randomBytes(3000)); // same size, other content
-    await symlink(c.asset.uri, join(elsewhere, 'link.png'));
+    await symlink(c.asset.uri, join(elsewhere, 'link.png')).catch(windowsWithoutSymlinks);
 
     const results = await lib.relink([join(root, 'elsewhere')]);
     expect(results).toEqual([

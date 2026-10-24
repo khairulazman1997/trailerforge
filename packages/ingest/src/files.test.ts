@@ -15,6 +15,11 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'tforge-files-'));
 });
 
+// Windows allows file symlinks only with admin rights or Developer Mode; Linux CI covers the case.
+const windowsWithoutSymlinks = (e: NodeJS.ErrnoException) => {
+  if (process.platform !== 'win32' || e.code !== 'EPERM') throw e;
+};
+
 describe('collectMediaFiles', () => {
   it('walks folders for video and audio in a stable order, skipping the rest', async () => {
     const b = await touch('rec/b.mkv');
@@ -25,7 +30,7 @@ describe('collectMediaFiles', () => {
     await touch('rec/clip.mp4.part');
     await touch('rec/.hidden/secret.mp4');
     await touch('rec/.dot.mp4');
-    await symlink(a, join(root, 'rec', 'link.mp4'));
+    await symlink(a, join(root, 'rec', 'link.mp4')).catch(windowsWithoutSymlinks);
     const r = await collectMediaFiles([join(root, 'rec')]);
     expect(r.files).toEqual([a, b, deep]);
     expect(r.skipped).toEqual([]);

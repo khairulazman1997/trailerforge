@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseProject } from '@trailerforge/schema';
 import { sampleProject } from '@trailerforge/schema/fixtures';
 import { describe, expect, it } from 'vitest';
@@ -11,7 +11,7 @@ import { coreCommands } from '../project-commands.js';
 import { ProjectStore } from './project-store.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const tsxLoader = createRequire(import.meta.url).resolve('tsx');
+const tsxLoader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
 
 /** Start the child, wait until it is saving, then SIGKILL it at a random moment. */
 function runAndKill(dir: string): Promise<void> {

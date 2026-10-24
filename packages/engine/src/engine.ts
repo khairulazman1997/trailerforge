@@ -19,6 +19,7 @@ import {
   createClaudeCodeProvider,
   LlmClient,
   loadRoutesConfig,
+  type ClaudeCodeOptions,
   type LlmClientOptions,
 } from '@trailerforge/llm';
 import { PluginHost, type Plugin, type PluginStatus } from '@trailerforge/plugin-api';
@@ -42,6 +43,8 @@ export interface EngineOptions {
   llm?: LlmClient;
   /** Where API keys are kept. Default: a file only the current user can read, under `home`. */
   secrets?: SecretStore;
+  /** Options for the Claude Code CLI provider (tests point it at a fake CLI). */
+  claudeCode?: ClaudeCodeOptions;
   /** Disclosure gate for the default client; called before any request leaves the machine. */
   approveSend?: LlmClientOptions['approveSend'];
 }
@@ -123,7 +126,7 @@ export class Engine {
     const providers = {
       // A key saved in settings wins; ANTHROPIC_API_KEY is the fallback.
       'core/anthropic': createAnthropicProvider({ apiKey: () => secrets.get('anthropic-api-key') }),
-      'core/claude-code': createClaudeCodeProvider(),
+      'core/claude-code': createClaudeCodeProvider(opts.claudeCode),
       // Only offered while something (the service) can show the prompt to a person.
       'core/chat-handoff': {
         ...chat,

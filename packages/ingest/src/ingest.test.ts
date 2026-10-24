@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { LibraryStore } from '@trailerforge/core';
 import { JobQueue, type JobRecord } from '@trailerforge/jobs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -211,7 +211,7 @@ describe('crash recovery', () => {
   it('a process killed mid-import resumes on restart without duplicates', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'tforge-ingest-k-'));
     const here = dirname(fileURLToPath(import.meta.url));
-    const tsx = createRequire(import.meta.url).resolve('tsx');
+    const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
     const source = clip('killed');
     await new Promise<void>((resolve, reject) => {
       const child = spawn(

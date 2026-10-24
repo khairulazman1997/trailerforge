@@ -5,6 +5,8 @@ import { jsonSchemaFor, withRepairs } from '../structured.js';
 export interface ClaudeCodeOptions {
   /** Path to the `claude` CLI. Default: `claude` on PATH. */
   bin?: string;
+  /** Arguments put before the CLI's own, e.g. a script path when `bin` is Node. */
+  binArgs?: string[];
   timeoutMs?: number;
   /**
    * Tools Claude Code may use. Default none (pure text in, JSON out). The deep repo scan passes
@@ -29,6 +31,7 @@ interface CliResult {
  */
 export function createClaudeCodeProvider(opts: ClaudeCodeOptions = {}): LlmProvider {
   const bin = opts.bin ?? 'claude';
+  const pre = opts.binArgs ?? [];
   const timeoutMs = opts.timeoutMs ?? 10 * 60_000;
   return {
     id: 'core/claude-code',
@@ -37,7 +40,7 @@ export function createClaudeCodeProvider(opts: ClaudeCodeOptions = {}): LlmProvi
     sendsDataOffDevice: true,
     async available() {
       try {
-        await run(bin, ['--version'], '', 10_000);
+        await run(bin, [...pre, '--version'], '', 10_000);
         return { ok: true };
       } catch (err) {
         return { ok: false, reason: `Claude Code CLI not usable: ${(err as Error).message}` };
@@ -46,6 +49,7 @@ export function createClaudeCodeProvider(opts: ClaudeCodeOptions = {}): LlmProvi
     async generate(request, signal) {
       const schema = jsonSchemaFor(request.schema);
       const base = [
+        ...pre,
         '-p',
         '--output-format',
         'json',

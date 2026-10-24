@@ -186,7 +186,7 @@ describe('crash recovery', () => {
     const { spawn } = await import('node:child_process');
     const { createRequire } = await import('node:module');
     const { dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
+    const { fileURLToPath, pathToFileURL } = await import('node:url');
     const long = join(dir, 'crash.mp4');
     ff([
       '-f',
@@ -201,7 +201,7 @@ describe('crash recovery', () => {
     ]);
     const analysisDir = join(dir, 'cache', 'analysis');
     const here = dirname(fileURLToPath(import.meta.url));
-    const tsx = createRequire(import.meta.url).resolve('tsx');
+    const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
     await new Promise<void>((resolve, reject) => {
       const child = spawn(
         process.execPath,
@@ -218,9 +218,16 @@ describe('crash recovery', () => {
     expect(existsSync(footageCacheFile(analysisDir, 'd'.repeat(64)))).toBe(false);
 
     // The orphaned sidecar notices within a couple of seconds and stops decoding.
+    const commandLines = () =>
+      process.platform === 'win32'
+        ? execFileSync('powershell', [
+            '-NoProfile',
+            '-Command',
+            'Get-CimInstance Win32_Process | ForEach-Object { $_.CommandLine }',
+          ]).toString()
+        : execFileSync('ps', ['-eo', 'args']).toString();
     const running = () =>
-      execFileSync('ps', ['-eo', 'args'])
-        .toString()
+      commandLines()
         .split('\n')
         .filter((l) => l.includes('crash.mp4') && !l.includes('ps -eo')).length;
     for (let i = 0; i < 100 && running() > 0; i++) await new Promise((r) => setTimeout(r, 100));
