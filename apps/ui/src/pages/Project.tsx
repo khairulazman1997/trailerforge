@@ -4,6 +4,7 @@ import { ConfirmDialog } from '../components/Dialog.js';
 import { EditableText } from '../components/EditableText.js';
 import { Link, navigate, projectPath, type ProjectTab } from '../router.js';
 import { BriefPage } from './Brief.js';
+import { CapturePage } from './Capture.js';
 import { KnowledgePage } from './Knowledge.js';
 import { StoryboardPage } from './Storyboard.js';
 import { busyTask } from '../store.js';
@@ -13,6 +14,7 @@ const TAB_LABEL: Record<ProjectTab, string> = {
   brief: 'Brief',
   knowledge: 'Game knowledge',
   storyboard: 'Storyboard',
+  capture: 'Capture',
 };
 
 export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
@@ -50,6 +52,8 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
         <KnowledgePage id={id} />
       ) : tab === 'storyboard' ? (
         <StoryboardPage id={id} />
+      ) : tab === 'capture' ? (
+        <CapturePage id={id} />
       ) : (
         <Placeholder tab={tab} />
       )}

@@ -81,6 +81,9 @@ importers:
 
   apps/ui:
     dependencies:
+      '@trailerforge/pack-game-trailer':
+        specifier: workspace:*
+        version: link:../../packages/pack-game-trailer
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../../packages/schema

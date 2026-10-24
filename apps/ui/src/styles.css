@@ -900,3 +900,124 @@ table.routes thead th {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
 }
+
+/* ---- Capture ---- */
+.cap-progress progress {
+  width: 100%;
+  height: 0.8rem;
+}
+.cap-settings {
+  margin: 0.5rem 0;
+}
+.cap-setting {
+  display: grid;
+  grid-template-columns: 11rem 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.2rem 0;
+}
+.cap-setting dt {
+  color: var(--muted);
+}
+.cap-setting dd {
+  margin: 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cap-number {
+  width: 6rem;
+}
+.cap-advice {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}
+.cap-advice li {
+  padding: 0.25rem 0;
+}
+.cap-advice li.warn strong {
+  color: var(--warn);
+}
+.cap-hints h4 {
+  margin: 0.5rem 0 0.1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.cap-hints ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.cap-items {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+}
+.cap-item {
+  border-top: 1px solid var(--border);
+  padding: 0.6rem 0;
+}
+.cap-item.drop-before {
+  box-shadow: 0 -2px 0 var(--accent);
+}
+.cap-item.drop-after {
+  box-shadow: 0 2px 0 var(--accent);
+}
+.cap-main {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+.cap-tick {
+  width: 1.2rem;
+  height: 1.2rem;
+  margin-top: 0.2rem;
+  flex: none;
+}
+.cap-body {
+  flex: 1;
+  min-width: 0;
+}
+.cap-head {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cap-item.done .cap-title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.cap-do {
+  margin: 0.3rem 0;
+}
+.cap-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0 0.75rem;
+  margin: 0.2rem 0;
+  color: var(--muted);
+}
+.cap-facts dd {
+  margin: 0;
+}
+.cap-notes {
+  width: 100%;
+  resize: vertical;
+  margin: 0.3rem 0;
+}
+.cap-takes {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.chip.warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.cap-skipped {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
