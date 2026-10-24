@@ -87,7 +87,7 @@ Design defaults confirmed by the user before 3.1: Markdown + printable HTML (PDF
 | 3.1 Capture plan builder | `2684a95` | 00:25:46 | 00:28:50 | ~3 min     | Opus   | seeded-PRNG property tests (no new dep); locked sections kept (a lock guards content, not recording); skip via ext                                            |
 | 3.2 Recording settings   | `9fdeb76` | 00:42:04 | 00:46:37 | ~5 min     | Sonnet | derived from platforms, video type, HUD needs and format targets; overrides at `extensions['game-trailer'].recording`; MCP exposes the two commands as tools  |
 | 3.3 Capture commands     | `e42ab94` | 00:48:04 | 00:50:30 | ~2 min     | Sonnet | status/notes/takes/skip/reorder-group under `game-trailer/capture.*`; work in locked sections; no storyboard revision bump                                    |
-| 3.4 Setup hints          | `HASH`    | 00:52:24 | 00:53:46 | ~4 min     | Sonnet | derived hints from knowledge; debug commands and save files are tag-driven because the Unity extractor does not detect them; `forLlm` drops excluded entities |
+| 3.4 Setup hints          | `a43fcde` | 00:52:24 | 00:53:46 | ~4 min     | Sonnet | derived hints from knowledge; debug commands and save files are tag-driven because the Unity extractor does not detect them; `forLlm` drops excluded entities |
 
 | When (M3)  | Session | Week | Note           |
 | ---------- | ------- | ---- | -------------- |
