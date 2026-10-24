@@ -214,6 +214,8 @@ Design decisions (all four defaults confirmed by the user 2026-10-24): pack form
 
 Rough budget: 3.1 and 3.9 Opus, the rest Sonnet (~80% of the milestone); about 80–120k output tokens. Suggested sessions: (1) 3.1 alone on Opus; (2) 3.2–3.4; (3) 3.5–3.7; (4) 3.8; (5) 3.9 on Opus.
 
+**3.4b — Unity extractor: debug commands and save files** (added 2026-10-24, **Opus**; do before 3.6). 3.4's hints only show debug commands and save files that carry the `debug-command` / `save-file` tags, and no extractor sets them. Scope: (1) `ExtractedEntity` gains optional `tags`, and `mergeKnowledge` adds extractor tags to new entities and unions them into refreshed ones without touching user-edited entities or user tags; (2) the Unity extractor reads `.cs` files (local regex only, comments stripped, bounded patterns, abort-aware) and emits `other` entities for console-command attributes (`[ConsoleCommand]`, `[Command]`, `[ConsoleMethod]`, `[Cheat]`) tagged `debug-command` + `all-levels`, and for save files from `Application.persistentDataPath` usage plus `companyName`/`productName` (Windows path `%USERPROFILE%/AppData/LocalLow/<company>/<product>/<file>`) tagged `save-file` + `all-levels`; (3) output holds names and short file names only, never source snippets, string contents beyond a tight filename pattern, or anything secret-like. Acceptance: fixture Unity project with real, commented-out, secret-looking and lookalike code; hints show detected commands and saves; re-scan keeps user edits and tags and never duplicates; extraction is deterministic and capped.
+
 ## Potential extensions (not scheduled, not in any milestone)
 
 Ideas recorded so they are not lost. None of these is planned work; do not build them or design around them without the user asking.
