@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import type { CaptureItem } from '@trailerforge/pack-game-trailer/browser';
-import type { SlotStatus } from '@trailerforge/schema';
+import type { ShotSlot, SlotStatus } from '@trailerforge/schema';
 import { formatSeconds } from '../capture-view.js';
+import { Thumb } from './Thumb.js';
 import { usePending } from '../use-pending.js';
 
 const STATUS_LABEL: Record<SlotStatus, string> = {
@@ -46,7 +47,17 @@ function NotesField({
   );
 }
 
+/** A recording attached to a shot, with what the row needs to show it. */
+export interface ImportedTake {
+  take: ShotSlot['takes'][number];
+  name: string;
+  /** The recording's thumbnail has been built. */
+  preview: boolean;
+}
+
 export interface CaptureItemHandlers {
+  onChoose: (takeId: string | null) => void;
+  onReject: (takeId: string, rejected: boolean) => void;
   onStatus: (status: SlotStatus) => Promise<unknown>;
   onNotes: (notes: string) => void;
   onTakes: (takes: number) => void;
@@ -65,9 +76,14 @@ export function CaptureItemRow({
   disabled,
   dropMark,
   code,
+  imported,
+  chosenTakeId,
   ...h
 }: {
   item: CaptureItem;
+  /** Recordings attached to this shot (from the Footage tab or the engine). */
+  imported: ImportedTake[];
+  chosenTakeId: string | undefined;
   /** Shot code to type into the recording's file name. */
   code: string | undefined;
   index: number;
@@ -139,6 +155,34 @@ export function CaptureItemRow({
               </>
             )}
           </dl>
+          {imported.length > 0 && (
+            <ul className="cap-imported" aria-label={`Recordings for ${name}`}>
+              {imported.map(({ take, name: file, preview }) => (
+                <li key={take.id} className={take.rejected ? 'rejected' : ''}>
+                  <Thumb assetId={take.assetId} name={file} ready={preview} />
+                  <span>{file}</span>
+                  {chosenTakeId === take.id && <span className="chip ok">used in the cut</span>}
+                  {take.rejected && <span className="chip warn">rejected</span>}
+                  <button
+                    type="button"
+                    disabled={disabled || take.rejected}
+                    aria-label={`${chosenTakeId === take.id ? 'Let the cut choose instead of' : 'Use'} ${file} for ${name}`}
+                    onClick={() => h.onChoose(chosenTakeId === take.id ? null : take.id)}
+                  >
+                    {chosenTakeId === take.id ? 'Let the cut choose' : 'Use this take'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    aria-label={`${take.rejected ? 'Restore' : 'Reject'} ${file} for ${name}`}
+                    onClick={() => h.onReject(take.id, !take.rejected)}
+                  >
+                    {take.rejected ? 'Restore' : 'Reject'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <NotesField
             label={`Notes for ${name}`}
             value={item.notes}

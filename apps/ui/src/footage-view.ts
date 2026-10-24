@@ -42,3 +42,9 @@ export const lengthText = (sec: number | null) =>
 
 /** A file name shown without its folder, whichever slash it uses. */
 export const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
+
+/** Download size for people: whole megabytes, or one decimal under 10. */
+export const megabytes = (bytes: number) => {
+  const mb = bytes / 1_000_000;
+  return mb < 10 ? `${Math.round(mb * 10) / 10} MB` : `${Math.round(mb)} MB`;
+};

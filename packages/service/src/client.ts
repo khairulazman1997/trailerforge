@@ -9,12 +9,15 @@ export type {
   CaptureStatus,
   CaptureView,
   ExportOutcome,
+  LibraryMediaKind,
   LlmPreview,
   RenderedPack,
   PendingHandoff,
   RoutesView,
   ScanSummary,
   SecretsView,
+  VisionView,
+  WatchedFoldersView,
 } from '@trailerforge/engine';
 import type { LlmPreview, PendingHandoff, RoutesView, SecretsView } from '@trailerforge/engine';
 import type { LibraryMediaKind, VisionView, WatchedFoldersView } from '@trailerforge/engine';

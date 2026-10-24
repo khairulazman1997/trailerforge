@@ -8,6 +8,8 @@ import {
   lengthText,
   parsePaths,
 } from '../footage-view.js';
+import { Filmstrip, Thumb } from '../components/Thumb.js';
+import { VisionPanel } from '../components/VisionPanel.js';
 import { Link, projectPath } from '../router.js';
 import { busyTask } from '../store.js';
 
@@ -41,6 +43,15 @@ export function FootagePage({ id }: { id: string }) {
   useEffect(() => {
     void store.refreshFootage(id);
   }, [store, id, version]);
+  // Jobs also start by themselves (a watched folder), so follow the engine's job events too.
+  const jobTick = useAppState((s) =>
+    Object.values(s.jobs)
+      .map((j) => `${j.jobId}:${j.status}`)
+      .join(),
+  );
+  useEffect(() => {
+    if (jobTick) void store.refreshFootage(id);
+  }, [store, id, jobTick]);
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => void store.refreshFootage(id), 1500);
@@ -162,6 +173,12 @@ export function FootagePage({ id }: { id: string }) {
         </div>
       </section>
 
+      <p className="muted">
+        Want recordings picked up from your recording folder by themselves?{' '}
+        <Link to="/settings">Watch a folder in Settings</Link>.
+      </p>
+      <VisionPanel />
+
       {snap && (
         <p className="muted" role="status" data-testid="foot-progress">
           {active
@@ -188,7 +205,8 @@ export function FootagePage({ id }: { id: string }) {
           </div>
           <ul className="foot-list" aria-label="Recordings">
             {snap.status.footage.map((f) => (
-              <li key={f.assetId} data-asset={f.assetId}>
+              <li key={f.assetId} data-asset={f.assetId} className="foot-rec">
+                <Thumb assetId={f.assetId} name={f.name} ready={f.previews.thumbnail} />
                 <strong>{f.name}</strong> <span className="muted">{lengthText(f.durationSec)}</span>
                 {f.file !== 'ok' && <span className="chip warn">file {f.file}</span>}
                 <span className="chip">{f.analyzed ? 'analysed' : 'not analysed'}</span>
@@ -197,6 +215,7 @@ export function FootagePage({ id }: { id: string }) {
                     take of {title(s)}
                   </span>
                 ))}
+                {f.previews.thumbnail && <Filmstrip assetId={f.assetId} name={f.name} />}
                 {f.warnings.length > 0 && (
                   <ul className="foot-warnings">
                     {f.warnings.map((w) => (

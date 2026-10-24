@@ -10,7 +10,7 @@ import {
   type RecordingPatch,
 } from '@trailerforge/pack-game-trailer/browser';
 import { useAppState, useStore } from '../app-context.js';
-import { CaptureItemRow } from '../components/CaptureItemRow.js';
+import { CaptureItemRow, type ImportedTake } from '../components/CaptureItemRow.js';
 import { CaptureTipsBlock, type TipsStatus } from '../components/CaptureTipsBlock.js';
 import { CaptureTipsDialog } from '../components/CaptureTipsDialog.js';
 import { ExportPanel } from '../components/ExportPanel.js';
@@ -97,6 +97,24 @@ export function CapturePage({ id }: { id: string }) {
   );
 
   const cmd = (type: string, payload: unknown) => store.command(id, type, payload);
+  const recordings = useAppState((s) => s.footage[id]?.status.footage);
+  useEffect(() => {
+    if (hasStoryboard) void store.refreshFootage(id);
+  }, [store, id, version, hasStoryboard]);
+  const slots = useMemo(
+    () =>
+      new Map(
+        (project.storyboard?.sections ?? [])
+          .flatMap((s) => s.slots)
+          .flatMap((x) => (x.kind === 'shot' ? [[x.id, x] as const] : [])),
+      ),
+    [project.storyboard],
+  );
+  const importedFor = (slotId: string): ImportedTake[] =>
+    (slots.get(slotId)?.takes ?? []).map((take) => {
+      const rec = recordings?.find((r) => r.assetId === take.assetId);
+      return { take, name: rec?.name ?? take.assetId, preview: rec?.previews.thumbnail ?? false };
+    });
   if (!data) {
     return (
       <>
@@ -216,6 +234,14 @@ export function CapturePage({ id }: { id: string }) {
                     key={it.slotId}
                     item={it}
                     code={codes.get(it.slotId)}
+                    imported={importedFor(it.slotId)}
+                    chosenTakeId={slots.get(it.slotId)?.chosenTakeId}
+                    onChoose={(takeId) =>
+                      void cmd('core/takes.choose', { slotId: it.slotId, takeId })
+                    }
+                    onReject={(takeId, rejected) =>
+                      void cmd('core/takes.reject', { slotId: it.slotId, takeId, rejected })
+                    }
                     index={i}
                     count={g.items.length}
                     disabled={disabled}

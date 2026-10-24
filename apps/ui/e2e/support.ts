@@ -1,7 +1,7 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Engine } from '@trailerforge/engine';
+import { Engine, type EngineOptions } from '@trailerforge/engine';
 import { createMockProvider, LlmClient, RoutesConfig } from '@trailerforge/llm';
 import type { LlmRequest } from '@trailerforge/plugin-api';
 import { startService, type RunningService } from '@trailerforge/service';
@@ -28,6 +28,8 @@ export async function startTestService(
     /** Make the mock provider claim it sends data off the computer. */ offDevice?: boolean;
     /** Use the engine's real providers and default routes instead of the mock LLM. */
     realProviders?: boolean;
+    /** Extra engine options (a test vision model, a fake network, a fast folder poll). */
+    engine?: Partial<EngineOptions>;
   } = {},
 ): Promise<TestService> {
   const root = await mkdtemp(join(tmpdir(), 'tforge-ui-e2e-'));
@@ -104,6 +106,7 @@ export async function startTestService(
     autosaveMs: 0,
     loadUserPlugins: false,
     ...(opts.realProviders ? {} : { llm }),
+    ...opts.engine,
   });
   const svc = await startService({
     engine,

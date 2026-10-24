@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseName, confidentCount, lengthText, parsePaths } from './footage-view.js';
+import { baseName, confidentCount, lengthText, megabytes, parsePaths } from './footage-view.js';
 
 describe('footage view helpers', () => {
   it('reads pasted paths: lines or semicolons, quotes, blanks and repeats', () => {
@@ -30,5 +30,12 @@ describe('footage view helpers', () => {
     expect(lengthText(125)).toBe('2 min 5 s');
     expect(baseName('C:\\rec\\a.mp4')).toBe('a.mp4');
     expect(baseName('/rec/b.mkv')).toBe('b.mkv');
+  });
+});
+
+describe('megabytes', () => {
+  it('rounds to whole megabytes, with one decimal for small sizes', () => {
+    expect(megabytes(3_400_000)).toBe('3.4 MB');
+    expect(megabytes(151_300_000)).toBe('151 MB');
   });
 });

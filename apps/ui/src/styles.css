@@ -610,7 +610,7 @@ label.check {
   border-color: var(--warn);
 }
 .chip.ok {
-  color: var(--ok);
+  color: var(--ok-text);
   border-color: var(--ok);
 }
 .chip.info {
@@ -1213,4 +1213,65 @@ span.handle {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+.thumb {
+  display: inline-block;
+  width: 96px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+  background: var(--border);
+}
+.filmstrip {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-top: 0.25rem;
+  border-radius: 4px;
+}
+.foot-rec .thumb,
+.cap-imported .thumb {
+  float: left;
+}
+.foot-rec,
+.cap-imported > li {
+  overflow: hidden;
+}
+.cap-imported {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.5rem 0;
+}
+.cap-imported > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+.cap-imported > li.rejected > span:not(.chip) {
+  text-decoration: line-through;
+}
+.cap-imported .thumb {
+  float: none;
+  width: 64px;
+  height: 36px;
+  margin: 0;
+}
+.watched-list {
+  list-style: none;
+  padding-left: 0;
+}
+.watched-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+progress {
+  width: 14rem;
 }

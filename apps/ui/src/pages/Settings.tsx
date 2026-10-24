@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAppState, useStore } from '../app-context.js';
 import { ConfirmDialog } from '../components/Dialog.js';
 import { RoutesEditor } from '../components/RoutesEditor.js';
+import { VisionPanel } from '../components/VisionPanel.js';
+import { WatchedFoldersPanel } from '../components/WatchedFoldersPanel.js';
 
 export function SettingsPage() {
   const store = useStore();
@@ -107,6 +109,9 @@ export function SettingsPage() {
           here.
         </p>
       </section>
+
+      <WatchedFoldersPanel />
+      <VisionPanel />
 
       <section aria-labelledby="routes-h">
         <h2 id="routes-h">

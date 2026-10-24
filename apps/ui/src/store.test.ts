@@ -206,6 +206,12 @@ class Fake {
       this.keySet = false;
       return {} as never;
     },
+    vision: async () => ({ status: 'unavailable', disclosure: null }),
+    downloadVision: async () => {
+      throw new Error('unused');
+    },
+    watchedFolders: async () => ({ folders: [], watching: false, problems: [] }),
+    setWatchedFolders: async (folders) => ({ folders, watching: folders.length > 0, problems: [] }),
     llmPreview: async (_id, task) => ({
       task,
       available: true,

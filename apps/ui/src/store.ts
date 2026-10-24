@@ -5,6 +5,7 @@ import {
   type BriefSuggestion,
   type CaptureView,
   type ExportOutcome,
+  type LibraryMediaKind,
   type LlmPreview,
   type PendingHandoff,
   type RenderedPack,
@@ -15,6 +16,8 @@ import {
   type ServiceEventMessage,
   type TaskRequest,
   type TaskView,
+  type VisionView,
+  type WatchedFoldersView,
 } from '@trailerforge/service/client';
 import type { DecisionRecord } from '@trailerforge/schema';
 import type { Connection } from './connection.js';
@@ -70,6 +73,10 @@ export type ClientLike = Pick<
   | 'secrets'
   | 'setApiKey'
   | 'clearApiKey'
+  | 'vision'
+  | 'downloadVision'
+  | 'watchedFolders'
+  | 'setWatchedFolders'
 >;
 
 export type ProviderStatus = Awaited<ReturnType<ServiceClient['llmProviders']>>[number];
@@ -123,6 +130,12 @@ export interface AppState {
   handoffs: PendingHandoff[];
   /** Providers, routes and key status; null until the Settings screen asks for them. */
   settings: SettingsData | null;
+  /** The opt-in vision model: state and disclosure; null until a screen asks. */
+  vision: VisionView | null;
+  /** Download progress 0–1 and its task, while the model is downloading. */
+  visionDownload: { taskId: string; fraction: number } | null;
+  /** Folders whose new recordings are imported automatically; null until a screen asks. */
+  watched: WatchedFoldersView | null;
   toasts: Toast[];
   /** Last event sequence number applied; used to resume after a dropped stream. */
   lastSeq: number;
@@ -144,6 +157,9 @@ const initial: AppState = {
   decisions: {},
   handoffs: [],
   settings: null,
+  vision: null,
+  visionDownload: null,
+  watched: null,
   toasts: [],
   lastSeq: 0,
 };
@@ -288,6 +304,24 @@ export class AppStore {
             notices: t.status === 'running' ? s.notices : notices,
           };
         });
+        if (t.kind === 'vision-download') {
+          if (t.status === 'running') {
+            this.set((s) => ({
+              visionDownload: s.visionDownload ?? { taskId: t.id, fraction: 0 },
+            }));
+            break;
+          }
+          this.set({ visionDownload: null });
+          await this.loadVision();
+          if (t.status === 'succeeded')
+            this.toast('info', 'AI vision is ready. It runs on this computer.');
+          else if (t.status === 'failed')
+            this.toast(
+              'error',
+              `The model download failed: ${t.error?.message ?? 'unknown error'}`,
+            );
+          break;
+        }
         if (t.status === 'failed') {
           this.toast('error', `${t.kind} failed: ${t.error?.message ?? 'unknown error'}`);
         } else if (t.status === 'succeeded' && t.kind === 'generate') {
@@ -320,9 +354,15 @@ export class AppStore {
         break;
       }
       case 'settings.changed':
-        // Someone (this window, another one, Claude Code) changed keys or routes: re-read them.
+        // Someone (this window, another one, Claude Code) changed keys, routes or watched folders.
         if (this.state.settings) await this.loadSettings();
+        if (this.state.watched) await this.loadWatched();
         break;
+      case 'vision.progress': {
+        const p = data as { taskId: string; fraction: number };
+        this.set({ visionDownload: { taskId: p.taskId, fraction: p.fraction } });
+        break;
+      }
       case 'job.updated': {
         const j = data as unknown as JobUpdate;
         this.set((s) => ({ jobs: { ...s.jobs, [j.jobId]: j } }));
@@ -538,6 +578,38 @@ export class AppStore {
     if (data) this.set({ settings: data });
   }
 
+  // ---- vision and watched folders ----
+
+  async loadVision(): Promise<void> {
+    const v = await this.run((c) => c.vision());
+    if (v) this.set({ vision: v });
+  }
+
+  /** Start the one-time download; the caller has shown the disclosure and been told yes. */
+  async startVisionDownload(): Promise<boolean> {
+    const t = await this.run((c) => c.downloadVision());
+    if (!t) return false;
+    this.set((s) => ({ visionDownload: s.visionDownload ?? { taskId: t.id, fraction: 0 } }));
+    return true;
+  }
+
+  async cancelVisionDownload(): Promise<void> {
+    const d = this.state.visionDownload;
+    if (d) await this.run((c) => c.cancelTask(d.taskId));
+  }
+
+  async loadWatched(): Promise<void> {
+    const w = await this.run((c) => c.watchedFolders());
+    if (w) this.set({ watched: w });
+  }
+
+  async setWatched(folders: string[]): Promise<boolean> {
+    const w = await this.run((c) => c.setWatchedFolders(folders));
+    if (!w) return false;
+    this.set({ watched: w });
+    return true;
+  }
+
   /** The key is sent once and never read back. */
   async setApiKey(value: string): Promise<boolean> {
     const r = await this.run((c) => c.setApiKey(value));
@@ -615,13 +687,16 @@ export class AppStore {
   private mediaUrls = new Map<string, Promise<string | null>>();
 
   /** A playable address for a recording's editing copy or a music file (fetched once with the token). */
-  mediaUrl(assetId: string, what: 'proxy' | 'audio'): Promise<string | null> {
+  mediaUrl(assetId: string, what: LibraryMediaKind): Promise<string | null> {
     const key = `${what}:${assetId}`;
     let url = this.mediaUrls.get(key);
     if (!url) {
-      url = this.run((c) => c.media(assetId, what)).then((b) =>
-        b ? URL.createObjectURL(b) : null,
-      );
+      // A preview that is not built yet is normal, not an error to show.
+      const quiet = what === 'thumbnail' || what === 'filmstrip';
+      const fetchBlob = quiet
+        ? this.client?.media(assetId, what).catch(() => undefined)
+        : this.run((c) => c.media(assetId, what));
+      url = Promise.resolve(fetchBlob).then((b) => (b ? URL.createObjectURL(b) : null));
       this.mediaUrls.set(key, url);
       void url.then((u) => u === null && this.mediaUrls.delete(key));
     }
