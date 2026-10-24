@@ -4,6 +4,7 @@ import { addProjectAsset, removeProjectAsset, setProjectAssetRole } from './asse
 import { CommandRegistry, defineCommand } from './commands.js';
 import { musicCommands } from './music-commands.js';
 import { takeCommands } from './take-commands.js';
+import { timelineCommands } from './timeline-commands.js';
 
 export const renameProject = defineCommand({
   type: 'core/project.rename',
@@ -42,6 +43,6 @@ export function coreCommands(registry = new CommandRegistry()): CommandRegistry 
     .register(addProjectAsset)
     .register(removeProjectAsset)
     .register(setProjectAssetRole);
-  for (const c of [...takeCommands, ...musicCommands]) registry.register(c);
+  for (const c of [...takeCommands, ...musicCommands, ...timelineCommands]) registry.register(c);
   return registry;
 }

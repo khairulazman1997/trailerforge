@@ -13,3 +13,4 @@ export * from './store/analysis-cache.js';
 export * from './egress.js';
 export * from './take-commands.js';
 export * from './music-commands.js';
+export * from './timeline-commands.js';
