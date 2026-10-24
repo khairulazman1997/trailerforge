@@ -1,6 +1,6 @@
 import { FLICKS_PER_SECOND } from '@trailerforge/schema';
 import { describe, expect, it } from 'vitest';
-import { toFootageAnalysis, toMusicAnalysis } from './convert.js';
+import { summarizeFootage, toFootageAnalysis, toMusicAnalysis } from './convert.js';
 import { FootageAnalysis, MusicAnalysis, type FootageRaw, type MusicRaw } from './schemas.js';
 
 const F = FLICKS_PER_SECOND;
@@ -59,5 +59,29 @@ describe('toFootageAnalysis', () => {
     expect(f.flashes).toEqual([45 * frame]);
     expect(f.frozen).toEqual([]);
     expect(f.duration).toBe(100 * frame);
+  });
+});
+
+describe('summarizeFootage', () => {
+  it('turns an analysis into the plain numbers a take ranking compares', () => {
+    const raw: FootageRaw = {
+      rate: { num: 30, den: 1 },
+      frameCount: 90,
+      scenes: [30, 60],
+      black: [[0, 15]],
+      flashes: [40, 41],
+      frozen: [[60, 90]],
+      brightness: Array(90).fill(100),
+      motion: Array(90).fill(50), // 5 grey levels of change per frame
+    };
+    const f = summarizeFootage(FootageAnalysis.parse(toFootageAnalysis(raw)));
+    expect(f).toEqual({
+      seconds: 3,
+      blackSeconds: 0.5,
+      frozenSeconds: 1,
+      flashFrames: 2,
+      sceneChanges: 2,
+      motion: 20,
+    });
   });
 });

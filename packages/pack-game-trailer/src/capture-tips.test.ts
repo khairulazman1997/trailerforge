@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import {
   captureCommands,
   captureTipsCommands,
+  excludedTerms,
   generateCaptureTips,
   PACK_ID,
   readCaptureTips,
@@ -175,6 +176,20 @@ describe('generateCaptureTips', () => {
       expect(sent, secret).not.toContain(secret);
     }
     expect(sent).toContain('[redacted]');
+  });
+
+  it('also hides a name players shorten, without its leading "The"', () => {
+    const p = project();
+    p.knowledge.push({
+      ...p.knowledge[0]!,
+      id: 'ent_the_x',
+      name: 'The Hollow King',
+      excludedFromLlm: true,
+      sourcePaths: [],
+    });
+    expect(excludedTerms(p.knowledge)).toEqual(
+      expect.arrayContaining(['The Hollow King', 'Hollow King']),
+    );
   });
 
   it('is not blocked by a short excluded name that also occurs in the prompt template', async () => {

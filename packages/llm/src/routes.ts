@@ -33,6 +33,7 @@ export const DEFAULT_ROUTES: z.input<typeof RoutesConfig> = {
     },
     'vo.script': { provider: 'core/anthropic', model: 'claude-opus-5-5', effort: 'medium' },
     'capture.tips': { provider: 'core/anthropic', model: 'claude-sonnet-5-5', effort: 'low' },
+    'cut.rank-takes': { provider: 'core/anthropic', model: 'claude-sonnet-5-5', effort: 'low' },
     'reference.template': {
       provider: 'core/anthropic',
       model: 'claude-sonnet-5-5',

@@ -129,6 +129,29 @@ export const chooseTake = defineCommand({
   },
 });
 
+/** Several choices as one undo step (applying an AI take ranking). */
+export const chooseTakes = defineCommand({
+  type: 'core/takes.choose-many',
+  payload: z.strictObject({
+    choices: z
+      .array(z.strictObject({ slotId: Id, takeId: Id }))
+      .min(1)
+      .max(1000),
+  }),
+  label: ({ choices }) => `Choose ${choices.length} take${choices.length === 1 ? '' : 's'}`,
+  apply: (d, { choices }) => {
+    for (const { slotId, takeId } of choices) {
+      const shot = findShot(d, slotId, 'core/takes.choose-many');
+      const take = shot.takes.find((t) => t.id === takeId);
+      if (!take)
+        throw new CommandError('core/takes.choose-many', `no take "${takeId}" on "${slotId}"`);
+      if (take.rejected)
+        throw new CommandError('core/takes.choose-many', 'a rejected take cannot be chosen');
+      shot.chosenTakeId = takeId;
+    }
+  },
+});
+
 /** Mark a take unusable (or usable again); a rejected take is never chosen. */
 export const rejectTake = defineCommand({
   type: 'core/takes.reject',
@@ -148,5 +171,6 @@ export const takeCommands = [
   attachTakes,
   detachTake,
   chooseTake,
+  chooseTakes,
   rejectTake,
 ] as unknown as readonly CommandDef<unknown>[];

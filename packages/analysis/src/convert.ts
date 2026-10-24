@@ -1,4 +1,4 @@
-import { framesToFlicks, secondsToFlicks } from '@trailerforge/schema';
+import { FLICKS_PER_SECOND, framesToFlicks, secondsToFlicks } from '@trailerforge/schema';
 import type { FootageAnalysis, FootageRaw, MusicAnalysis, MusicRaw } from './schemas.js';
 
 export const MUSIC_ANALYZER = { name: 'music', version: '1' } as const;
@@ -56,5 +56,22 @@ export function toFootageAnalysis(raw: FootageRaw): FootageAnalysis {
     frozen: ranges(raw.frozen),
     brightness: raw.brightness,
     motion: raw.motion,
+  };
+}
+
+/** Numbers about a recording that a take ranking can compare (see `TakeFacts` in the Game Trailer pack). */
+export function summarizeFootage(a: FootageAnalysis) {
+  const sec = (flicks: number) => flicks / FLICKS_PER_SECOND;
+  const span = (rs: { start: number; end: number }[]) =>
+    rs.reduce((n, r) => n + sec(r.end - r.start), 0);
+  const mean = a.motion.length ? a.motion.reduce((n, m) => n + m, 0) / a.motion.length : 0;
+  return {
+    seconds: sec(a.duration),
+    blackSeconds: span(a.black),
+    frozenSeconds: span(a.frozen),
+    flashFrames: a.flashes.length,
+    sceneChanges: a.scenes.length,
+    /** Mean luma change per frame (the series is stored x10), x4 so busy action nears 100. */
+    motion: Math.min(100, (mean / 10) * 4),
   };
 }

@@ -49,9 +49,11 @@ const MIN_NAME = 3;
 
 /** Everything the user excluded from LLM use that could leak by name, id or path. */
 export function excludedTerms(knowledge: readonly KnowledgeEntity[]): string[] {
+  // Players shorten names in their notes ("Ash Warden" for "The Ash Warden"): cover both.
+  const withoutArticle = (name: string) => name.replace(/^(?:the|an?)\s+/i, '');
   const terms = knowledge
     .filter((e) => e.excludedFromLlm)
-    .flatMap((e) => [e.name, e.id, ...e.sourcePaths])
+    .flatMap((e) => [e.name, withoutArticle(e.name), e.id, ...e.sourcePaths])
     .map((t) => t.trim())
     .filter((t) => t.length >= MIN_NAME);
   return [...new Set(terms)].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));

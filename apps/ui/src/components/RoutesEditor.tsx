@@ -23,6 +23,7 @@ const TASK_LABEL: Record<string, string> = {
   'storyboard.regenerate-section': 'Rewrite one section',
   'vo.script': 'Voice-over script',
   'capture.tips': 'Capture tips',
+  'cut.rank-takes': 'Take ranking',
   'reference.template': 'Template from a reference video',
   'critique.run': 'AI critique',
 };
