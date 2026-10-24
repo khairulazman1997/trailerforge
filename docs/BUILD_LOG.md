@@ -114,3 +114,16 @@ Design defaults confirmed by the user before 3.1: Markdown + printable HTML (PDF
 M3 summary: 11 tasks (3.1–3.9 plus 3.4b and the 3.8a/b split) in one long session, about 2 hours of wall time (00:25–02:24 UTC); usage went from 0% to 43%+ of a session window and 42% to 47% of the week. Desktop smoke (including the Save As dialog for downloads) still needs a real Windows machine.
 
 Twice during M3 a full `pnpm check` failed in packages the change did not touch (first run of 3.1; 3.9: a vitest worker in `apps/desktop` killed by SIGINT, which nothing in the repo sends). Both passed on the next runs; it looks like the container, not the code. Watch for it on a real machine.
+
+## Milestone 4 — Ingest + auto-cut (2026-10-24, UTC)
+
+Planned: 14 tasks (4.1–4.14), about 270–400k output tokens, ~75% Opus, six suggested sessions (see `docs/PLAN.md`).
+
+| Task                | Commit | Start    | End      | Build time | Model | Notes                                                                                                                                                                                                    |
+| ------------------- | ------ | -------- | -------- | ---------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M4 breakdown (plan) | (this) | 02:48:48 | 02:56:03 | ~8 min     | Opus  | design questions answered (import + drag and drop + watched folder; shot codes + suggestions + opt-in local AI vision; rough cut on the music; optional text-only LLM take ranking); task table 4.1–4.14 |
+
+| When (M4)        | Session | Week | Note           |
+| ---------------- | ------- | ---- | -------------- |
+| Before breakdown | —       | —    | user to report |
+| After breakdown  | —       | —    | user to report |
