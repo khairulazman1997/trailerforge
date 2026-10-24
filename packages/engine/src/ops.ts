@@ -27,7 +27,11 @@ import {
   type KnowledgeSource,
 } from '@trailerforge/schema';
 import { buildCaptureHints, tipsInputs } from '@trailerforge/pack-game-trailer';
-import { generateStoryboard, regenerateSection } from '@trailerforge/storyboard';
+import {
+  TakesWouldBeLostError,
+  generateStoryboard,
+  regenerateSection,
+} from '@trailerforge/storyboard';
 import type { Engine } from './engine.js';
 
 /**
@@ -39,7 +43,7 @@ import type { Engine } from './engine.js';
 /** A problem the caller can explain to the user. `usage` means the request itself was wrong. */
 export class OpError extends Error {
   constructor(
-    readonly code: 'usage' | 'no-video-type' | 'brief-incomplete' | 'not-found',
+    readonly code: 'usage' | 'no-video-type' | 'brief-incomplete' | 'not-found' | 'takes-attached',
     message: string,
     readonly details?: unknown,
   ) {
@@ -306,6 +310,8 @@ export interface GenerateOptions {
   assume?: boolean | undefined;
   /** Cancels the LLM call; a cancelled generation never writes to the project. */
   signal?: AbortSignal | undefined;
+  /** Replace unlocked shots even though recordings are attached (error `takes-attached` otherwise). */
+  discardTakes?: boolean | undefined;
 }
 
 export interface GenerateOutcome {
@@ -352,11 +358,21 @@ export async function generateStoryboardOp(
     assumptionsAdded = assumeMissingOp(engine, store).added;
   }
 
-  const { storyboard, decisions } = await generateStoryboard({ llm: engine.llm }, store.state, {
-    template,
-    targetDuration: duration,
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  });
+  let generated;
+  try {
+    generated = await generateStoryboard({ llm: engine.llm }, store.state, {
+      template,
+      targetDuration: duration,
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.discardTakes ? { discardTakes: true } : {}),
+    });
+  } catch (err) {
+    if (err instanceof TakesWouldBeLostError) {
+      throw new OpError('takes-attached', err.message, { shots: err.shots });
+    }
+    throw err;
+  }
+  const { storyboard, decisions } = generated;
   opts.signal?.throwIfAborted();
   store.dispatch('core/storyboard.set', storyboard);
   await appendDecisions(store.paths.decisions, decisions);

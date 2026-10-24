@@ -285,3 +285,54 @@ describe('decision log', () => {
     expect(await readDecisions(paths.decisions)).toEqual(decisions);
   });
 });
+
+describe('recordings attached to shots', () => {
+  const withTake = () => {
+    const p = project();
+    const section = p.storyboard!.sections.find((s) => s.id === 'sec_escalation')!;
+    const shot = section.slots[0]!;
+    if (shot.kind !== 'shot') throw new Error('fixture');
+    section.slots.push({ ...shot, id: 'shot_extra', title: 'Extra', takes: [], extensions: {} });
+    shot.takes.push({
+      id: 'take_1',
+      assetId: 'asset_forest',
+      matchedBy: 'code',
+      rejected: false,
+      note: '',
+      attachedAt: NOW().toISOString(),
+    });
+    return { p, shotId: shot.id };
+  };
+
+  it('regenerating a section keeps shots with takes, even when not keeping hand edits', async () => {
+    const { p, shotId } = withTake();
+    const { deps } = setup({ 'storyboard.regenerate-section': [sectionReply, sectionReply] });
+    for (const keepEdited of [true, false]) {
+      const { payload } = await regenerateSection(deps, p, {
+        sectionId: 'sec_escalation',
+        keepEdited,
+      });
+      const kept = payload.section.slots.find((s) => s.id === shotId);
+      expect(kept?.kind === 'shot' && kept.takes.map((t) => t.id)).toEqual(['take_1']);
+      expect(payload.section.slots.some((s) => s.id === 'shot_extra')).toBe(false); // rewritten
+    }
+  });
+
+  it('a full regeneration refuses to drop them unless told to', async () => {
+    const { p } = withTake();
+    const { deps } = setup({ 'storyboard.generate': genReply });
+    const template = releaseTemplate;
+    await expect(
+      generateStoryboard(deps, p, { template, targetDuration: 30 }),
+    ).rejects.toMatchObject({
+      name: 'TakesWouldBeLostError',
+      shots: 1,
+    });
+    const { storyboard } = await generateStoryboard(deps, p, {
+      template,
+      targetDuration: 30,
+      discardTakes: true,
+    });
+    expect(storyboard.sections.length).toBeGreaterThan(0);
+  });
+});

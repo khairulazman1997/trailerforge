@@ -99,9 +99,13 @@ export class HttpError extends Error {
 export function describeError(err: unknown): HttpError {
   if (err instanceof HttpError) return err;
   if (err instanceof OpError) {
-    const status = { usage: 400, 'not-found': 404, 'no-video-type': 422, 'brief-incomplete': 422 }[
-      err.code
-    ];
+    const status = {
+      usage: 400,
+      'not-found': 404,
+      'no-video-type': 422,
+      'brief-incomplete': 422,
+      'takes-attached': 409,
+    }[err.code];
     return new HttpError(status, err.code, err.message, err.details);
   }
   if (err instanceof SectionLockedError) return new HttpError(409, 'locked', err.message);

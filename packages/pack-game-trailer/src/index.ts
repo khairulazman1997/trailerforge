@@ -19,6 +19,7 @@ export * from './pack-ext.js';
 export * from './capture-commands.js';
 export * from './recording.js';
 export * from './shot-codes.js';
+export * from './matching.js';
 export * from './recording-commands.js';
 export * from './templates.js';
 export * from './unity.js';

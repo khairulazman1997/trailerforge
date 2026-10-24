@@ -11,6 +11,7 @@ import {
   type CardSlot,
   type Project,
   type Section,
+  type Slot,
   type VoLine,
 } from '@trailerforge/schema';
 import { SectionLockedError } from './commands.js';
@@ -89,14 +90,38 @@ export interface GenerateResult {
  * points and SFX cues with them); the LLM only writes the remaining time.
  * Apply the result with `core/storyboard.set`, then append `decisions` to the decision log.
  */
+const hasTakes = (slot: Slot) => slot.kind === 'shot' && slot.takes.length > 0;
+
+/** A full regeneration would replace shots that already have recordings attached. */
+export class TakesWouldBeLostError extends Error {
+  constructor(readonly shots: number) {
+    super(
+      `${shots} shot${shots === 1 ? ' has' : 's have'} recordings attached in unlocked sections; ` +
+        'lock those sections, or confirm that the recordings may be detached',
+    );
+    this.name = 'TakesWouldBeLostError';
+  }
+}
+
 export async function generateStoryboard(
   deps: GenerateDeps,
   project: Project,
-  opts: { template: StoryboardTemplate; targetDuration: number; signal?: AbortSignal },
+  opts: {
+    template: StoryboardTemplate;
+    targetDuration: number;
+    signal?: AbortSignal;
+    /** Replace unlocked sections even though some of their shots have recordings attached. */
+    discardTakes?: boolean;
+  },
 ): Promise<GenerateResult> {
   const { template, targetDuration } = opts;
   const skeleton = Storyboard.parse(template.build({ targetDuration }));
   const existing = project.storyboard;
+  const withTakes = (existing?.sections ?? [])
+    .filter((s) => !s.locked)
+    .flatMap((s) => s.slots.filter(hasTakes));
+  if (withTakes.length > 0 && opts.discardTakes !== true)
+    throw new TakesWouldBeLostError(withTakes.length);
   const locked = (existing?.sections ?? [])
     .map((s, index) => ({ s, index }))
     .filter(({ s }) => s.locked);
@@ -253,15 +278,16 @@ export async function regenerateSection(
   const free = round1(sb.meta.targetDuration - others.reduce((a, s) => a + sectionSeconds(s), 0));
   const total = sectionSeconds(target) || Math.max(free, 1);
 
-  const pinned =
-    opts.keepEdited === false
-      ? []
-      : target.slots
-          .map((slot, index) => ({ slot, index }))
-          .filter(({ slot }) => userEditedFields(slot).length > 0);
+  // Shots with recordings attached are always kept: regenerating must never drop footage.
+  const pinned = target.slots
+    .map((slot, index) => ({ slot, index }))
+    .filter(
+      ({ slot }) =>
+        hasTakes(slot) || (opts.keepEdited !== false && userEditedFields(slot).length > 0),
+    );
   if (pinned.length > 0 && pinned.length === target.slots.length) {
     throw new Error(
-      `every slot in "${target.name}" was edited by hand, so there is nothing to regenerate; ` +
+      `every slot in "${target.name}" was edited by hand or has recordings attached, so there is nothing to regenerate; ` +
         'delete the ones you do not want, or pass keepEdited: false to rewrite them all',
     );
   }
