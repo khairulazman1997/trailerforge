@@ -180,3 +180,75 @@ describe('analysis jobs', () => {
     expect(existsSync(footageCacheFile(analysisDir, H))).toBe(false);
   }, 120_000);
 });
+
+describe('crash recovery', () => {
+  it('a killed app stops its sidecar; the analysis resumes on restart and leaves no partial cache', async () => {
+    const { spawn } = await import('node:child_process');
+    const { createRequire } = await import('node:module');
+    const { dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const long = join(dir, 'crash.mp4');
+    ff([
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc2=s=640x360:r=60:d=90',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      long,
+    ]);
+    const analysisDir = join(dir, 'cache', 'analysis');
+    const here = dirname(fileURLToPath(import.meta.url));
+    const tsx = createRequire(import.meta.url).resolve('tsx');
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        ['--import', tsx, join(here, 'crash-child.ts'), dir, long, analysisDir],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      let err = '';
+      child.stderr.on('data', (d: Buffer) => (err += d.toString()));
+      child.stdout.on('data', (d: Buffer) => {
+        if (d.toString().includes('progress')) child.kill('SIGKILL');
+      });
+      child.on('exit', (_c, signal) => (signal === 'SIGKILL' ? resolve() : reject(new Error(err))));
+    });
+    expect(existsSync(footageCacheFile(analysisDir, 'd'.repeat(64)))).toBe(false);
+
+    // The orphaned sidecar notices within a couple of seconds and stops decoding.
+    const running = () =>
+      execFileSync('ps', ['-eo', 'args'])
+        .toString()
+        .split('\n')
+        .filter((l) => l.includes('crash.mp4') && !l.includes('ps -eo')).length;
+    for (let i = 0; i < 100 && running() > 0; i++) await new Promise((r) => setTimeout(r, 100));
+    expect(running()).toBe(0);
+
+    const q = new JobQueue({
+      dbPath: join(dir, 'jobs.sqlite'),
+      tempRoot: join(dir, 'tmp'),
+      progressThrottleMs: 0,
+    });
+    queues.push(q);
+    const [orphan] = q.list();
+    expect(orphan?.status).toBe('running');
+    registerAnalysisJobs(q);
+    q.start();
+    const job = await settle(q, orphan!.id);
+    expect(job).toMatchObject({ status: 'succeeded', attempts: 1 });
+    expect(existsSync(footageCacheFile(analysisDir, 'd'.repeat(64)))).toBe(true);
+  }, 240_000);
+});
+
+describe('a sidecar that exits at once', () => {
+  it('fails the call cleanly instead of throwing an unhandled write error', async () => {
+    const quick = { command: process.execPath, args: ['-e', 'process.exit(0)'] };
+    for (let i = 0; i < 5; i++) {
+      await expect(
+        callSidecar('ping', { pad: 'x'.repeat(200_000) }, { command: quick }),
+      ).rejects.toMatchObject({ code: 'crashed' });
+    }
+  });
+});

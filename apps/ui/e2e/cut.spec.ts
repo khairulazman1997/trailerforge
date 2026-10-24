@@ -145,10 +145,12 @@ test('choose music, analyse, build the cut, inspect, trim, swap, lock, rebuild, 
   ).toBeEnabled();
 
   // Rebuilding keeps the hand edit.
+  const preEdit = await parry.getAttribute('aria-label');
   await page
     .getByRole('group', { name: 'Trim the end' })
     .getByRole('button', { name: '1 frame earlier' })
     .click();
+  await expect(parry).not.toHaveAttribute('aria-label', preEdit!); // wait for the trim to land
   const edited = await parry.getAttribute('aria-label');
   await page.getByRole('button', { name: 'Rebuild the cut' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Rebuild' }).click();

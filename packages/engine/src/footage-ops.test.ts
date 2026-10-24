@@ -178,3 +178,117 @@ describe('footage ops, end to end', () => {
     });
   });
 });
+
+describe('the whole M4 flow', () => {
+  it('pack codes → watched folder → analyse → match → identical cut twice → edit kept on rebuild → undo', async () => {
+    const { captureExportOp } = await import('./capture-ops.js');
+    const { readFile } = await import('node:fs/promises');
+    const { timelineHash } = await import('@trailerforge/cut');
+    const store = await engine.createProject(join(root, 'Flow.tforge'), {
+      ...sampleProject(),
+      id: 'proj_flow',
+    } as never);
+
+    // The codes come from the exported capture pack, as a player would read them.
+    const pack = await captureExportOp(engine, store, { formats: ['json'] });
+    const json = JSON.parse(
+      await readFile(
+        join(
+          store.paths.dir,
+          pack.files.find((f) => f.endsWith('.json'))!,
+        ),
+        'utf8',
+      ),
+    ) as {
+      groups: { items: { slotId: string; code: string }[] }[];
+    };
+    const code = json.groups.flatMap((g) => g.items).find((i) => i.slotId === 'shot_parry')!.code;
+
+    // Recordings appear in a watched folder (an OBS output folder) while it is being watched.
+    const obs = join(root, 'obs');
+    mkdirSync(obs);
+    const watcher = engine.ingestor.watch({
+      folders: [obs],
+      stableChecks: 2,
+      projectId: store.state.id,
+    });
+    await watcher.poll(); // first look: the folder is empty
+    ff([
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc2=s=320x180:r=30:d=6',
+      '-metadata',
+      'title=flow1',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-pix_fmt',
+      'yuv420p',
+      join(obs, `2026-10-24 15-00-00 ${code}.mp4`),
+    ]);
+    ff([
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc2=s=320x180:r=30:d=7',
+      '-metadata',
+      'title=flow2',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-pix_fmt',
+      'yuv420p',
+      join(obs, '2026-10-24 15-02-00.mp4'),
+    ]);
+    for (let i = 0; i < 4; i++) await watcher.poll();
+    await idle();
+    const song = join(root, 'flow-song.wav');
+    ff([
+      '-f',
+      'lavfi',
+      '-i',
+      "aevalsrc='if(lt(mod(t-0.25\\,0.5)\\,0.01)*gte(t\\,0.25)\\,sin(2*PI*2000*t)\\,0)':s=44100:d=22",
+      song,
+    ]);
+    await importFootageOp(engine, store, { paths: [song] });
+    await idle();
+    // (a different length from the other test's song: the library would treat identical files as one)
+    const songId = engine.library.list().find((a) => a.originalName === 'flow-song.wav')!.id;
+    store.dispatch('core/music.set-track', { assetId: songId });
+    await analyzeOp(engine, store);
+    await idle();
+
+    // The coded recording attaches with certainty; the other is a suggestion we leave alone.
+    const sugg = await matchSuggestOp(engine, store);
+    const coded = sugg.matches.find((m) => m.kind === 'code')!;
+    expect(coded.candidates[0]!.slotId).toBe('shot_parry');
+    await matchAcceptOp(engine, store, { minConfidence: 'certain' });
+
+    // Same inputs, same cut.
+    await generateCutOp(engine, store);
+    const tl = () => store.state.timelines.find((t) => t.id === ROUGH_CUT_TIMELINE_ID)!;
+    const first = timelineHash(tl());
+    await generateCutOp(engine, store);
+    expect(timelineHash(tl())).toBe(first);
+
+    // A hand edit survives a rebuild; undo takes the rebuild and then the edit away.
+    store.dispatch('core/timeline.trim', {
+      timelineId: ROUGH_CUT_TIMELINE_ID,
+      itemId: 'rc_shot_parry',
+      edge: 'out',
+      delta: -2 * 23_520_000,
+    });
+    const edited = timelineHash(tl());
+    await generateCutOp(engine, store);
+    expect(tl().tracks[0]!.items.find((i) => i.id === 'rc_shot_parry')!.extensions).toMatchObject({
+      core: { userEdited: true },
+    });
+    store.undo();
+    expect(timelineHash(tl())).toBe(edited);
+    store.undo();
+    expect(timelineHash(tl())).toBe(first);
+  }, 240_000);
+});

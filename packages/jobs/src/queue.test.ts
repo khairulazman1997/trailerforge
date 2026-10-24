@@ -378,3 +378,28 @@ describe('resume', () => {
     expect(existsSync(join(tempRoot, orphan!.id))).toBe(false);
   }, 30_000);
 });
+
+describe('late reports', () => {
+  it('ignores progress and checkpoints from a job after it was cancelled or the queue closed', async () => {
+    const q = makeQueue();
+    let report!: (f: number) => void;
+    const late = defineJob<object>({
+      type: 'test/late',
+      input: z.strictObject({}),
+      run: async (ctx) => {
+        report = (f) => ctx.progress(f);
+        await new Promise((_, reject) =>
+          ctx.signal.addEventListener('abort', () => reject(new Error('aborted'))),
+        );
+      },
+    });
+    q.register(late).start();
+    const id = q.enqueue(late, {});
+    await waitFor(q, id, 'running');
+    await q.cancel(id);
+    expect(() => report(0.5)).not.toThrow();
+    expect(q.get(id)?.progress).toBe(0);
+    await q.close();
+    expect(() => report(0.9)).not.toThrow(); // the database is closed now
+  });
+});

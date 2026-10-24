@@ -10,6 +10,7 @@ response. Handlers raise `AnalysisError` for failures the caller should see by c
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from collections.abc import Callable
@@ -33,10 +34,55 @@ class AnalysisError(Exception):
         self.code = code
 
 
+def _alive(pid: int) -> bool:
+    """Whether process `pid` still runs (POSIX signal 0; on Windows, an exit-code check)."""
+    if os.name == "nt":  # pragma: no cover - exercised on Windows only
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        kernel32.CloseHandle(handle)
+        return bool(ok) and code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+class ParentGone(SystemExit):
+    """The app that asked for this work is gone: stop instead of finishing for nobody."""
+
+
+def _parent_watch() -> Callable[[], None]:
+    raw = os.environ.get("TFORGE_PARENT_PID", "")
+    pid = int(raw) if raw.isdigit() else 0
+    last = {"at": 0.0}
+
+    def check() -> None:
+        if not pid:
+            return
+        now = time.monotonic()
+        if now - last["at"] < 1.0:
+            return
+        last["at"] = now
+        if not _alive(pid):
+            raise ParentGone(3)
+
+    return check
+
+
 class RpcServer:
     def __init__(self) -> None:
         self._handlers: dict[str, tuple[Handler, bool]] = {}
         self._out: TextIO | None = None
+        self._parent_alive = _parent_watch()
         self.register("ping", lambda _params: {"pong": True})
 
     def register(self, method: str, handler: Handler, *, progress: bool = False) -> None:
@@ -46,6 +92,7 @@ class RpcServer:
         last = {"fraction": -1.0, "at": 0.0}
 
         def progress(fraction: float) -> None:
+            self._parent_alive()  # long work reports progress often: a good place to notice
             fraction = min(1.0, max(0.0, float(fraction)))
             now = time.monotonic()
             # Throttle: at most ~10 lines a second unless the value jumped.

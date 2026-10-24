@@ -1,8 +1,14 @@
-# Next session (Milestone 4, Ingest + auto-cut)
+# Next session
 
-M4 is broken down (task table 4.1–4.14 at the end of `docs/PLAN.md`). Start on **Opus** with task 4.1 (ingest schemas and asset library), then 4.2, following the suggested sessions in the plan.
+M4 (Ingest + auto-cut) is complete apart from the items below. Start on **Opus**.
 
-The desktop items below are deferred until the user has their Windows machine; keep them on the list and do not start them unless asked.
+1. **Live vision download test** (needs `us.aws.cdn.hf.co` reachable; a new session after adding `hf.co` to the allowed domains): `cd packages/analysis && TFORGE_VISION_LIVE=1 NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt npx vitest run src/vision.test.ts -t live`.
+2. **4.12b** (see the end of the M4 section in `docs/PLAN.md`): vision wiring and opt-in dialog, watched-folder setting, previews on screen, takes in the Capture tab.
+3. Then break down **M5** (variants + graphics) the same way as M4.
+
+## Human review of a rough cut (the user, on a real machine)
+
+The plan asks for a person to judge an M4 cut. With your own recordings and a music track: Footage tab → add the folder → attach → Cut tab → choose the music → Analyse → Build the cut → Play. Note what feels wrong (cuts that miss the beat, a dull stretch of a take, a shot too long or short) and send it back; the numbers the tests track are in `packages/cut/src/__snapshots__/metrics.test.ts.snap`. Also check on Windows: drag and drop onto the Footage tab, Choose folder…, and that the preview shows picture (headless test browsers cannot decode H.264).
 
 ## Deferred: desktop smoke checklist (run on Windows later)
 

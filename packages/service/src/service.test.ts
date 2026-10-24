@@ -956,6 +956,9 @@ describe('footage', () => {
       status: 400,
     });
     await expect(client.media('asset_nope', 'proxy')).rejects.toMatchObject({ status: 404 });
+    for (const evil of ['../../etc/passwd', '..\\..\\secrets.json', '%2e%2e%2fsecrets.json']) {
+      await expect(client.media(evil, 'audio')).rejects.toMatchObject({ status: 404 }); // ids are looked up, never used as paths
+    }
     expect((await raw({ path: `/v1/library/assets/${f.footage[0]!.assetId}/proxy` })).status).toBe(
       401,
     );

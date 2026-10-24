@@ -93,6 +93,8 @@ export function callSidecar(
     opts.signal?.throwIfAborted();
     const child = spawn(cmd.command, cmd.args, {
       ...(cmd.cwd ? { cwd: cmd.cwd } : {}),
+      // If this process dies (crash, kill), the sidecar notices and stops instead of running on.
+      env: { ...process.env, TFORGE_PARENT_PID: String(process.pid) },
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -127,6 +129,7 @@ export function callSidecar(
       stderr = (stderr + d.toString()).slice(-4000);
     });
     child.stdout.on('data', (d: Buffer) => {
+      if (settled) return; // cancelled or answered: late progress lines go nowhere
       buffer += d.toString();
       let nl: number;
       while ((nl = buffer.indexOf('\n')) >= 0) {
@@ -165,6 +168,9 @@ export function callSidecar(
         ),
       ),
     );
+    // A sidecar that dies before reading (killed on shutdown, broken install) makes this write fail
+    // with EPIPE; the 'close' handler reports the failure, so the write error must not escape.
+    child.stdin.on('error', () => undefined);
     child.stdin.end(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })}\n`);
   });
 }

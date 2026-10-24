@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import subprocess
 import sys
 
@@ -58,3 +59,20 @@ def test_sidecar_process_answers_ping():
         timeout=20,
     )
     assert json.loads(proc.stdout)["result"] == {"pong": True}
+
+
+def test_stops_when_the_app_that_asked_is_gone(monkeypatch):
+    import pytest
+
+    from tforge_analysis.rpc import ParentGone
+
+    done = subprocess.run([sys.executable, "-c", "pass"], check=True)
+    assert done.returncode == 0
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    monkeypatch.setenv("TFORGE_PARENT_PID", str(dead.pid))
+    server = RpcServer()
+    with pytest.raises(ParentGone):
+        server._progress_for(1)(0.5)
+    monkeypatch.setenv("TFORGE_PARENT_PID", str(os.getpid()))
+    RpcServer()._progress_for(1)(0.5)  # alive: carries on

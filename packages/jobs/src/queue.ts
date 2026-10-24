@@ -225,6 +225,8 @@ export class JobQueue {
       signal: controller.signal,
       tempDir,
       progress: (fraction, message) => {
+        // A job that was cancelled, timed out or shut down may still report; ignore it.
+        if (controller.signal.aborted || this.stopping) return;
         const t = this.now();
         if (fraction < 1 && t - lastProgressWrite < this.throttleMs) return;
         lastProgressWrite = t;
