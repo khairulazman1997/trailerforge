@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { DecisionRecord } from './decision.js';
-import { LibraryAsset } from './media.js';
+import { AssetLibrary, LibraryAsset } from './media.js';
 import { Project } from './project.js';
 import { Storyboard } from './storyboard.js';
 import { Timeline } from './timeline.js';
@@ -15,6 +15,7 @@ export const jsonSchemaSources = {
   storyboard: Storyboard,
   timeline: Timeline,
   'library-asset': LibraryAsset,
+  'asset-library': AssetLibrary,
   decision: DecisionRecord,
 } as const;
 

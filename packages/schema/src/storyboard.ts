@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { Extensions, Id, PluginRef, Seconds } from './common.js';
+import { Extensions, Id, IsoDateTime, PluginRef, Seconds } from './common.js';
 import { Resolution } from './format.js';
+import { Flicks } from './time.js';
 
 export const SlotStatus = z.enum(['empty', 'recorded', 'approved', 'rejected']);
 export type SlotStatus = z.infer<typeof SlotStatus>;
@@ -49,6 +50,37 @@ const SlotBase = {
   extensions: Extensions.default({}),
 };
 
+/** How a recording came to be attached to a shot. */
+export const TakeMatch = z.enum(['code', 'suggestion', 'vision', 'manual']);
+export type TakeMatch = z.infer<typeof TakeMatch>;
+
+/**
+ * A recording attached to a shot. Only the user's decisions live here; probe data, analysis and
+ * match scores are regenerable cache keyed by the asset's hash. The Game Trailer pack's manual
+ * takes counter (`extensions['game-trailer'].capture.takes`) is separate: it counts takes
+ * recorded but never imported.
+ */
+export const Take = z
+  .strictObject({
+    id: Id,
+    /** Must be in `project.assets`. */
+    assetId: Id,
+    matchedBy: TakeMatch,
+    rejected: z.boolean().default(false),
+    /** Optional in/out hint inside the recording, flicks from the start of the file. */
+    sourceIn: Flicks.optional(),
+    sourceOut: Flicks.optional(),
+    note: z.string().default(''),
+    attachedAt: IsoDateTime,
+  })
+  .refine(
+    (t) => t.sourceIn === undefined || t.sourceOut === undefined || t.sourceIn < t.sourceOut,
+    {
+      message: 'sourceIn must be before sourceOut',
+    },
+  );
+export type Take = z.infer<typeof Take>;
+
 /** A slot to be filled with recorded footage. */
 export const ShotSlot = z.strictObject({
   ...SlotBase,
@@ -65,6 +97,10 @@ export const ShotSlot = z.strictObject({
   alternates: z.array(z.string()).default([]),
   overlays: z.array(Overlay).default([]),
   status: SlotStatus.default('empty'),
+  /** Recordings attached to this shot, in attach order. */
+  takes: z.array(Take).default([]),
+  /** The take the cut uses; unset means the cut picks the best non-rejected take. */
+  chosenTakeId: Id.optional(),
 });
 export type ShotSlot = z.infer<typeof ShotSlot>;
 

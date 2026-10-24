@@ -119,11 +119,13 @@ Twice during M3 a full `pnpm check` failed in packages the change did not touch 
 
 Planned: 14 tasks (4.1–4.14), about 270–400k output tokens, ~75% Opus, six suggested sessions (see `docs/PLAN.md`).
 
-| Task                | Commit | Start    | End      | Build time | Model | Notes                                                                                                                                                                                                    |
-| ------------------- | ------ | -------- | -------- | ---------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M4 breakdown (plan) | (this) | 02:48:48 | 02:56:03 | ~8 min     | Opus  | design questions answered (import + drag and drop + watched folder; shot codes + suggestions + opt-in local AI vision; rough cut on the music; optional text-only LLM take ranking); task table 4.1–4.14 |
+| Task                               | Commit    | Start    | End      | Build time | Model | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------- | --------- | -------- | -------- | ---------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M4 breakdown (plan)                | `b761b66` | 02:48:48 | 02:56:03 | ~8 min     | Opus  | design questions answered (import + drag and drop + watched folder; shot codes + suggestions + opt-in local AI vision; rough cut on the music; optional text-only LLM take ranking); task table 4.1–4.14                                                                                                                                                                                                                                     |
+| 4.1 Ingest schemas + asset library | (this)    | 05:30:33 | 05:39:20 | ~9 min     | Opus  | takes moved to core (`ShotSlot.takes[]` + `chosenTakeId`, refs checked by `parseProject`) because the cut and ref checks are core; `LibraryStore` under `<home>/library/` (re-read under a short lock, atomic write, unreadable file refused, never overwritten); quick hash = size + first/last 4 MiB, full hash later; asset id from quick hash; relink by size + hash (skips symlinks, dot-folders; bounded, abortable); `core/assets.add | remove | set-role`(remove lists where an asset is used); analysis cache`cache/analysis/<hash>/<analyzer>@<version>.json`; no schema version bump (defaults) |
 
-| When (M4)        | Session | Week | Note           |
-| ---------------- | ------- | ---- | -------------- |
-| Before breakdown | —       | —    | user to report |
-| After breakdown  | —       | —    | user to report |
+| When (M4)                    | Session | Week | Note               |
+| ---------------------------- | ------- | ---- | ------------------ |
+| Before breakdown             | —       | —    | user to report     |
+| After breakdown / before 4.1 | 2%      | 50%  | new session window |
+| After 4.1                    | —       | —    | user to report     |

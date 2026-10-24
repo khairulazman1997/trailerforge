@@ -51,15 +51,25 @@ export const AssetLicense = z.strictObject({
 });
 
 /**
- * An entry in the app-level shared asset library. Projects reference library assets by id;
- * footage is never copied into projects unless the user asks.
+ * An entry in the app-level shared asset library (`<home>/library/library.json`). Projects
+ * reference library assets by id; footage is never copied into projects unless the user asks.
+ * Whether the file is currently present is checked at runtime, never stored.
  */
 export const LibraryAsset = z.strictObject({
   id: Id,
   kind: AssetKind,
   /** Absolute path or `file://` URI on the user's machine. */
   uri: z.string().min(1),
-  contentHash: ContentHash,
+  /**
+   * sha256 of the size plus the first and last 4 MiB, computed at import so multi-gigabyte
+   * recordings are deduplicated and relinked without reading them in full.
+   */
+  quickHash: ContentHash,
+  /** Full-file sha256, filled in later by a background job. */
+  contentHash: ContentHash.optional(),
+  sizeBytes: z.int().nonnegative(),
+  /** File modification time at import (a recording's end time, used by matching). */
+  fileModifiedAt: IsoDateTime.optional(),
   originalName: z.string().min(1),
   media: MediaInfo.optional(),
   tags: z.array(z.string()).default([]),
@@ -79,6 +89,36 @@ export const LibraryAsset = z.strictObject({
   extensions: Extensions.default({}),
 });
 export type LibraryAsset = z.infer<typeof LibraryAsset>;
+
+export const LIBRARY_SCHEMA_VERSION = 1;
+
+/** The library file. Asset ids are unique, and so are quick hashes (one entry per file content). */
+export const AssetLibrary = z
+  .strictObject({
+    schemaVersion: z.literal(LIBRARY_SCHEMA_VERSION),
+    assets: z.array(LibraryAsset).default([]),
+  })
+  .superRefine((lib, ctx) => {
+    const ids = new Set<string>();
+    const hashes = new Set<string>();
+    lib.assets.forEach((a, i) => {
+      if (ids.has(a.id))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['assets', i, 'id'],
+          message: `duplicate asset id "${a.id}"`,
+        });
+      if (hashes.has(a.quickHash))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['assets', i, 'quickHash'],
+          message: 'duplicate quickHash',
+        });
+      ids.add(a.id);
+      hashes.add(a.quickHash);
+    });
+  });
+export type AssetLibrary = z.infer<typeof AssetLibrary>;
 
 export const AssetRole = z.enum([
   'footage',

@@ -75,6 +75,7 @@ function convertSlot(g: GenSlot, ideal: number, ctx: ConvertContext): Slot {
     alternates: g.alternates,
     overlays: [],
     status: 'empty',
+    takes: [],
   };
 }
 

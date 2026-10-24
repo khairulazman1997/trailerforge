@@ -59,8 +59,21 @@ export function validateProjectRefs(project: Project): RefIssue[] {
         slot.entityIds.forEach((id) => {
           if (!entityIds.has(id)) issue(p, `unknown knowledge entity "${id}"`);
         });
-        if (slot.kind === 'shot')
+        if (slot.kind === 'shot') {
           slot.overlays.forEach((o, oi) => claim(o.id, `${p}.overlays[${oi}]`));
+          const takeIds = new Set<string>();
+          slot.takes.forEach((t, ti) => {
+            claim(t.id, `${p}.takes[${ti}]`);
+            takeIds.add(t.id);
+            if (!assetIds.has(t.assetId))
+              issue(`${p}.takes[${ti}]`, `unknown asset "${t.assetId}"`);
+          });
+          if (slot.chosenTakeId !== undefined) {
+            const chosen = slot.takes.find((t) => t.id === slot.chosenTakeId);
+            if (!chosen) issue(`${p}.chosenTakeId`, `unknown take "${slot.chosenTakeId}"`);
+            else if (chosen.rejected) issue(`${p}.chosenTakeId`, `take "${chosen.id}" is rejected`);
+          }
+        }
       });
     });
     sb.voLines.forEach((v, i) => {
@@ -144,6 +157,40 @@ export function validateProjectRefs(project: Project): RefIssue[] {
   if (cycle) issue('timelines', `nested sequences form a cycle: ${cycle.join(' -> ')}`);
 
   return issues;
+}
+
+/**
+ * Every place in the project that refers to `assetId`, as paths. Used to refuse removing an asset
+ * that is still in use, with a message that says where.
+ */
+export function findAssetUsages(project: Project, assetId: string): string[] {
+  const uses: string[] = [];
+  const sb = project.storyboard;
+  if (sb) {
+    sb.sections.forEach((s, si) =>
+      s.slots.forEach((slot, i) => {
+        if (slot.kind !== 'shot') return;
+        slot.takes.forEach((t, ti) => {
+          if (t.assetId === assetId)
+            uses.push(`storyboard.sections[${si}].slots[${i}].takes[${ti}]`);
+        });
+      }),
+    );
+    if (sb.music.trackAssetId === assetId) uses.push('storyboard.music.trackAssetId');
+    sb.music.sfxCues.forEach((c, i) => {
+      if (c.assetId === assetId) uses.push(`storyboard.music.sfxCues[${i}]`);
+    });
+  }
+  if (project.brief.referenceAssetIds.includes(assetId)) uses.push('brief.referenceAssetIds');
+  project.timelines.forEach((tl, ti) =>
+    tl.tracks.forEach((track, ki) =>
+      track.items.forEach((item, ii) => {
+        if (item.kind === 'clip' && item.assetId === assetId)
+          uses.push(`timelines[${ti}].tracks[${ki}].items[${ii}]`);
+      }),
+    ),
+  );
+  return uses;
 }
 
 function findCycle(graph: Map<string, string[]>): string[] | null {

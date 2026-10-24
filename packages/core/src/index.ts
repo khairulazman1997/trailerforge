@@ -1,3 +1,4 @@
+export * from './asset-commands.js';
 export * from './commands.js';
 export * from './events.js';
 export * from './project-commands.js';
@@ -6,3 +7,6 @@ export * from './store/fs-atomic.js';
 export * from './store/layout.js';
 export * from './store/lock.js';
 export * from './store/project-store.js';
+export * from './library/hash.js';
+export * from './library/library-store.js';
+export * from './store/analysis-cache.js';
