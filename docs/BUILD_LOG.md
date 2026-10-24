@@ -77,3 +77,16 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 | After 2b.9      | 88%        | 40%  | Sonnet UI + backend: +7% session          |
 | After 2b.10     | 91%        | 41%  | Sonnet Electron shell: +3% session        |
 | After 2b.11     | 94%        | 41%  | Opus hardening: +3% session               |
+
+## Milestone 3 — Capture Pack (2026-10-24, UTC)
+
+Design defaults confirmed by the user before 3.1: Markdown + printable HTML (PDF via browser print); recording settings from brief platforms + an editable table; capture notes on the slot (`extensions['game-trailer'].capture`); grouping by location → setup → featured entity.
+
+| Task                     | Commit | Start    | End      | Build time | Model | Notes                                                                                                              |
+| ------------------------ | ------ | -------- | -------- | ---------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
+| 3.1 Capture plan builder | `HASH` | 00:25:46 | 00:28:50 | ~3 min     | Opus  | seeded-PRNG property tests (no new dep); locked sections kept (a lock guards content, not recording); skip via ext |
+
+| When (M3)  | Session | Week | Note           |
+| ---------- | ------- | ---- | -------------- |
+| Before 3.1 | 0%      | 42%  |                |
+| After 3.1  | —       | —    | user to report |

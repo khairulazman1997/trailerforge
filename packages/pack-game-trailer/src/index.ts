@@ -5,6 +5,7 @@ import { unityExtractor } from './unity.js';
 import { videoTypes } from './video-types.js';
 
 export * from './brief-ext.js';
+export * from './capture.js';
 export * from './templates.js';
 export * from './unity.js';
 export * from './video-types.js';
