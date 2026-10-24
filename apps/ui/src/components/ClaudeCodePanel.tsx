@@ -42,7 +42,10 @@ export function ClaudeCodePanel() {
         )}
       </p>
       {!cc.installed && (
-        <p className="muted">Install Claude Code first, then come back and connect it.</p>
+        <p className="muted">
+          Neither the claude command nor Claude Code's settings file was found. Install and open
+          Claude Code once, then come back.
+        </p>
       )}
       {cc.canConnect ? (
         <div className="row">

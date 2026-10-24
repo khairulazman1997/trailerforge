@@ -68,7 +68,7 @@ In the desktop app, **Browse…** buttons open the Windows file chooser to open 
 
 ### Drive a project from Claude Code (MCP)
 
-Easiest: open **Settings → Claude Code** and press **Connect Claude Code** (it runs `claude mcp add` for you, at user scope, on this app's data folder so Claude Code shares your library and provider settings; **Disconnect** removes it, and "Run it yourself instead" shows the command). Claude Code then names the project folder in each request. By hand:
+Easiest: open **Settings → Claude Code** and press **Connect Claude Code** (it runs `claude mcp add` for you, at user scope, on this app's data folder so Claude Code shares your library and provider settings; **Disconnect** removes it; if there is no `claude` command, as when Claude Code runs only inside the Claude desktop app, it edits that app's `~/.claude.json` instead, changing only its own `trailerforge` entry and keeping a `.tforge-backup` copy; and "Run it yourself instead" shows the command). Claude Code then names the project folder in each request. By hand:
 
 ```bash
 claude mcp add trailerforge -- node /path/to/trailerforge/apps/cli/dist/bin.js mcp ./Ember.tforge

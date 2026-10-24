@@ -1,4 +1,8 @@
 import { execFile } from 'node:child_process';
+import { copyFile, readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { writeFileAtomic } from '@trailerforge/core';
 import type { Engine } from './engine.js';
 import { OpError } from './ops.js';
 
@@ -12,10 +16,12 @@ export interface ClaudeCodeCli {
   binArgs?: string[];
   /** `apps/cli/dist/bin.js`: what Claude Code launches as the MCP server. Null: not available here. */
   cliPath?: string | null;
+  /** Claude Code's settings file. Default `~/.claude.json`. */
+  configPath?: string;
 }
 
 export interface ClaudeCodeView {
-  /** The `claude` command was found and answered. */
+  /** Claude Code was found: its command, or its settings file when only the desktop app is installed. */
   installed: boolean;
   /** TrailerForge is registered as an MCP server in Claude Code (user scope). */
   connected: boolean;
@@ -77,17 +83,72 @@ export function connectCommand(engine: Engine, cli: ClaudeCodeCli): string | nul
   return add.map(quote).join(' ');
 }
 
+// ---- Claude Code's settings file ---------------------------------------------------------------
+// Used when there is no `claude` command (Claude Code running inside the desktop app has none on
+// PATH). Both read the same user-level `~/.claude.json`, whose `mcpServers` lists the servers.
+
+const configFile = (cli: ClaudeCodeCli) => cli.configPath ?? join(homedir(), '.claude.json');
+
+async function readConfig(path: string): Promise<Record<string, unknown> | null> {
+  let text: string;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+      return parsed as Record<string, unknown>;
+  } catch {
+    // fall through
+  }
+  throw new OpError(
+    'failed',
+    `Claude Code's settings file (${path}) is not valid JSON; not touching it.`,
+  );
+}
+
+/**
+ * Add or remove our entry and nothing else. The file is read again right before writing, written
+ * atomically, and kept once as `<file>.tforge-backup` the first time we change it.
+ */
+async function editConfig(
+  cli: ClaudeCodeCli,
+  change: (servers: Record<string, unknown>) => void,
+): Promise<void> {
+  const path = configFile(cli);
+  const config = await readConfig(path);
+  if (!config)
+    throw new OpError('not-found', 'Claude Code was not found. Install it, then try again.');
+  await copyFile(path, `${path}.tforge-backup`).catch(() => undefined);
+  const fresh = (await readConfig(path)) ?? config;
+  const raw = fresh.mcpServers;
+  const servers: Record<string, unknown> =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...(raw as object) } : {};
+  change(servers);
+  await writeFileAtomic(path, `${JSON.stringify({ ...fresh, mcpServers: servers }, null, 2)}\n`);
+}
+
+// ---- operations --------------------------------------------------------------------------------
+
 export async function claudeCodeStatusOp(
   engine: Engine,
   cli: ClaudeCodeCli,
 ): Promise<ClaudeCodeView> {
+  const base = { canConnect: !!cli.cliPath, command: connectCommand(engine, cli) };
   const got = await run(cli, ['mcp', 'get', MCP_NAME]);
-  return {
-    installed: !got.missing,
+  if (!got.missing) {
     // `mcp get` exits 0 when the server exists and non-zero when it does not.
-    connected: got.code === 0,
-    canConnect: !!cli.cliPath,
-    command: connectCommand(engine, cli),
+    return { installed: true, connected: got.code === 0, ...base };
+  }
+  const config = await readConfig(configFile(cli)).catch(() => null);
+  const servers = config?.mcpServers;
+  return {
+    installed: config !== null,
+    connected: !!servers && typeof servers === 'object' && MCP_NAME in servers,
+    ...base,
   };
 }
 
@@ -98,10 +159,20 @@ export async function claudeCodeConnectOp(
 ): Promise<ClaudeCodeView> {
   if (!cli.cliPath)
     throw new OpError('usage', 'this build cannot tell Claude Code where its tool is');
-  const status = await claudeCodeStatusOp(engine, cli);
-  if (!status.installed)
-    throw new OpError('not-found', 'Claude Code was not found. Install it, then try again.');
-  if (status.connected) await run(cli, ['mcp', 'remove', '--scope', 'user', MCP_NAME]);
+  const probe = await run(cli, ['mcp', 'get', MCP_NAME]);
+  if (probe.missing) {
+    const cliPath = cli.cliPath;
+    await editConfig(cli, (servers) => {
+      servers[MCP_NAME] = {
+        type: 'stdio',
+        command: 'node',
+        args: serverArgs(engine, cliPath).slice(1),
+        env: {},
+      };
+    });
+    return claudeCodeStatusOp(engine, cli);
+  }
+  if (probe.code === 0) await run(cli, ['mcp', 'remove', '--scope', 'user', MCP_NAME]);
   const r = await run(cli, [
     'mcp',
     'add',
@@ -124,7 +195,13 @@ export async function claudeCodeDisconnectOp(
   cli: ClaudeCodeCli,
 ): Promise<ClaudeCodeView> {
   const status = await claudeCodeStatusOp(engine, cli);
-  if (status.connected) {
+  if (!status.connected) return status;
+  const probe = await run(cli, ['mcp', 'get', MCP_NAME]);
+  if (probe.missing) {
+    await editConfig(cli, (servers) => {
+      delete servers[MCP_NAME];
+    });
+  } else {
     const r = await run(cli, ['mcp', 'remove', '--scope', 'user', MCP_NAME]);
     if (r.code !== 0)
       throw new OpError(

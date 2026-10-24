@@ -552,6 +552,7 @@ process.exit(2);`,
       await s2.close();
     }
 
+    const noConfig = join(root, 'no-such-claude.json');
     const noCli = await startService({
       engine,
       claudeBin: process.execPath,
@@ -560,6 +561,7 @@ process.exit(2);`,
     const missing = await startService({
       engine,
       claudeBin: join(root, 'no-such-claude'),
+      claudeConfigPath: noConfig,
       cliPath: cli,
     });
     try {
@@ -572,6 +574,51 @@ process.exit(2);`,
     } finally {
       await noCli.close();
       await missing.close();
+    }
+  });
+});
+
+describe('Claude Code connection without a claude command', () => {
+  it('edits only its own entry in the settings file, keeps a backup, and refuses a broken file', async () => {
+    const file = join(root, 'claude-settings.json');
+    const original = {
+      userID: 'u1',
+      projects: { a: { x: 1 } },
+      mcpServers: { other: { type: 'stdio', command: 'x' } },
+    };
+    await writeFile(file, JSON.stringify(original));
+    const cli = join(root, 'cli', 'bin.js');
+    const s2 = await startService({
+      engine,
+      claudeBin: join(root, 'no-such-claude'),
+      claudeConfigPath: file,
+      cliPath: cli,
+    });
+    try {
+      const c = new ServiceClient({ baseUrl: s2.url, token: s2.token });
+      expect(await c.claudeCode()).toMatchObject({ installed: true, connected: false });
+      expect(await c.connectClaudeCode()).toMatchObject({ installed: true, connected: true });
+      const after = JSON.parse(await readFile(file, 'utf8'));
+      expect(after.userID).toBe('u1');
+      expect(after.projects).toEqual(original.projects);
+      expect(after.mcpServers.other).toEqual(original.mcpServers.other);
+      expect(after.mcpServers.trailerforge).toEqual({
+        type: 'stdio',
+        command: 'node',
+        args: [cli, 'mcp', '--home', engine.home],
+        env: {},
+      });
+      expect(JSON.parse(await readFile(`${file}.tforge-backup`, 'utf8'))).toEqual(original);
+
+      expect(await c.disconnectClaudeCode()).toMatchObject({ connected: false });
+      const gone = JSON.parse(await readFile(file, 'utf8'));
+      expect(gone.mcpServers).toEqual(original.mcpServers);
+
+      await writeFile(file, '{ not json');
+      await expect(c.connectClaudeCode()).rejects.toMatchObject({ status: 502 });
+      expect(await readFile(file, 'utf8')).toBe('{ not json'); // untouched
+    } finally {
+      await s2.close();
     }
   });
 });

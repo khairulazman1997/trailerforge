@@ -89,6 +89,8 @@ export interface ServiceOptions {
   cliPath?: string | null;
   /** Arguments before the `claude` CLI's own (tests run a fake CLI through Node). */
   claudeBinArgs?: string[];
+  /** Claude Code's settings file when there is no `claude` command; default `~/.claude.json`. */
+  claudeConfigPath?: string;
   /**
    * Folder of a built UI (index.html + assets) to serve at `/`, same origin as the API. The
    * files are public (no token); only `/v1/*` needs one. Served with a strict CSP.
@@ -316,6 +318,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
   const claudeCli = {
     ...(opts.claudeBin ? { bin: opts.claudeBin } : {}),
     ...(opts.claudeBinArgs ? { binArgs: opts.claudeBinArgs } : {}),
+    ...(opts.claudeConfigPath ? { configPath: opts.claudeConfigPath } : {}),
     cliPath: opts.cliPath ?? null,
   };
 
