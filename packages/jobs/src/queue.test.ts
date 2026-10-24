@@ -193,6 +193,33 @@ describe('failures and retries', () => {
     expect(kinds.filter((k) => k === 'retrying')).toHaveLength(2);
   });
 
+  it('never loses a retry whose time comes while the clock ticks (no stuck queued jobs)', async () => {
+    // A clock that moves on every reading, as a real one does between two calls in a row.
+    let t = 1_000_000;
+    const q = new JobQueue({
+      dbPath: join(root, 'ticking.sqlite'),
+      tempRoot: join(root, 'tmp'),
+      progressThrottleMs: 0,
+      now: () => t++,
+    });
+    queues.push(q);
+    let calls = 0;
+    const flaky = defineJob<object, never, number>({
+      type: 'test/ticking',
+      input: z.strictObject({}),
+      maxAttempts: 40,
+      backoffMs: (retry) => 1 + (retry % 4), // 2 ms is the one that used to be lost
+
+      run: async () => {
+        if (++calls < 30) throw new JobError('again', true);
+        return calls;
+      },
+    });
+    q.register(flaky).start();
+    const id = q.enqueue(flaky, {});
+    expect((await waitFor(q, id, 'succeeded')).output).toBe(30);
+  });
+
   it('fails for good after maxAttempts and records the error', async () => {
     const q = makeQueue();
     const broken = defineJob<object>({

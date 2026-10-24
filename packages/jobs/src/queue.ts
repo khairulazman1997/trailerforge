@@ -174,22 +174,26 @@ export class JobQueue {
   private pump(): void {
     if (!this.started || this.stopping) return;
     const types = [...this.defs.keys()];
-    for (const job of this.db.ready(this.now(), types)) {
+    // One reading of the clock for both the "ready now" query and the wake-up time: with two
+    // readings a job that became due in between was neither started nor scheduled, and sat
+    // queued until something else happened to pump.
+    const now = this.now();
+    for (const job of this.db.ready(now, types)) {
       if (this.running.size >= this.concurrency) break;
       if (this.running.has(job.id)) continue;
       const limit = this.defs.get(job.type)!.concurrency;
       if (limit !== undefined && this.runningOfType(job.type) >= limit) continue;
       this.launch(job);
     }
-    this.scheduleWake(types);
+    this.scheduleWake(types, now);
   }
 
-  private scheduleWake(types: string[]): void {
+  private scheduleWake(types: string[], now: number): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     const next = this.db.nextRunAfter(types);
     if (next === undefined) return;
-    const delay = next - this.now();
+    const delay = next - now;
     if (delay <= 0) return; // ready now; pump runs again when a slot frees up
     this.timer = setTimeout(() => {
       this.timer = undefined;
