@@ -8,6 +8,7 @@ import { videoTypes } from './video-types.js';
 
 export * from './brief-ext.js';
 export * from './capture.js';
+export * from './capture-hints.js';
 export * from './capture-commands.js';
 export * from './recording.js';
 export * from './recording-commands.js';
