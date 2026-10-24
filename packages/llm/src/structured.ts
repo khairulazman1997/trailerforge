@@ -35,8 +35,31 @@ export function extractJson(text: string): unknown {
   return undefined;
 }
 
-export function jsonSchemaFor(schema: z.ZodType): string {
-  return JSON.stringify(z.toJSONSchema(schema, { io: 'input', reused: 'ref' }));
+export function jsonSchemaFor(
+  schema: z.ZodType,
+  opts: { target?: 'draft-2020-12' | 'draft-7' } = {},
+): string {
+  const json = z.toJSONSchema(schema, {
+    io: 'input',
+    reused: 'ref',
+    ...(opts.target ? { target: opts.target } : {}),
+  }) as Record<string, unknown>;
+  if (opts.target === 'draft-7') {
+    // Some validators (the Claude Code CLI's) refuse a `$schema` they have no meta-schema for
+    // (draft-07 is what they assume anyway) and formats they do not know, such as `date`. The
+    // reply is checked against the Zod schema afterwards, so nothing is lost.
+    delete json.$schema;
+    stripFormats(json);
+  }
+  return JSON.stringify(json);
+}
+
+function stripFormats(node: unknown): void {
+  if (Array.isArray(node)) return node.forEach(stripFormats);
+  if (!node || typeof node !== 'object') return;
+  const o = node as Record<string, unknown>;
+  if (typeof o.format === 'string') delete o.format; // a keyword; a property named so is an object
+  Object.values(o).forEach(stripFormats);
 }
 
 /** Instructions appended to every structured request, for providers without native schemas. */

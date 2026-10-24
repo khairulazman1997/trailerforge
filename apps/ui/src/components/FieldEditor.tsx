@@ -20,6 +20,9 @@ const sameDraft = (a: string | string[], b: string | string[]) =>
     ? a.length === b.length && a.every((x, i) => x === b[i])
     : a === b;
 
+/** The "Other…" entry of a single choice; not a value anyone would choose. */
+const OTHER = '__other__';
+
 const STATE_LABEL: Record<BriefField['state'], string> = {
   answered: 'Answered',
   missing: 'Needs an answer',
@@ -51,6 +54,11 @@ export function FieldEditor({
   const choices = (field.choices ?? []).filter((c) => !isFormats || !have.has(c));
 
   const [draft, setDraft] = useState<string | string[]>(isFormats ? [] : saved);
+  // Single choices are suggestions: "Other…" takes any answer (an unusual genre, say).
+  const listed = (v: unknown) => typeof v === 'string' && (field.choices ?? []).includes(v);
+  const [other, setOther] = useState(
+    field.input === 'choice' && typeof saved === 'string' && saved !== '' && !listed(saved),
+  );
   const [suggestion, setSuggestion] = useState<{ reason: string; provider: string } | null>(null);
   const [pending, setPending] = useState<'save' | 'suggest' | null>(null);
 
@@ -76,6 +84,7 @@ export function FieldEditor({
     setPending(null);
     if (!s) return;
     setDraft(asDraft(field, s.value));
+    if (field.input === 'choice') setOther(!listed(s.value));
     setSuggestion({ reason: s.reason, provider: s.provider });
   };
 
@@ -111,19 +120,36 @@ export function FieldEditor({
       break;
     case 'choice':
       editor = (
-        <select
-          id={inputId}
-          value={draft as string}
-          onChange={(e) => setDraft(e.target.value)}
-          aria-describedby={describedBy}
-        >
-          <option value="">Choose…</option>
-          {(field.choices ?? []).map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        <>
+          <select
+            id={inputId}
+            value={other ? OTHER : (draft as string)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setOther(v === OTHER);
+              setDraft(v === OTHER ? '' : v);
+            }}
+            aria-describedby={describedBy}
+          >
+            <option value="">Choose…</option>
+            {(field.choices ?? []).map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+            <option value={OTHER}>Other…</option>
+          </select>
+          {other && (
+            <input
+              type="text"
+              className="other-choice"
+              aria-label={`Other ${field.label.toLowerCase()}`}
+              placeholder="Type your own"
+              value={draft as string}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+          )}
+        </>
       );
       break;
     case 'multi-choice':

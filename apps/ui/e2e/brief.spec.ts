@@ -65,8 +65,20 @@ test('fill in a brief with suggestions, proceed with assumptions, and manage the
 
   // Choice, multi-choice, and release date (an exact date or a window both work).
   const genre = field(page, 'brief.extensions.game-trailer.genre');
-  await genre.getByRole('combobox').selectOption({ index: 1 });
+  await expect(genre.getByRole('option', { name: 'City builder' })).toHaveCount(1);
+  // A genre not on the list: "Other…" takes your own words.
+  await genre.getByRole('combobox').selectOption({ label: 'Other…' });
+  await genre.getByRole('textbox', { name: 'Other genre' }).fill('Colony sim');
   await genre.getByRole('button', { name: 'Save' }).click();
+  await expect
+    .poll(
+      () =>
+        (
+          [...t.engine.projects.values()].find((x) => x.state.id === projectId)!.state.brief
+            .extensions['game-trailer'] as { genre?: string } | undefined
+        )?.genre,
+    )
+    .toBe('Colony sim');
   const platforms = field(page, 'brief.extensions.game-trailer.gamePlatforms');
   await platforms.getByRole('checkbox').nth(0).check();
   await platforms.getByRole('checkbox').nth(1).check();

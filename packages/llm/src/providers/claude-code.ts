@@ -47,7 +47,8 @@ export function createClaudeCodeProvider(opts: ClaudeCodeOptions = {}): LlmProvi
       }
     },
     async generate(request, signal) {
-      const schema = jsonSchemaFor(request.schema);
+      // The CLI validates `--json-schema` as draft-07 and rejects a 2020-12 `$schema`.
+      const schema = jsonSchemaFor(request.schema, { target: 'draft-7' });
       const base = [
         ...pre,
         '-p',

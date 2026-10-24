@@ -31,5 +31,8 @@
     "@trailerforge/schema": "workspace:*",
     "@trailerforge/storyboard": "workspace:*",
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0"
   }
 }

@@ -24,6 +24,7 @@ export const GENRES = [
   'Metroidvania',
   'Roguelike',
   'Strategy',
+  'City builder',
   'Simulation',
   'Cozy / Life sim',
   'Puzzle',
