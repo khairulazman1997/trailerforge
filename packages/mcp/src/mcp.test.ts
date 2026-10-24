@@ -119,6 +119,7 @@ describe('tool surface', () => {
         'storyboard_regenerate_section',
         'core_storyboard_update-slot',
         'core_brief_set-field',
+        'game-trailer_recording_set-overrides',
       ]),
     );
     // Bulk-result commands are reachable only through the action tools.
@@ -127,7 +128,7 @@ describe('tool surface', () => {
     expect(names).not.toContain('core_knowledge_apply-scan');
     // Every registered command is exposed except those, and each schema is an object.
     expect(engine.commands.types().length - 3).toBe(
-      names.filter((n) => n.startsWith('core_')).length,
+      names.filter((n) => n.startsWith('core_') || n.startsWith('game-trailer_')).length,
     );
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object');

@@ -267,6 +267,9 @@ importers:
 
   packages/pack-game-trailer:
     dependencies:
+      '@trailerforge/core':
+        specifier: workspace:*
+        version: link:../core
       '@trailerforge/knowledge':
         specifier: workspace:*
         version: link:../knowledge

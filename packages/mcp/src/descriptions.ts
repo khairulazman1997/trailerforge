@@ -3,6 +3,10 @@
  * not the intent). Commands not listed here still get a generic description.
  */
 export const COMMAND_DESCRIPTIONS: Record<string, string> = {
+  'game-trailer/recording.set-overrides':
+    'Override recording settings (resolution, fps, bitrateMbps, codec, container, hud, hdr). Send null to clear one override and go back to the derived value.',
+  'game-trailer/recording.reset-overrides':
+    'Clear every recording-setting override and go back to the derived settings.',
   'core/brief.set-field':
     'Set one brief field by path, e.g. path "brief.title" or "brief.extensions.game-trailer.genre". Replaces any assumption for that field.',
   'core/brief.set-video-type':

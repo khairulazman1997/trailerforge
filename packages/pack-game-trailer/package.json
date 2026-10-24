@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@trailerforge/core": "workspace:*",
     "@trailerforge/knowledge": "workspace:*",
     "@trailerforge/plugin-api": "workspace:*",
     "@trailerforge/schema": "workspace:*",
