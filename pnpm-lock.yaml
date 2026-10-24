@@ -62,6 +62,10 @@ importers:
       '@trailerforge/service':
         specifier: workspace:*
         version: link:../../packages/service
+    devDependencies:
+      '@trailerforge/pack-game-trailer':
+        specifier: workspace:*
+        version: link:../../packages/pack-game-trailer
 
   apps/desktop:
     dependencies:

@@ -5,6 +5,14 @@ import { createMcpServer, serveStdio } from '@trailerforge/mcp';
 import { MediaError, probe } from '@trailerforge/media';
 import { startService } from '@trailerforge/service';
 import { captureCommand } from './capture.js';
+import {
+  analyzeCommand,
+  cutCommand,
+  footageCommand,
+  ingestCommand,
+  matchCommand,
+  rankTakesCommand,
+} from './footage.js';
 import { briefCheck, knowledgeScan, storyboardGenerate, type CmdCtx } from './m2.js';
 
 export interface Io {
@@ -28,6 +36,13 @@ Usage:
                                                           Show or change recording settings (resolution=WxH, fps, bitrate, codec, container, hud, hdr)
   tforge capture tips <dir> [--group <key>]... [--force] [--overwrite-edited]
                                                           Ask the LLM for tips and risks per group
+  tforge ingest <dir> <file or folder>... [--wait]        Import recordings (folders are searched for video); --wait lets the background work finish
+  tforge footage <dir>                                    The recordings, their warnings and progress
+  tforge analyze <dir> [--wait]                           Local analysis of the recordings and the music
+  tforge match <dir> [--accept] [--min certain|high|medium]
+                                                          Suggest which shot each recording is; --accept attaches the confident ones (one undo step)
+  tforge rank-takes <dir> [--overwrite-chosen]            Ask the AI which take to use (text only, never footage)
+  tforge cut <dir> [--lead 0|1|2]                         Build the rough cut on the music (keeps locked tracks and hand edits)
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
   tforge serve [--ui <dist>] [--port <n>] [--allow-origin <url>]...
                                                           Run the local engine service (and serve the built UI)
@@ -92,6 +107,11 @@ export async function main(
         set: { type: 'string', multiple: true },
         unset: { type: 'string', multiple: true },
         reset: { type: 'boolean', default: false },
+        wait: { type: 'boolean', default: false },
+        accept: { type: 'boolean', default: false },
+        min: { type: 'string' },
+        lead: { type: 'string' },
+        'overwrite-chosen': { type: 'boolean', default: false },
         todo: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
@@ -177,6 +197,11 @@ export async function main(
       unset: o.unset ?? [],
       reset: o.reset,
       todo: o.todo,
+      wait: o.wait,
+      accept: o.accept,
+      min: o.min,
+      lead: o.lead,
+      overwriteChosen: o['overwrite-chosen'],
     },
   };
   try {
@@ -240,6 +265,20 @@ export async function main(
         return need(arg, '<dir>')
           ? await captureCommand(ctx, cmd.split(' ')[1], arg, positionals[3])
           : 2;
+      case 'ingest':
+        return need(arg, '<dir>') && need(positionals[2], '<file or folder>')
+          ? await ingestCommand(ctx, arg, positionals.slice(2))
+          : 2;
+      case 'footage':
+        return need(arg, '<dir>') ? await footageCommand(ctx, arg) : 2;
+      case 'analyze':
+        return need(arg, '<dir>') ? await analyzeCommand(ctx, arg) : 2;
+      case 'match':
+        return need(arg, '<dir>') ? await matchCommand(ctx, arg) : 2;
+      case 'rank-takes':
+        return need(arg, '<dir>') ? await rankTakesCommand(ctx, arg) : 2;
+      case 'cut':
+        return need(arg, '<dir>') ? await cutCommand(ctx, arg) : 2;
       case 'storyboard generate':
         return need(arg, '<dir>') ? await storyboardGenerate(ctx, arg) : 2;
       case 'new': {

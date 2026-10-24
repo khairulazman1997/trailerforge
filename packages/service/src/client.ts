@@ -19,6 +19,16 @@ export type {
 import type { LlmPreview, PendingHandoff, RoutesView, SecretsView } from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
 import type { CaptureStatus, CaptureView, ExportOutcome, RenderedPack } from '@trailerforge/engine';
+import type {
+  analyzeOp,
+  footageStatusOp,
+  generateCutOp,
+  importFootageOp,
+  matchAcceptOp,
+  matchSuggestOp,
+} from '@trailerforge/engine';
+
+type Result<F extends (...args: never[]) => unknown> = Awaited<ReturnType<F>>;
 
 export class ServiceError extends Error {
   constructor(
@@ -73,6 +83,7 @@ export type TaskRequest =
       kind: 'regenerate-section';
       options: { sectionId: string; instruction?: string; keepEdited?: boolean };
     }
+  | { kind: 'rank-takes'; options?: { overwriteChosen?: boolean } }
   | {
       kind: 'capture-tips';
       options?: { groupKeys?: string[]; force?: boolean; overwriteEdited?: boolean };
@@ -233,6 +244,50 @@ export class ServiceClient {
     return this.request<CaptureView>(
       'GET',
       `/v1/projects/${encodeURIComponent(id)}/capture?include=${include}`,
+    );
+  }
+  footage(id: string) {
+    return this.request<Result<typeof footageStatusOp>>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/footage`,
+    );
+  }
+  /** Paths are on the machine running the service (the desktop app's file picker gives them). */
+  importFootage(id: string, paths: string[]) {
+    return this.request<Result<typeof importFootageOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/footage/import`,
+      { paths },
+    );
+  }
+  analyzeFootage(id: string, opts: { assetIds?: string[]; music?: boolean } = {}) {
+    return this.request<Result<typeof analyzeOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/footage/analyze`,
+      opts,
+    );
+  }
+  footageMatches(id: string) {
+    return this.request<Result<typeof matchSuggestOp>>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/footage/matches`,
+    );
+  }
+  acceptMatches(
+    id: string,
+    opts: { minConfidence?: 'certain' | 'high' | 'medium'; assetIds?: string[] } = {},
+  ) {
+    return this.request<Result<typeof matchAcceptOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/footage/matches/accept`,
+      opts,
+    );
+  }
+  generateCut(id: string, opts: { leadFrames?: number } = {}) {
+    return this.request<Result<typeof generateCutOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/cut`,
+      opts,
     );
   }
   captureStatus(id: string) {

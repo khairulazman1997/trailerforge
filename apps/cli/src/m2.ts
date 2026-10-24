@@ -31,6 +31,12 @@ export interface Flags {
   unset: string[];
   reset: boolean;
   todo: boolean;
+  /** Footage commands. */
+  wait: boolean;
+  accept: boolean;
+  min?: string | undefined;
+  lead?: string | undefined;
+  overwriteChosen: boolean;
 }
 
 export interface CmdCtx {

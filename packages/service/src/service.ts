@@ -15,11 +15,18 @@ import {
   assumeMissingOp,
   briefForm,
   briefStatus,
+  analyzeOp,
   captureExportOp,
   captureRenderOp,
   captureStatusOp,
   captureTipsOp,
   captureViewOp,
+  footageStatusOp,
+  generateCutOp,
+  importFootageOp,
+  matchAcceptOp,
+  matchSuggestOp,
+  rankTakesOp,
   clearAnthropicKey,
   generateStoryboardOp,
   HandoffCancelled,
@@ -200,6 +207,10 @@ const TaskRequest = z.discriminatedUnion('kind', [
       instruction: z.string().optional(),
       keepEdited: z.boolean().optional(),
     }),
+  }),
+  z.strictObject({
+    kind: z.literal('rank-takes'),
+    options: z.strictObject({ overwriteChosen: z.boolean().optional() }).default({}),
   }),
   z.strictObject({
     kind: z.literal('capture-tips'),
@@ -535,6 +546,66 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       },
     ],
     [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/footage$/,
+      async ({ params }) => footageStatusOp(engine, storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/footage\/import$/,
+      async ({ params, body }) => {
+        const o = z
+          .strictObject({ paths: z.array(z.string().min(1)).min(1).max(1000) })
+          .parse(await body());
+        return importFootageOp(engine, storeById(params.id!), o);
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/footage\/analyze$/,
+      async ({ params, body }) => {
+        const o = z
+          .strictObject({ assetIds: z.array(z.string()).optional(), music: z.boolean().optional() })
+          .default({})
+          .parse(await body());
+        return analyzeOp(engine, storeById(params.id!), o);
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/footage\/matches$/,
+      async ({ params }) => matchSuggestOp(engine, storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/footage\/matches\/accept$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        const o = z
+          .strictObject({
+            minConfidence: z.enum(['certain', 'high', 'medium']).optional(),
+            assetIds: z.array(z.string()).optional(),
+          })
+          .default({})
+          .parse(await body());
+        notBusy(store);
+        return matchAcceptOp(engine, store, o);
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/cut$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        const o = z
+          .strictObject({ leadFrames: z.int().min(0).max(2).optional() })
+          .default({})
+          .parse(await body());
+        notBusy(store);
+        return generateCutOp(engine, store, o);
+      },
+    ],
+    [
       'POST',
       /^\/v1\/projects\/(?<id>[^/]+)\/capture\/render$/,
       async ({ params, body }) => {
@@ -638,6 +709,8 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await regenerateSectionOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'capture-tips')
             out = await captureTipsOp(engine, store, { ...t.options, signal });
+          else if (t.kind === 'rank-takes')
+            out = await rankTakesOp(engine, store, { ...t.options, signal });
           else {
             out = await scanKnowledgeOp(engine, store, {
               ...t.options,

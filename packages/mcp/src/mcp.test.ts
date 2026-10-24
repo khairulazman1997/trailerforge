@@ -121,6 +121,14 @@ describe('tool surface', () => {
         'core_brief_set-field',
         'game-trailer_recording_set-overrides',
         'capture_plan',
+        'footage_status',
+        'footage_analyze',
+        'match_suggest',
+        'match_accept',
+        'take_ranking',
+        'cut_generate',
+        'core_timeline_trim',
+        'core_takes_choose',
         'capture_status',
         'capture_settings',
         'capture_tips',
@@ -129,6 +137,7 @@ describe('tool surface', () => {
       ]),
     );
     // Bulk-result commands are reachable only through the action tools.
+    expect(names).not.toContain('footage_import'); // choosing files is the user's, not an AI client's
     expect(names).not.toContain('core_storyboard_set');
     expect(names).not.toContain('core_storyboard_replace-section');
     expect(names).not.toContain('core_knowledge_apply-scan');

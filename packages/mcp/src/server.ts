@@ -9,11 +9,17 @@ import {
 import { CommandError, readDecisions, type ProjectStore } from '@trailerforge/core';
 import {
   briefStatus,
+  analyzeOp,
   captureExportOp,
   captureSettingsOp,
   captureStatusOp,
   captureTipsOp,
   captureViewOp,
+  footageStatusOp,
+  generateCutOp,
+  matchAcceptOp,
+  matchSuggestOp,
+  rankTakesOp,
   generateStoryboardOp,
   OpError,
   regenerateSectionOp,
@@ -356,6 +362,118 @@ export function createMcpServer(opts: McpServerOptions): Server {
         instruction: typeof args.instruction === 'string' ? args.instruction : undefined,
         keepEdited: typeof args.keepEdited === 'boolean' ? args.keepEdited : undefined,
       });
+    },
+  });
+
+  // ---------------------------------------------------------------- footage and the rough cut
+  // Importing files is deliberately not a tool: pointing the app at files is the user's choice
+  // (screens, `tforge ingest`), not something an AI client should be able to do.
+  add({
+    mutates: false,
+    tool: {
+      name: 'footage_status',
+      description:
+        'Recordings in the library: file state, length, warnings (variable frame rate, HDR, low resolution...), whether analysed, previews, and which shots each is a take of; plus import and analysis job progress.',
+      inputSchema: object({}),
+    },
+    async run(args) {
+      return footageStatusOp(engine, await project(args));
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'footage_analyze',
+      description:
+        'Queue local analysis (shot changes, black/flash/frozen frames, motion) for recordings not analysed yet, and the music track (beats, bars, sections). Runs on this computer in the background; watch footage_status.',
+      inputSchema: object({
+        assetIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Only these library assets.',
+        },
+      }),
+    },
+    async run(args) {
+      const ids = Array.isArray(args.assetIds) ? args.assetIds.map(String) : undefined;
+      return analyzeOp(engine, await project(args), ids ? { assetIds: ids } : {});
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'match_suggest',
+      description:
+        'Ranked suggestions for which shot each imported recording belongs to, with a reason per signal (shot code in the file name, recording order, length, session). Only a shot code is certain; confirm the rest with the user.',
+      inputSchema: object({}),
+    },
+    async run(args) {
+      return matchSuggestOp(engine, await project(args));
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'match_accept',
+      description:
+        'Attach recordings to shots: every shot-code match and every suggestion at or above minConfidence (default high), as one undo step.',
+      inputSchema: object({
+        minConfidence: { type: 'string', enum: ['certain', 'high', 'medium'] },
+      }),
+    },
+    async run(args) {
+      const min = args.minConfidence;
+      return matchAcceptOp(
+        engine,
+        await project(args),
+        min === 'certain' || min === 'high' || min === 'medium' ? { minConfidence: min } : {},
+      );
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'take_ranking',
+      description:
+        "Ask the configured AI which take to use for shots with several. Sends text only (the shot's words, notes and measured numbers; never footage or frames) and asks the user first if the provider is not local. Applied as one undo step.",
+      inputSchema: object({
+        overwriteChosen: {
+          type: 'boolean',
+          description: 'Also rank shots where a take is already chosen.',
+        },
+      }),
+    },
+    async run(args) {
+      return rankTakesOp(
+        engine,
+        await project(args),
+        args.overwriteChosen === true ? { overwriteChosen: true } : {},
+      );
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'cut_generate',
+      description:
+        'Build the rough cut on the music (needs the music analysed): one take per shot, cuts a frame ahead of the beat, placeholders for shots without footage, music with a fade. Rebuilding keeps locked tracks and clips edited by hand. One undo step. Edit the result with the core_timeline_* tools.',
+      inputSchema: object({
+        leadFrames: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 2,
+          description: 'Frames to cut ahead of the beat (default 1).',
+        },
+      }),
+    },
+    async run(args) {
+      const lead = typeof args.leadFrames === 'number' ? args.leadFrames : undefined;
+      return generateCutOp(engine, await project(args), lead ? { leadFrames: lead } : {});
     },
   });
 

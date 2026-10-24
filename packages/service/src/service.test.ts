@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import { request } from 'node:http';
 import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -888,4 +890,65 @@ describe('capture', () => {
       status: 400,
     });
   });
+});
+
+describe('footage', () => {
+  const ID = 'proj_footage';
+  const sh = (args: string[]) =>
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args]);
+  let dir: string;
+  let recDir: string;
+  beforeAll(async () => {
+    dir = join(root, 'Footage.tforge');
+    await engine.createProject(dir, { ...sampleProject(), id: ID } as never);
+    recDir = join(root, 'footage-rec');
+    mkdirSync(recDir);
+    sh([
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc2=s=320x180:r=30:d=3',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-pix_fmt',
+      'yuv420p',
+      join(recDir, 'one.mp4'),
+    ]);
+  });
+
+  it('needs the token like everything else', async () => {
+    for (const path of ['/footage', '/footage/matches']) {
+      expect((await raw({ path: `/v1/projects/${ID}${path}` })).status).toBe(401);
+    }
+    for (const path of ['/footage/import', '/footage/analyze', '/footage/matches/accept', '/cut']) {
+      expect(
+        (await raw({ path: `/v1/projects/${ID}${path}`, method: 'POST', body: '{}' })).status,
+      ).toBe(401);
+    }
+  });
+
+  it('imports, reports progress, suggests matches, and says what the cut still needs', async () => {
+    const r = await client.importFootage(ID, [recDir]);
+    expect(r.jobs).toHaveLength(1);
+    for (
+      let i = 0;
+      i < 400 && engine.jobs.list().some((j) => ['queued', 'running'].includes(j.status));
+      i++
+    ) {
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    const f = await client.footage(ID);
+    expect(f.footage).toHaveLength(1);
+    expect(f.footage[0]).toMatchObject({ name: 'one.mp4', file: 'ok', slotIds: [] });
+    const m = await client.footageMatches(ID);
+    expect(m.matches).toHaveLength(1);
+    expect(m.matches[0]!.kind).toBe('suggested');
+    const acc = await client.acceptMatches(ID);
+    expect(acc.attached.map((a) => a.assetId)).toEqual([m.matches[0]!.assetId]);
+    expect(acc.attached[0]!.matchedBy).toBe('suggestion');
+    await expect(client.generateCut(ID)).rejects.toMatchObject({ status: 404 }); // the music is not in the library
+    await expect(client.importFootage(ID, [])).rejects.toMatchObject({ status: 400 });
+  }, 60_000);
 });

@@ -142,7 +142,7 @@ export async function footageStatusOp(
 export async function analyzeOp(
   engine: Engine,
   store: ProjectStore,
-  opts: { assetIds?: string[]; music?: boolean } = {},
+  opts: { assetIds?: string[] | undefined; music?: boolean | undefined } = {},
 ): Promise<{ jobs: { assetId: string; type: string; jobId: string }[]; skipped: string[] }> {
   await engine.library.reload();
   const analysisDir = store.paths.analysisCache;
@@ -212,7 +212,7 @@ function recordings(engine: Engine, project: Project, assetIds?: string[]): Matc
 export async function matchSuggestOp(
   engine: Engine,
   store: ProjectStore,
-  opts: { assetIds?: string[] } = {},
+  opts: { assetIds?: string[] | undefined } = {},
 ): Promise<{ matches: RecordingMatch[]; recordings: MatchRecording[] }> {
   requireStoryboard(store);
   await engine.library.reload();
@@ -227,7 +227,10 @@ export async function matchSuggestOp(
 export async function matchAcceptOp(
   engine: Engine,
   store: ProjectStore,
-  opts: { minConfidence?: 'certain' | 'high' | 'medium'; assetIds?: string[] } = {},
+  opts: {
+    minConfidence?: 'certain' | 'high' | 'medium' | undefined;
+    assetIds?: string[] | undefined;
+  } = {},
 ): Promise<{ attached: { slotId: string; assetId: string; matchedBy: string }[] }> {
   const { matches } = await matchSuggestOp(
     engine,
@@ -278,7 +281,7 @@ export interface CutOutcome {
 export async function generateCutOp(
   engine: Engine,
   store: ProjectStore,
-  opts: { leadFrames?: number; signal?: AbortSignal | undefined } = {},
+  opts: { leadFrames?: number | undefined; signal?: AbortSignal | undefined } = {},
 ): Promise<CutOutcome> {
   const sb = requireStoryboard(store);
   await engine.library.reload();
@@ -329,7 +332,7 @@ export async function generateCutOp(
 export async function rankTakesOp(
   engine: Engine,
   store: ProjectStore,
-  opts: { overwriteChosen?: boolean; signal?: AbortSignal | undefined } = {},
+  opts: { overwriteChosen?: boolean | undefined; signal?: AbortSignal | undefined } = {},
 ): Promise<{
   chosen: { slotId: string; takeId: string; reason: string }[];
   skipped: { slotId: string; reason: string }[];
