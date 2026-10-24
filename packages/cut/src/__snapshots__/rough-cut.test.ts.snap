@@ -1,0 +1,178 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildRoughCut > builds the fixture cut: best take at its best moment, a placeholder for the missing shot, the card, the music 1`] = `
+{
+  "extensions": {
+    "core": {
+      "roughCut": {
+        "generator": "core/rough-cut",
+        "version": 1,
+      },
+    },
+  },
+  "frameRate": {
+    "den": 1,
+    "num": 30,
+  },
+  "id": "tl_rough",
+  "markers": [
+    {
+      "at": 0,
+      "id": "mk_bar_0",
+      "kind": "downbeat",
+      "label": "",
+    },
+    {
+      "at": 0,
+      "id": "mk_sec_sec_hook",
+      "kind": "section",
+      "label": "Hook",
+    },
+    {
+      "at": 1411200000,
+      "id": "mk_bar_1",
+      "kind": "downbeat",
+      "label": "",
+    },
+    {
+      "at": 1411200000,
+      "id": "mk_hit_hit_boss",
+      "kind": "hit",
+      "label": "drop",
+    },
+    {
+      "at": 1411200000,
+      "id": "mk_sec_sec_escalation",
+      "kind": "section",
+      "label": "Escalation",
+    },
+    {
+      "at": 2822400000,
+      "id": "mk_bar_2",
+      "kind": "downbeat",
+      "label": "",
+    },
+    {
+      "at": 2822400000,
+      "id": "mk_sec_sec_end",
+      "kind": "section",
+      "label": "End slate",
+    },
+    {
+      "at": 4233600000,
+      "id": "mk_bar_3",
+      "kind": "downbeat",
+      "label": "",
+    },
+  ],
+  "name": "Rough cut",
+  "resolution": {
+    "height": 1080,
+    "width": 1920,
+  },
+  "sampleRate": 48000,
+  "tracks": [
+    {
+      "id": "trk_picture",
+      "items": [
+        {
+          "assetId": "asset_b",
+          "decisionId": "dec_06200283fe0c64",
+          "duration": 1387680000,
+          "effects": [],
+          "extensions": {},
+          "gainDb": 0,
+          "id": "rc_shot_parry",
+          "kind": "clip",
+          "label": "Perfect parry",
+          "muted": false,
+          "slotId": "shot_parry",
+          "sourceIn": 1764000000,
+          "speed": 1,
+          "start": 0,
+        },
+        {
+          "decisionId": "dec_1fff23d99722fc",
+          "duration": 1411200000,
+          "extensions": {},
+          "id": "rc_shot_boss",
+          "kind": "placeholder",
+          "label": "Boss reveal",
+          "note": "not recorded yet",
+          "reason": "missing-footage",
+          "slotId": "shot_boss",
+          "start": 1387680000,
+        },
+      ],
+      "kind": "video",
+      "locked": false,
+      "muted": false,
+      "name": "Picture",
+      "transitions": [],
+    },
+    {
+      "id": "trk_cards",
+      "items": [
+        {
+          "decisionId": "dec_11e54f2ab0ddd7",
+          "duration": 2845920000,
+          "effects": [],
+          "extensions": {},
+          "id": "rc_card_end",
+          "kind": "graphic",
+          "label": "cta",
+          "params": {
+            "text": "Wishlist now — Feb 14",
+          },
+          "slotId": "card_end",
+          "start": 2798880000,
+          "templateId": "core/end-slate",
+        },
+      ],
+      "kind": "graphics",
+      "locked": false,
+      "muted": false,
+      "name": "Cards",
+      "transitions": [],
+    },
+    {
+      "id": "trk_music",
+      "items": [
+        {
+          "assetId": "asset_music",
+          "decisionId": "dec_0abeff7184317d",
+          "duration": 5644800000,
+          "effects": [],
+          "extensions": {},
+          "gainDb": {
+            "keyframes": [
+              {
+                "at": 4233600000,
+                "easing": "linear",
+                "value": 0,
+              },
+              {
+                "at": 5644800000,
+                "easing": "linear",
+                "value": -60,
+              },
+            ],
+          },
+          "id": "rc_music",
+          "kind": "clip",
+          "label": "Music",
+          "muted": false,
+          "sourceIn": 0,
+          "speed": 1,
+          "start": 0,
+        },
+      ],
+      "kind": "audio",
+      "locked": false,
+      "muted": false,
+      "name": "Music",
+      "transitions": [],
+    },
+  ],
+}
+`;
