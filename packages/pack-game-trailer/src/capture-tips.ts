@@ -65,7 +65,7 @@ const REDACTED = '[redacted]';
 const MIN_NAME = 3;
 
 /** Everything the user excluded from LLM use that could leak by name, id or path. */
-function excludedTerms(knowledge: readonly KnowledgeEntity[]): string[] {
+export function excludedTerms(knowledge: readonly KnowledgeEntity[]): string[] {
   const terms = knowledge
     .filter((e) => e.excludedFromLlm)
     .flatMap((e) => [e.name, e.id, ...e.sourcePaths])
@@ -76,10 +76,10 @@ function excludedTerms(knowledge: readonly KnowledgeEntity[]): string[] {
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-function redactor(terms: string[]): (text: string) => string {
+export function redactor(terms: string[], replacement = REDACTED): (text: string) => string {
   if (terms.length === 0) return (t) => t;
   const re = new RegExp(terms.map(escapeRe).join('|'), 'gi');
-  return (t) => t.replace(re, REDACTED);
+  return (t) => t.replace(re, () => replacement);
 }
 
 export interface TipsGroupInput {

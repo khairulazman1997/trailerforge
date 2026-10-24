@@ -1,0 +1,225 @@
+{
+  "format": "trailerforge.capture-pack",
+  "version": 1,
+  "project": {
+    "id": "proj_sample",
+    "name": "Ember Knight — Release Trailer"
+  },
+  "storyboard": {
+    "id": "sb_main",
+    "revision": 0,
+    "videoTypeId": "game-trailer/release-trailer"
+  },
+  "progress": {
+    "total": 2,
+    "done": 1,
+    "todoRecordSeconds": 6
+  },
+  "recording": {
+    "settings": {
+      "resolution": {
+        "width": 3840,
+        "height": 2160
+      },
+      "fps": 60,
+      "bitrateMbps": 140,
+      "codec": "hevc",
+      "container": "mkv",
+      "hud": "off",
+      "hdr": false
+    },
+    "sources": {
+      "resolution": "derived",
+      "fps": "derived",
+      "bitrateMbps": "derived",
+      "codec": "derived",
+      "container": "derived",
+      "hud": "derived",
+      "hdr": "derived"
+    },
+    "primaryPlatform": "PlayStation 5",
+    "advice": [
+      {
+        "code": "cfr",
+        "severity": "warn",
+        "message": "Record at a constant frame rate (CFR). Variable frame rate drifts out of sync with audio and makes cuts land between frames."
+      },
+      {
+        "code": "console-capture",
+        "severity": "info",
+        "message": "Use an HDMI capture card at full quality. A console's built-in share or clip feature is heavily compressed and not suited to trailer footage."
+      },
+      {
+        "code": "pc-overlay",
+        "severity": "warn",
+        "message": "Xbox Game Bar and GPU overlay recorders often capture variable frame rate; prefer OBS with a fixed FPS."
+      },
+      {
+        "code": "hdr-capable",
+        "severity": "info",
+        "message": "A listed platform can output HDR. Record SDR unless you deliver HDR; HDR footage looks washed out unless tone-mapped to SDR."
+      }
+    ]
+  },
+  "setup": {
+    "debugCommands": [
+      {
+        "name": "spawn_boss",
+        "kind": "other",
+        "detail": "Debug console command: `spawn_boss <phase>`"
+      }
+    ],
+    "saveFiles": [
+      {
+        "name": "slot1.sav",
+        "kind": "other",
+        "detail": "Windows: %USERPROFILE%\\AppData\\LocalLow\\Ember\\slot1.sav"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "key": "forest||ent_warden",
+      "label": "Forest · The Ash Warden",
+      "location": "Forest",
+      "setup": "",
+      "featured": "The Ash Warden",
+      "total": 1,
+      "done": 1,
+      "hints": {
+        "levels": [
+          {
+            "name": "Cinder Forest",
+            "kind": "level",
+            "detail": ""
+          }
+        ],
+        "featured": [
+          {
+            "name": "The Ash Warden",
+            "kind": "boss",
+            "detail": "Second-act boss; two phases."
+          }
+        ],
+        "debugCommands": [
+          {
+            "name": "warp_forest",
+            "kind": "other",
+            "detail": "Debug console command: `warp forest` (Cinder Forest)"
+          }
+        ],
+        "saveFiles": []
+      },
+      "tips": null,
+      "items": [
+        {
+          "slotId": "shot_boss",
+          "shotNumber": 3,
+          "section": "Escalation",
+          "title": "Boss reveal",
+          "purpose": "",
+          "priority": "must",
+          "status": "recorded",
+          "done": true,
+          "instruction": "Wait for the intro cinematic, then walk into the arena.",
+          "framing": "",
+          "setup": "",
+          "location": "Forest",
+          "hud": "any",
+          "cutSeconds": {
+            "min": 2,
+            "ideal": 2.5,
+            "max": 4
+          },
+          "handleSeconds": 1.25,
+          "recordSeconds": 7,
+          "alternates": [],
+          "entities": [
+            {
+              "name": "The Ash Warden",
+              "kind": "boss"
+            },
+            {
+              "name": "Cinder Forest",
+              "kind": "level"
+            }
+          ],
+          "notes": "",
+          "takes": 0
+        }
+      ]
+    },
+    {
+      "key": "forest||",
+      "label": "Forest",
+      "location": "Forest",
+      "setup": "",
+      "featured": null,
+      "total": 1,
+      "done": 0,
+      "hints": {
+        "levels": [
+          {
+            "name": "Cinder Forest",
+            "kind": "level",
+            "detail": ""
+          }
+        ],
+        "featured": [],
+        "debugCommands": [
+          {
+            "name": "warp_forest",
+            "kind": "other",
+            "detail": "Debug console command: `warp forest` (Cinder Forest)"
+          }
+        ],
+        "saveFiles": []
+      },
+      "tips": {
+        "status": "fresh",
+        "tips": [
+          "Start from the checkpoint to save loading time."
+        ],
+        "risks": [
+          "An autosave popup can ruin a take."
+        ]
+      },
+      "items": [
+        {
+          "slotId": "shot_parry",
+          "shotNumber": 1,
+          "section": "Hook",
+          "title": "Perfect parry",
+          "purpose": "Show the core mechanic in the first 3 seconds",
+          "priority": "must",
+          "status": "empty",
+          "done": false,
+          "instruction": "Boss phase 2: land a parry then a finisher. No HUD.",
+          "framing": "",
+          "setup": "",
+          "location": "Forest",
+          "hud": "off",
+          "cutSeconds": {
+            "min": 1.5,
+            "ideal": 2,
+            "max": 3
+          },
+          "handleSeconds": 1,
+          "recordSeconds": 6,
+          "alternates": [
+            "Parry the _first_ strike instead"
+          ],
+          "entities": [],
+          "notes": "Use <take 2> & \"quotes\" | pipe *star* [link](x)",
+          "takes": 3
+        }
+      ]
+    }
+  ],
+  "skipped": [
+    {
+      "slotId": "shot_skip",
+      "title": "Cut scene"
+    }
+  ]
+}

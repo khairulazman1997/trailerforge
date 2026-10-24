@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ember Knight — Release Trailer — capture pack</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { font: 14px/1.5 system-ui, "Segoe UI", sans-serif; color: #1a1a1a; background: #fff; margin: 0 auto; max-width: 52rem; padding: 1.5rem 1rem 3rem; }
+h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.2rem; margin: 2rem 0 .5rem; border-bottom: 1px solid #ccc; padding-bottom: .2rem; }
+h3 { font-size: 1.05rem; margin: 0 0 .4rem; }
+.meta { color: #555; margin: 0 0 1rem; }
+table { border-collapse: collapse; }
+th, td { text-align: left; padding: .2rem .8rem .2rem 0; vertical-align: top; }
+td.src { color: #666; font-size: .85em; }
+.note { margin: .2rem 0; }
+.warn { color: #8a3b00; font-weight: 600; }
+.group { margin: 1.25rem 0; padding: .75rem 1rem; border: 1px solid #bbb; border-radius: 6px; break-inside: avoid-page; }
+.group h3 .count { color: #666; font-weight: 400; }
+ul { margin: .25rem 0 .5rem; padding-left: 1.2rem; }
+.items { list-style: none; padding: 0; }
+.item { display: flex; gap: .6rem; padding: .5rem 0; border-top: 1px solid #e4e4e4; break-inside: avoid; }
+.box { flex: none; width: 1.1rem; height: 1.1rem; margin-top: .15rem; border: 2px solid #333; border-radius: 3px; text-align: center; line-height: .8rem; font-size: .85rem; }
+.item.done .box::after { content: "✓"; }
+.item.done .title { text-decoration: line-through; color: #666; }
+.title { font-weight: 600; }
+.head { color: #444; }
+dl { margin: .25rem 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 0 .75rem; }
+dt { color: #666; }
+dd { margin: 0; }
+code { font: .9em ui-monospace, Consolas, monospace; background: #f1f1f1; padding: 0 .25em; border-radius: 3px; }
+@media print { body { max-width: none; padding: 0; font-size: 11pt; } .group { page-break-inside: avoid; } h2 { page-break-after: avoid; } }
+</style>
+</head>
+<body>
+<h1>Ember Knight — Release Trailer — capture pack</h1>
+<p class="meta">1 of 2 shots recorded · about 6 s of footage still to record · storyboard revision 0</p>
+<h2>Recording settings</h2>
+<table><tr><th scope="row">Resolution</th><td>3840×2160</td><td class="src">derived</td></tr><tr><th scope="row">Frame rate</th><td>60 fps, constant</td><td class="src">derived</td></tr><tr><th scope="row">Bitrate</th><td>140 Mbps</td><td class="src">derived</td></tr><tr><th scope="row">Codec</th><td>HEVC</td><td class="src">derived</td></tr><tr><th scope="row">Container</th><td>MKV</td><td class="src">derived</td></tr><tr><th scope="row">HUD</th><td>off</td><td class="src">derived</td></tr><tr><th scope="row">HDR</th><td>off (record SDR)</td><td class="src">derived</td></tr></table>
+<p class="note"><span class="warn">Watch out:</span> Record at a constant frame rate (CFR). Variable frame rate drifts out of sync with audio and makes cuts land between frames.</p>
+<p class="note"><span class="">Note:</span> Use an HDMI capture card at full quality. A console&#39;s built-in share or clip feature is heavily compressed and not suited to trailer footage.</p>
+<p class="note"><span class="warn">Watch out:</span> Xbox Game Bar and GPU overlay recorders often capture variable frame rate; prefer OBS with a fixed FPS.</p>
+<p class="note"><span class="">Note:</span> A listed platform can output HDR. Record SDR unless you deliver HDR; HDR footage looks washed out unless tone-mapped to SDR.</p>
+<h2>Setup that applies everywhere</h2>
+<p class="note"><strong>Debug commands</strong></p><ul><li><strong>spawn_boss</strong> — Debug console command: <code>spawn_boss &lt;phase&gt;</code></li></ul>
+<p class="note"><strong>Save files</strong></p><ul><li><strong>slot1.sav</strong> — Windows: %USERPROFILE%\AppData\LocalLow\Ember\slot1.sav</li></ul>
+<h2>Checklist</h2>
+<section class="group"><h3>1. Forest · The Ash Warden <span class="count">(1/1)</span></h3><p class="note"><strong>Level</strong></p><ul><li><strong>Cinder Forest</strong></li></ul><p class="note"><strong>Debug commands</strong></p><ul><li><strong>warp_forest</strong> — Debug console command: <code>warp forest</code> (Cinder Forest)</li></ul><ul class="items"><li class="item done"><span class="box" aria-hidden="true"></span><div><div><span class="title">Boss reveal</span> <code>shot_boss</code> <span class="head">Escalation — record 7 s · 2.5 s cut (2–4 s) · HUD any</span></div><dl><dt>Do</dt><dd>Wait for the intro cinematic, then walk into the arena.</dd><dt>Features</dt><dd>The Ash Warden, Cinder Forest</dd></dl></div></li></ul></section>
+<section class="group"><h3>2. Forest <span class="count">(0/1)</span></h3><p class="note"><strong>Level</strong></p><ul><li><strong>Cinder Forest</strong></li></ul><p class="note"><strong>Debug commands</strong></p><ul><li><strong>warp_forest</strong> — Debug console command: <code>warp forest</code> (Cinder Forest)</li></ul><p class="note"><strong>Tips</strong></p><ul><li>Start from the checkpoint to save loading time.</li></ul><p class="note"><strong>Risks</strong></p><ul><li>An autosave popup can ruin a take.</li></ul><ul class="items"><li class="item"><span class="box" aria-hidden="true"></span><div><div><span class="title">Perfect parry</span> <code>shot_parry</code> <span class="head">Hook — record 6 s · 2 s cut (1.5–3 s) · HUD off</span></div><dl><dt>Do</dt><dd>Boss phase 2: land a parry then a finisher. No HUD.</dd><dt>Why</dt><dd>Show the core mechanic in the first 3 seconds</dd><dt>Alternates</dt><dd>Parry the _first_ strike instead</dd><dt>Notes</dt><dd>Use &lt;take 2&gt; &amp; &quot;quotes&quot; | pipe *star* [link](x)</dd><dt>Takes</dt><dd>3</dd></dl></div></li></ul></section>
+<h2>Skipped shots</h2>
+<ul><li>Cut scene <code>shot_skip</code></li></ul>
+</body>
+</html>

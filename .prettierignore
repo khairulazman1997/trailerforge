@@ -5,3 +5,4 @@ pnpm-lock.yaml
 workers/analysis/uv.lock
 test-results
 playwright-report
+packages/pack-game-trailer/src/__golden__
