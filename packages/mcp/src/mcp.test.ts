@@ -120,6 +120,12 @@ describe('tool surface', () => {
         'core_storyboard_update-slot',
         'core_brief_set-field',
         'game-trailer_recording_set-overrides',
+        'capture_plan',
+        'capture_status',
+        'capture_settings',
+        'capture_tips',
+        'capture_export',
+        'game-trailer_capture_set-status',
       ]),
     );
     // Bulk-result commands are reachable only through the action tools.
@@ -297,6 +303,43 @@ describe('actions', () => {
 });
 
 describe('stdio transport', () => {
+  it('reads the capture checklist, marks a shot through its command tool, and exports the pack', async () => {
+    // Earlier tests edit the shared sample project, so work from what the plan says now.
+    const plan = (await call(client, 'capture_plan')).data;
+    const { total, done } = plan.plan;
+    expect(total).toBeGreaterThan(0);
+    expect(plan.recording.settings.fps).toBe(60);
+    const todo = plan.plan.groups
+      .flatMap((g: { items: { slotId: string; todo: boolean }[] }) => g.items)
+      .find((i: { todo: boolean }) => i.todo);
+    const marked = await call(client, 'game-trailer_capture_set-status', {
+      slotId: todo.slotId,
+      status: 'recorded',
+    });
+    expect(marked.isError).toBe(false);
+    expect((await call(client, 'capture_status')).data).toMatchObject({ total, done: done + 1 });
+    expect((await call(client, 'capture_plan', { include: 'todo' })).data.plan.total).toBe(
+      total - done - 1,
+    );
+    expect((await call(client, 'capture_settings')).data.settings.codec).toBeTruthy();
+
+    const exported = await call(client, 'capture_export', { formats: ['json'] });
+    expect(exported.data).toEqual({
+      files: ['exports/capture/capture-pack.json'],
+      shots: total,
+      done: done + 1,
+    });
+    expect((await call(client, 'capture_export', { omitExcluded: true })).isError).toBe(false);
+
+    // A project with no storyboard explains what to do instead of failing obscurely.
+    const bare = join(root, 'NoStoryboard.tforge');
+    await engine.createProject(bare, { name: 'No storyboard' });
+    const none = await call(client, 'capture_plan', { project: bare });
+    expect(none.isError).toBe(true);
+    expect(JSON.stringify(none.data)).toContain('no storyboard');
+    expect((await call(client, 'capture_tips', { project: bare })).isError).toBe(true);
+  });
+
   it('speaks line-delimited JSON-RPC and answers tools/list', async () => {
     const stdin = new PassThrough();
     const stdout = new PassThrough();

@@ -4,6 +4,7 @@ import { Engine, type EngineOptions } from '@trailerforge/engine';
 import { createMcpServer, serveStdio } from '@trailerforge/mcp';
 import { MediaError, probe } from '@trailerforge/media';
 import { startService } from '@trailerforge/service';
+import { captureCommand } from './capture.js';
 import { briefCheck, knowledgeScan, storyboardGenerate, type CmdCtx } from './m2.js';
 
 export interface Io {
@@ -20,6 +21,13 @@ Usage:
   tforge knowledge scan <dir> [--repo <path>] [--force]   Scan a game repo into the knowledge base
   tforge storyboard generate <dir> [--duration <s>] [--template <id>] [--assume]
                                                           Generate the storyboard with the LLM
+  tforge capture plan|status|export <dir> [--todo] [--format md,html,json] [--omit-excluded]
+                                                          The recording checklist: show it, count progress, write the pack
+  tforge capture mark <dir> <slotId> [--status recorded|approved|rejected|empty] [--note <text>] [--takes <n>] [--skip|--unskip]
+  tforge capture settings <dir> [--set fps=30]... [--unset fps]... [--reset]
+                                                          Show or change recording settings (resolution=WxH, fps, bitrate, codec, container, hud, hdr)
+  tforge capture tips <dir> [--group <key>]... [--force] [--overwrite-edited]
+                                                          Ask the LLM for tips and risks per group
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
   tforge serve [--ui <dist>] [--port <n>] [--allow-origin <url>]...
                                                           Run the local engine service (and serve the built UI)
@@ -73,6 +81,18 @@ export async function main(
         deep: { type: 'boolean', default: false },
         'allow-deep-scan': { type: 'boolean', default: false },
         force: { type: 'boolean', default: false },
+        format: { type: 'string' },
+        'omit-excluded': { type: 'boolean', default: false },
+        note: { type: 'string' },
+        takes: { type: 'string' },
+        skip: { type: 'boolean', default: false },
+        unskip: { type: 'boolean', default: false },
+        group: { type: 'string', multiple: true },
+        'overwrite-edited': { type: 'boolean', default: false },
+        set: { type: 'string', multiple: true },
+        unset: { type: 'string', multiple: true },
+        reset: { type: 'boolean', default: false },
+        todo: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
     });
@@ -81,8 +101,8 @@ export async function main(
     return 2;
   }
   const { values: o, positionals } = parsed;
-  // `brief check`, `knowledge scan` and `storyboard generate` are two-word commands.
-  const twoWord = ['brief', 'knowledge', 'storyboard'].includes(positionals[0] ?? '');
+  // `brief check`, `knowledge scan`, `storyboard generate` and `capture <sub>` are two-word commands.
+  const twoWord = ['brief', 'knowledge', 'storyboard', 'capture'].includes(positionals[0] ?? '');
   const cmd = twoWord ? `${positionals[0]} ${positionals[1] ?? ''}`.trim() : positionals[0];
   const arg = positionals[twoWord ? 2 : 1];
   if (o.help || !cmd) {
@@ -144,6 +164,19 @@ export async function main(
       deep: o.deep,
       allowDeepScan: o['allow-deep-scan'],
       force: o.force,
+      format: o.format,
+      omitExcluded: o['omit-excluded'],
+      note: o.note,
+      takes: o.takes,
+      status: o.status,
+      skip: o.skip,
+      unskip: o.unskip,
+      group: o.group ?? [],
+      overwriteEdited: o['overwrite-edited'],
+      set: o.set ?? [],
+      unset: o.unset ?? [],
+      reset: o.reset,
+      todo: o.todo,
     },
   };
   try {
@@ -198,6 +231,15 @@ export async function main(
         return need(arg, '<dir>') ? await briefCheck(ctx, arg) : 2;
       case 'knowledge scan':
         return need(arg, '<dir>') ? await knowledgeScan(ctx, arg) : 2;
+      case 'capture plan':
+      case 'capture status':
+      case 'capture settings':
+      case 'capture mark':
+      case 'capture tips':
+      case 'capture export':
+        return need(arg, '<dir>')
+          ? await captureCommand(ctx, cmd.split(' ')[1], arg, positionals[3])
+          : 2;
       case 'storyboard generate':
         return need(arg, '<dir>') ? await storyboardGenerate(ctx, arg) : 2;
       case 'new': {

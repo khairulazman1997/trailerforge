@@ -9,6 +9,11 @@ import {
 import { CommandError, readDecisions, type ProjectStore } from '@trailerforge/core';
 import {
   briefStatus,
+  captureExportOp,
+  captureSettingsOp,
+  captureStatusOp,
+  captureTipsOp,
+  captureViewOp,
   generateStoryboardOp,
   OpError,
   regenerateSectionOp,
@@ -350,6 +355,104 @@ export function createMcpServer(opts: McpServerOptions): Server {
         sectionId: args.sectionId,
         instruction: typeof args.instruction === 'string' ? args.instruction : undefined,
         keepEdited: typeof args.keepEdited === 'boolean' ? args.keepEdited : undefined,
+      });
+    },
+  });
+
+  // ---------------------------------------------------------------- capture pack
+  add({
+    mutates: false,
+    tool: {
+      name: 'capture_plan',
+      description:
+        'The recording checklist: shots grouped by location, setup and featured entity, each with its instruction, HUD, cut and recording length, status, notes and takes; setup hints (levels, debug commands, save files); stored tips; recording settings. Mark shots with the game-trailer_capture_* tools.',
+      inputSchema: object({
+        include: {
+          type: 'string',
+          enum: ['all', 'todo'],
+          description: 'todo: only shots still to record.',
+        },
+      }),
+    },
+    async run(args) {
+      return captureViewOp(engine, await project(args), {
+        include: args.include === 'todo' ? 'todo' : 'all',
+      });
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'capture_status',
+      description:
+        'Recording progress: shots done and left, by status, per group, and the state of the tips.',
+      inputSchema: object({}),
+    },
+    async run(args) {
+      return captureStatusOp(engine, await project(args));
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'capture_settings',
+      description:
+        'Recording settings (resolution, fps, bitrate, codec, container, HUD, HDR) with which are derived and which overridden, and the capture warnings. Change them with game-trailer_recording_set-overrides.',
+      inputSchema: object({}),
+    },
+    async run(args) {
+      return captureSettingsOp(engine, await project(args));
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'capture_tips',
+      description:
+        'Ask the configured LLM for tips and risk notes per capture group and store them. Sends the shots and setup hints of the groups, never entities the user excluded. Groups with fresh tips are skipped unless force is true; hand-edited tips are kept unless overwriteEdited is true.',
+      inputSchema: object({
+        groupKeys: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Only these groups (keys from capture_plan).',
+        },
+        force: { type: 'boolean' },
+        overwriteEdited: { type: 'boolean' },
+      }),
+    },
+    async run(args) {
+      return captureTipsOp(engine, await project(args), {
+        groupKeys: Array.isArray(args.groupKeys)
+          ? args.groupKeys.filter((k): k is string => typeof k === 'string')
+          : undefined,
+        force: args.force === true,
+        overwriteEdited: args.overwriteEdited === true,
+      });
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'capture_export',
+      description:
+        "Write the capture pack (Markdown, printable HTML, JSON) under the project's exports/capture folder. Returns project-relative file paths. omitExcluded leaves out everything about entities the user excluded.",
+      inputSchema: object({
+        formats: { type: 'array', items: { type: 'string', enum: ['md', 'html', 'json'] } },
+        omitExcluded: { type: 'boolean' },
+      }),
+    },
+    async run(args) {
+      return captureExportOp(engine, await project(args), {
+        formats: Array.isArray(args.formats)
+          ? args.formats.filter(
+              (f): f is 'md' | 'html' | 'json' => f === 'md' || f === 'html' || f === 'json',
+            )
+          : undefined,
+        omitExcluded: args.omitExcluded === true,
       });
     },
   });

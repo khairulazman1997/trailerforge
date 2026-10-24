@@ -26,6 +26,7 @@ import {
   type KnowledgeEntity,
   type KnowledgeSource,
 } from '@trailerforge/schema';
+import { buildCaptureHints, tipsInputs } from '@trailerforge/pack-game-trailer';
 import { generateStoryboard, regenerateSection } from '@trailerforge/storyboard';
 import type { Engine } from './engine.js';
 
@@ -443,6 +444,8 @@ export interface LlmPreview {
     /** Game facts an AI may see: names, kinds and short descriptions only. */
     knowledge: { id: string; kind: string; name: string }[];
     knowledgeExcluded: number;
+    /** `capture.tips` only: how many capture groups and shots the request describes. */
+    capture?: { groups: number; shots: number };
   };
 }
 
@@ -484,6 +487,20 @@ export async function llmPreviewOp(
       .map((e) => ({ id: e.id, kind: e.kind, name: e.name })),
     knowledgeExcluded: store.state.knowledge.length - shared.length,
   };
+  if (task === 'capture.tips') {
+    // The tips prompt carries the capture groups and their hints, not the brief.
+    const inputs = tipsInputs(store.state);
+    const seen = new Map<string, { id: string; kind: string; name: string }>();
+    for (const h of buildCaptureHints(inputs.plan, store.state.knowledge, { forLlm: true })) {
+      for (const x of [...h.levels, ...h.featured, ...h.debugCommands, ...h.saveFiles]) {
+        seen.set(x.entityId, { id: x.entityId, kind: x.kind, name: x.name });
+      }
+    }
+    willSend.brief = [];
+    willSend.assumptions = 0;
+    willSend.knowledge = [...seen.values()];
+    willSend.capture = { groups: inputs.groups.length, shots: inputs.plan.total };
+  }
   const route = await engine.llm.describeRoute(task);
   if (!route.ok) return { task, available: false, reason: route.reason, willSend };
   const p = route.provider;

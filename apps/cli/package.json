@@ -19,6 +19,7 @@
     "@trailerforge/mcp": "workspace:*",
     "@trailerforge/media": "workspace:*",
     "@trailerforge/plugin-api": "workspace:*",
+    "@trailerforge/schema": "workspace:*",
     "@trailerforge/service": "workspace:*"
   }
 }

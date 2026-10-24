@@ -17,6 +17,20 @@ export interface Flags {
   deep: boolean;
   allowDeepScan: boolean;
   force: boolean;
+  /** Capture commands. */
+  format?: string | undefined;
+  omitExcluded: boolean;
+  note?: string | undefined;
+  takes?: string | undefined;
+  status?: string | undefined;
+  skip: boolean;
+  unskip: boolean;
+  group: string[];
+  overwriteEdited: boolean;
+  set: string[];
+  unset: string[];
+  reset: boolean;
+  todo: boolean;
 }
 
 export interface CmdCtx {
@@ -28,7 +42,7 @@ export interface CmdCtx {
 }
 
 /** Print an operation's problem; `usage` mistakes exit 2, everything else 1. */
-function fail(ctx: CmdCtx, err: unknown, hint?: string): number {
+export function fail(ctx: CmdCtx, err: unknown, hint?: string): number {
   if (!(err instanceof OpError)) throw err;
   ctx.io.err(err.message);
   if (err.code === 'brief-incomplete') {

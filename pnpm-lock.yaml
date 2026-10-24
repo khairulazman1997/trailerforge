@@ -56,6 +56,9 @@ importers:
       '@trailerforge/plugin-api':
         specifier: workspace:*
         version: link:../../packages/plugin-api
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
       '@trailerforge/service':
         specifier: workspace:*
         version: link:../../packages/service

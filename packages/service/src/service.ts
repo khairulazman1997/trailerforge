@@ -15,6 +15,10 @@ import {
   assumeMissingOp,
   briefForm,
   briefStatus,
+  captureExportOp,
+  captureStatusOp,
+  captureTipsOp,
+  captureViewOp,
   clearAnthropicKey,
   generateStoryboardOp,
   HandoffCancelled,
@@ -191,6 +195,16 @@ const TaskRequest = z.discriminatedUnion('kind', [
       instruction: z.string().optional(),
       keepEdited: z.boolean().optional(),
     }),
+  }),
+  z.strictObject({
+    kind: z.literal('capture-tips'),
+    options: z
+      .strictObject({
+        groupKeys: z.array(z.string().min(1)).optional(),
+        force: z.boolean().optional(),
+        overwriteEdited: z.boolean().optional(),
+      })
+      .default({}),
   }),
   z.strictObject({
     kind: z.literal('scan'),
@@ -463,15 +477,56 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       /^\/v1\/projects\/(?<id>[^/]+)\/llm-preview$/,
       async ({ params, query }) => {
         const task = z
-          .enum(['storyboard.generate', 'storyboard.regenerate-section', 'brief.suggest'])
+          .enum([
+            'storyboard.generate',
+            'storyboard.regenerate-section',
+            'brief.suggest',
+            'capture.tips',
+          ])
           .safeParse(query.get('task'));
         if (!task.success)
           throw new HttpError(
             400,
             'bad-request',
-            'task must be storyboard.generate, storyboard.regenerate-section or brief.suggest',
+            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest or capture.tips',
           );
         return llmPreviewOp(engine, storeById(params.id!), task.data);
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/capture$/,
+      async ({ params, query }) => {
+        const include = z
+          .enum(['all', 'todo'])
+          .default('all')
+          .safeParse(query.get('include') ?? undefined);
+        if (!include.success)
+          throw new HttpError(400, 'bad-request', 'include must be all or todo');
+        return captureViewOp(engine, storeById(params.id!), { include: include.data });
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/capture\/status$/,
+      async ({ params }) => captureStatusOp(engine, storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/capture\/export$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        const o = z
+          .strictObject({
+            formats: z
+              .array(z.enum(['md', 'html', 'json']))
+              .min(1)
+              .optional(),
+            omitExcluded: z.boolean().optional(),
+          })
+          .parse(await body());
+        notBusy(store);
+        return captureExportOp(engine, store, o);
       },
     ],
     [
@@ -563,6 +618,8 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await generateStoryboardOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'regenerate-section')
             out = await regenerateSectionOp(engine, store, { ...t.options, signal });
+          else if (t.kind === 'capture-tips')
+            out = await captureTipsOp(engine, store, { ...t.options, signal });
           else {
             out = await scanKnowledgeOp(engine, store, {
               ...t.options,

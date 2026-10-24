@@ -6,6 +6,9 @@ export type {
   BriefField,
   BriefForm,
   BriefSuggestion,
+  CaptureStatus,
+  CaptureView,
+  ExportOutcome,
   LlmPreview,
   PendingHandoff,
   RoutesView,
@@ -14,6 +17,7 @@ export type {
 } from '@trailerforge/engine';
 import type { LlmPreview, PendingHandoff, RoutesView, SecretsView } from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
+import type { CaptureStatus, CaptureView, ExportOutcome } from '@trailerforge/engine';
 
 export class ServiceError extends Error {
   constructor(
@@ -67,6 +71,10 @@ export type TaskRequest =
   | {
       kind: 'regenerate-section';
       options: { sectionId: string; instruction?: string; keepEdited?: boolean };
+    }
+  | {
+      kind: 'capture-tips';
+      options?: { groupKeys?: string[]; force?: boolean; overwriteEdited?: boolean };
     }
   | {
       kind: 'scan';
@@ -211,11 +219,36 @@ export class ServiceClient {
   /** What a task would send, to which provider, before anything is sent. */
   llmPreview(
     id: string,
-    task: 'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest',
+    task:
+      'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest' | 'capture.tips',
   ) {
     return this.request<LlmPreview>(
       'GET',
       `/v1/projects/${encodeURIComponent(id)}/llm-preview?task=${task}`,
+    );
+  }
+  /** The capture checklist: groups and shots, setup hints, stored tips and recording settings. */
+  capture(id: string, include: 'all' | 'todo' = 'all') {
+    return this.request<CaptureView>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/capture?include=${include}`,
+    );
+  }
+  captureStatus(id: string) {
+    return this.request<CaptureStatus>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/capture/status`,
+    );
+  }
+  /** Writes the pack under the project's `exports/capture/` folder. */
+  exportCapture(
+    id: string,
+    opts: { formats?: ('md' | 'html' | 'json')[]; omitExcluded?: boolean } = {},
+  ) {
+    return this.request<ExportOutcome>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/capture/export`,
+      opts,
     );
   }
   briefForm(id: string) {

@@ -19,7 +19,17 @@ const genReply = {
 };
 /** While set, generation waits on it: lets a test cancel or edit mid-flight. */
 let gate: Promise<void> | null = null;
+/** While set, capture tips wait on it. */
+let tipsGate: Promise<void> | null = null;
+const tipsReply = async (req: { prompt: string }) => {
+  if (tipsGate) await tipsGate;
+  const keys = [...req.prompt.matchAll(/"key": "([^"]*)"/g)].map((m) => m[1]!);
+  return {
+    groups: keys.map((key) => ({ key, tips: ['Use the checkpoint.'], risks: ['A popup.'] })),
+  };
+};
 const mock = createMockProvider({
+  'capture.tips': tipsReply,
   'brief.suggest': { value: 'Ember Knight', reason: 'from the game facts' },
   'storyboard.generate': async () => {
     if (gate) await gate;
@@ -769,5 +779,100 @@ describe('settings routes', () => {
     expect(e3.handoff.available).toBe(false);
     expect(await settled).toBe('cancelled');
     await e3.close();
+  });
+});
+
+describe('capture', () => {
+  const ID = 'proj_capture';
+  let dir: string;
+  beforeAll(async () => {
+    dir = join(root, 'Capture.tforge');
+    await engine.createProject(dir, { ...sampleProject(), id: ID } as never);
+  });
+
+  it('needs the token like everything else', async () => {
+    for (const path of ['', '/status']) {
+      expect((await raw({ path: `/v1/projects/${ID}/capture${path}` })).status).toBe(401);
+    }
+    expect(
+      (await raw({ path: `/v1/projects/${ID}/capture/export`, method: 'POST', body: '{}' })).status,
+    ).toBe(401);
+  });
+
+  it('serves the checklist and progress, and edits go through commands', async () => {
+    const view = await client.capture(ID);
+    expect(view.plan).toMatchObject({ total: 2, done: 0 });
+    expect(view.plan.groups).toHaveLength(2);
+    expect(view.hints).toHaveLength(2);
+    expect(view.recording.settings.resolution.width).toBeGreaterThan(0);
+
+    await client.command(ID, 'game-trailer/capture.set-status', {
+      slotId: 'shot_parry',
+      status: 'recorded',
+    });
+    await client.command(ID, 'game-trailer/recording.set-overrides', { fps: 30 });
+    expect(await client.captureStatus(ID)).toMatchObject({
+      total: 2,
+      done: 1,
+      byStatus: { recorded: 1, empty: 1 },
+    });
+    expect((await client.capture(ID, 'todo')).plan.total).toBe(1);
+    expect((await client.capture(ID)).recording.settings.fps).toBe(30);
+    await expect(client.capture('nope')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('shows what tips will send, then runs them as a task and saves the result', async () => {
+    const preview = await client.llmPreview(ID, 'capture.tips');
+    expect(preview).toMatchObject({
+      available: true,
+      willSend: { brief: [], capture: { shots: 1 } },
+    });
+
+    const t = await client.startTask(ID, { kind: 'capture-tips' });
+    const done = await client.waitForTask(t.id);
+    expect(done).toMatchObject({
+      status: 'succeeded',
+      result: { written: [{ tips: 1, risks: 1 }] },
+    });
+    const onDisk = JSON.parse(await readFile(join(dir, 'project.json'), 'utf8')) as {
+      extensions: { 'game-trailer': { captureTips: Record<string, unknown> } };
+    };
+    expect(Object.keys(onDisk.extensions['game-trailer'].captureTips)).toHaveLength(1);
+    expect((await client.captureStatus(ID)).tips.fresh).toBe(1);
+
+    const again = await client.waitForTask(
+      (await client.startTask(ID, { kind: 'capture-tips' })).id,
+    );
+    expect(again).toMatchObject({ status: 'succeeded', result: { written: [] } });
+  });
+
+  it('cancelling tips means nothing is stored', async () => {
+    await client.command(ID, 'game-trailer/capture.clear-tips', {});
+    let release!: () => void;
+    tipsGate = new Promise((r) => (release = r));
+    const before = await client.getProject(ID);
+    const t = await client.startTask(ID, { kind: 'capture-tips', options: { force: true } });
+    await client.cancelTask(t.id);
+    tipsGate = null;
+    release();
+    expect((await client.waitForTask(t.id)).status).toBe('cancelled');
+    const after = await client.getProject(ID);
+    expect(after.version).toBe(before.version);
+    expect((await client.captureStatus(ID)).tips.fresh).toBe(0);
+  });
+
+  it('exports the pack under the project folder, and validates the request', async () => {
+    const r = await client.exportCapture(ID, { formats: ['md', 'json'] });
+    expect(r).toMatchObject({
+      files: ['exports/capture/capture-pack.json', 'exports/capture/capture-pack.md'],
+      shots: 2,
+      done: 1,
+    });
+    const md = await readFile(join(dir, 'exports', 'capture', 'capture-pack.md'), 'utf8');
+    expect(md).toContain('capture pack');
+    expect(md).not.toContain(dir);
+    await expect(client.exportCapture(ID, { formats: ['pdf' as never] })).rejects.toMatchObject({
+      status: 400,
+    });
   });
 });
