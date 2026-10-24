@@ -74,6 +74,9 @@ test('tick shots off, count takes, write notes, skip, reorder, and undo', async 
   await expect(progress(page)).toContainText('0 of 2 shots recorded');
   await expect(page.getByRole('checkbox', { name: 'Recorded: Perfect parry' })).not.toBeChecked();
 
+  // Each shot shows the code to put in its recording's file name (same as the pack).
+  await expect(page.locator('[data-slot="shot_boss"] .cap-code')).toHaveText('TF-ZXV5G');
+
   // Rejecting a shot keeps it on the list, flagged to record again.
   await page.getByLabel('Status of Boss reveal').selectOption('rejected');
   await expect(page.locator('[data-slot="shot_boss"]')).toContainText('Record again');

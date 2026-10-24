@@ -1054,3 +1054,10 @@ span.handle {
   padding: 0.2rem 0.4rem;
   user-select: none;
 }
+
+.cap-code {
+  font-family: var(--mono, ui-monospace, monospace);
+  color: var(--text);
+  background: transparent;
+  user-select: all;
+}

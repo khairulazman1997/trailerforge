@@ -114,6 +114,7 @@
       "items": [
         {
           "slotId": "shot_boss",
+          "code": "TF-ZXV5G",
           "shotNumber": 3,
           "section": "Escalation",
           "title": "Boss reveal",
@@ -187,6 +188,7 @@
       "items": [
         {
           "slotId": "shot_parry",
+          "code": "TF-PX9B8",
           "shotNumber": 1,
           "section": "Hook",
           "title": "Perfect parry",

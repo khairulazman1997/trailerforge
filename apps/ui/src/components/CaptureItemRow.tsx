@@ -64,9 +64,12 @@ export function CaptureItemRow({
   count,
   disabled,
   dropMark,
+  code,
   ...h
 }: {
   item: CaptureItem;
+  /** Shot code to type into the recording's file name. */
+  code: string | undefined;
   index: number;
   count: number;
   disabled: boolean;
@@ -95,6 +98,11 @@ export function CaptureItemRow({
         <div className="cap-body">
           <div className="cap-head">
             <strong className="cap-title">{name}</strong>
+            {code && (
+              <code className="chip cap-code" title="Put this code in the recording's file name">
+                {code}
+              </code>
+            )}
             <span className="chip">{item.sectionName}</span>
             <span className="chip" title="Record a bit more than the cut, so the edit has handles">
               Record {item.recordSeconds} s

@@ -15,6 +15,7 @@ import {
 } from './capture-tips.js';
 import { buildCapturePlan, type CaptureGroup } from './capture.js';
 import { resolveRecordingSettings, RecordingSettings } from './recording.js';
+import { shotCodes } from './shot-codes.js';
 
 /**
  * The capture pack: everything needed to record the footage, computed from the project (nothing
@@ -28,6 +29,8 @@ export const CAPTURE_PACK_VERSION = 1;
 const Hint = z.strictObject({ name: z.string(), kind: z.string(), detail: z.string() });
 const Item = z.strictObject({
   slotId: z.string(),
+  /** Shot code to put in the recording's file name (`shot-codes.ts`); added in v1, optional to read. */
+  code: z.string().optional(),
   shotNumber: z.int().positive(),
   section: z.string(),
   title: z.string(),
@@ -123,6 +126,7 @@ export function buildCapturePack(project: Project, opts: CapturePackOptions = {}
   const plan = buildCapturePlan(sb, project.knowledge);
   const hints = buildCaptureHints(plan, project.knowledge, { forLlm: omit });
   const rec = resolveRecordingSettings(project);
+  const codes = shotCodes(project);
 
   const visible = project.knowledge.filter((e) => !(omit && e.excludedFromLlm));
   const everywhere = visible.filter(
@@ -175,6 +179,7 @@ export function buildCapturePack(project: Project, opts: CapturePackOptions = {}
           : null,
       items: g.items.map((it) => ({
         slotId: it.slotId,
+        code: codes.get(it.slotId),
         shotNumber: it.shotNumber,
         section: it.sectionName,
         title: it.title,

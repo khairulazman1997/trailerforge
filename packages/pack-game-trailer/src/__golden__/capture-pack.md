@@ -29,6 +29,8 @@ Save files:
 
 ## Checklist
 
+Put the shot code in the recording’s file name and TrailerForge matches the file to its shot when you import it; add “take2” for a second take. For example: `TF-ZXV5G take2.mp4`.
+
 ### 1. Forest · The Ash Warden (1/1)
 
 Level:
@@ -37,7 +39,7 @@ Level:
 Debug commands:
 - **warp\_forest** — Debug console command: `warp forest` (Cinder Forest)
 
-- [x] **Boss reveal** (`shot_boss`, Escalation) — record 7 s · 2.5 s cut (2–4 s) · HUD any
+- [x] **Boss reveal** (`TF-ZXV5G`, Escalation) — record 7 s · 2.5 s cut (2–4 s) · HUD any
   - Do: Wait for the intro cinematic, then walk into the arena.
   - Features: The Ash Warden, Cinder Forest
 
@@ -55,7 +57,7 @@ Tips:
 Risks:
 - An autosave popup can ruin a take.
 
-- [ ] **Perfect parry** (`shot_parry`, Hook) — record 6 s · 2 s cut (1.5–3 s) · HUD off
+- [ ] **Perfect parry** (`TF-PX9B8`, Hook) — record 6 s · 2 s cut (1.5–3 s) · HUD off
   - Do: Boss phase 2: land a parry then a finisher. No HUD.
   - Why: Show the core mechanic in the first 3 seconds
   - Alternates: Parry the \_first\_ strike instead

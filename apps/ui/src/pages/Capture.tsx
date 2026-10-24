@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import {
   buildCaptureHints,
   buildCapturePlan,
+  shotCodes,
   readCaptureTips,
   resolveRecordingSettings,
   type CaptureGroup,
@@ -81,6 +82,7 @@ export function CapturePage({ id }: { id: string }) {
     const plan = buildCapturePlan(project.storyboard, project.knowledge);
     return {
       plan,
+      codes: shotCodes({ storyboard: project.storyboard }),
       setup: splitSetup(buildCaptureHints(plan, project.knowledge), project.knowledge),
       titles: new Map(
         project.storyboard.sections.flatMap((s) => s.slots).map((s) => [s.id, s.title || s.id]),
@@ -106,7 +108,7 @@ export function CapturePage({ id }: { id: string }) {
       </>
     );
   }
-  const { plan, setup, titles } = data;
+  const { plan, setup, titles, codes } = data;
   const reorder = (g: CaptureGroup, ids: string[] | null) => {
     if (ids) void cmd('game-trailer/capture.reorder-group', { slotIds: ids });
   };
@@ -213,6 +215,7 @@ export function CapturePage({ id }: { id: string }) {
                   <CaptureItemRow
                     key={it.slotId}
                     item={it}
+                    code={codes.get(it.slotId)}
                     index={i}
                     count={g.items.length}
                     disabled={disabled}

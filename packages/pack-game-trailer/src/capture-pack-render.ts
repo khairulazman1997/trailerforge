@@ -124,7 +124,7 @@ export function renderCapturePackMarkdown(pack: CapturePack): string {
     out.push(...mdHints('Debug commands', pack.setup.debugCommands));
     out.push(...mdHints('Save files', pack.setup.saveFiles));
   }
-  out.push('## Checklist', '');
+  out.push('## Checklist', '', `${NAMING_TIP} For example: \`${md(exampleName(pack))}\`.`, '');
   if (pack.groups.length === 0) out.push('Nothing to record.', '');
   pack.groups.forEach((g, i) => {
     out.push(`### ${i + 1}. ${md(g.label)} (${g.done}/${g.total})`, '');
@@ -139,7 +139,7 @@ export function renderCapturePackMarkdown(pack: CapturePack): string {
     }
     for (const it of g.items) {
       out.push(
-        `- [${it.done ? 'x' : ' '}] **${md(it.title || it.slotId)}** (\`${it.slotId}\`, ${md(it.section)}) — ${md(itemHead(it))}`,
+        `- [${it.done ? 'x' : ' '}] **${md(it.title || it.slotId)}** (\`${it.code ?? it.slotId}\`, ${md(it.section)}) — ${md(itemHead(it))}`,
       );
       for (const f of itemFacts(it)) out.push(`  - ${f.label}: ${md(f.value)}`);
     }
@@ -199,6 +199,14 @@ const hHints = (label: string, hs: Hint[]): string =>
         )
         .join('')}</ul>`;
 
+const NAMING_TIP =
+  'Put the shot code in the recording’s file name and TrailerForge matches the file to its shot when you import it; add “take2” for a second take.';
+
+function exampleName(pack: CapturePack): string {
+  const first = pack.groups.flatMap((g) => g.items).find((it) => it.code);
+  return `${first?.code ?? 'TF-K7QF2'} take2.mp4`;
+}
+
 /** One self-contained page: inline CSS, no scripts, no external references. */
 export function renderCapturePackHtml(pack: CapturePack): string {
   const { progress: p } = pack;
@@ -225,7 +233,10 @@ export function renderCapturePackHtml(pack: CapturePack): string {
       hHints('Save files', pack.setup.saveFiles),
     );
   }
-  parts.push('<h2>Checklist</h2>');
+  parts.push(
+    '<h2>Checklist</h2>',
+    `<p class="note">${NAMING_TIP} For example: <code>${html(exampleName(pack))}</code>.</p>`,
+  );
   if (pack.groups.length === 0) parts.push('<p>Nothing to record.</p>');
   pack.groups.forEach((g, i) => {
     const tips = g.tips
@@ -236,7 +247,7 @@ export function renderCapturePackHtml(pack: CapturePack): string {
         const facts = itemFacts(it)
           .map((f) => `<dt>${f.label}</dt><dd>${html(f.value)}</dd>`)
           .join('');
-        return `<li class="item${it.done ? ' done' : ''}"><span class="box" aria-hidden="true"></span><div><div><span class="title">${html(it.title || it.slotId)}</span> <code>${html(it.slotId)}</code> <span class="head">${html(it.section)} — ${html(itemHead(it))}</span></div>${facts ? `<dl>${facts}</dl>` : ''}</div></li>`;
+        return `<li class="item${it.done ? ' done' : ''}"><span class="box" aria-hidden="true"></span><div><div><span class="title">${html(it.title || it.slotId)}</span> <code>${html(it.code ?? it.slotId)}</code> <span class="head">${html(it.section)} — ${html(itemHead(it))}</span></div>${facts ? `<dl>${facts}</dl>` : ''}</div></li>`;
       })
       .join('');
     parts.push(
