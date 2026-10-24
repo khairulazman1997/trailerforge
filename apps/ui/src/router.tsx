@@ -1,6 +1,7 @@
 import { useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from 'react';
 
-export type ProjectTab = 'overview' | 'brief' | 'knowledge' | 'storyboard' | 'capture' | 'footage';
+export type ProjectTab =
+  'overview' | 'brief' | 'knowledge' | 'storyboard' | 'capture' | 'footage' | 'cut';
 
 export type Route =
   | { name: 'home' }
@@ -8,7 +9,7 @@ export type Route =
   | { name: 'project'; id: string; tab: ProjectTab }
   | { name: 'not-found' };
 
-const TABS: ProjectTab[] = ['brief', 'knowledge', 'storyboard', 'capture', 'footage'];
+const TABS: ProjectTab[] = ['brief', 'knowledge', 'storyboard', 'capture', 'footage', 'cut'];
 
 export function matchRoute(path: string): Route {
   const parts = path.split('/').filter(Boolean);

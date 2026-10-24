@@ -948,6 +948,18 @@ describe('footage', () => {
     const acc = await client.acceptMatches(ID);
     expect(acc.attached.map((a) => a.assetId)).toEqual([m.matches[0]!.assetId]);
     expect(acc.attached[0]!.matchedBy).toBe('suggestion');
+    // the player's media: the editing copy, never an arbitrary file
+    const proxy = await client.media(f.footage[0]!.assetId, 'proxy');
+    expect(proxy.type).toBe('video/mp4');
+    expect(proxy.size).toBeGreaterThan(1000);
+    await expect(client.media(f.footage[0]!.assetId, 'audio')).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(client.media('asset_nope', 'proxy')).rejects.toMatchObject({ status: 404 });
+    expect((await raw({ path: `/v1/library/assets/${f.footage[0]!.assetId}/proxy` })).status).toBe(
+      401,
+    );
+    expect(await client.cutGrid(ID)).toBeNull(); // the music is not analysed yet
     await expect(client.generateCut(ID)).rejects.toMatchObject({ status: 404 }); // the music is not in the library
     await expect(client.importFootage(ID, [])).rejects.toMatchObject({ status: 400 });
   }, 60_000);

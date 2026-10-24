@@ -1,4 +1,5 @@
 import { stat } from 'node:fs/promises';
+import { extname } from 'node:path';
 import {
   FOOTAGE_JOB,
   MUSIC_JOB,
@@ -101,6 +102,14 @@ export async function footageStatusOp(
   store: ProjectStore,
 ): Promise<{
   footage: FootageEntry[];
+  /** Music and other sound files in the library, for choosing the track. */
+  music: {
+    assetId: string;
+    name: string;
+    durationSec: number | null;
+    analyzed: boolean;
+    chosen: boolean;
+  }[];
   jobs: { queued: number; running: number; failed: { id: string; type: string; error: string }[] };
 }> {
   await engine.library.reload();
@@ -123,9 +132,22 @@ export async function footageStatusOp(
       inProject: inProject.has(a.id),
     });
   }
+  const chosen = store.state.storyboard?.music.trackAssetId;
+  const music: Awaited<ReturnType<typeof footageStatusOp>>['music'] = [];
+  for (const a of engine.library.list()) {
+    if (a.kind !== 'audio') continue;
+    music.push({
+      assetId: a.id,
+      name: a.originalName,
+      durationSec: a.media?.duration ?? null,
+      analyzed: (await readMusicAnalysis(store.paths.analysisCache, a.quickHash)) !== null,
+      chosen: a.id === chosen,
+    });
+  }
   const jobs = engine.jobs.list({ projectId: store.state.id });
   return {
     footage,
+    music,
     jobs: {
       queued: jobs.filter((j) => j.status === 'queued').length,
       running: jobs.filter((j) => j.status === 'running').length,
@@ -324,6 +346,90 @@ export async function generateCutOp(
     warnings: [...built.warnings, ...merged.warnings],
     unanalysed: attached.filter((id) => sources.has(id) && !sources.get(id)!.footage).length,
   };
+}
+
+// ---- the cut screen: music grid and playable media ------------------------------------------
+
+export interface CutGrid {
+  assetId: string;
+  tempo: number;
+  beatsPerBar: number;
+  /** Flicks from the start of the music. */
+  beats: number[];
+  bars: number[];
+  duration: number;
+}
+
+/** The beat grid the cut lands on (analysis plus the user's nudges), or null before the music is analysed. */
+export async function cutGridOp(engine: Engine, store: ProjectStore): Promise<CutGrid | null> {
+  const sb = store.state.storyboard;
+  const trackId = sb?.music.trackAssetId;
+  if (!sb || !trackId) return null;
+  await engine.library.reload();
+  const track = engine.library.get(trackId);
+  const music = track ? await readMusicAnalysis(store.paths.analysisCache, track.quickHash) : null;
+  if (!music) return null;
+  const g = resolveMusicGrid(music, sb.music.grid ?? {});
+  return {
+    assetId: trackId,
+    tempo: g.tempo,
+    beatsPerBar: g.beatsPerBar,
+    beats: g.beats,
+    bars: g.bars,
+    duration: g.duration,
+  };
+}
+
+export interface MediaFile {
+  path: string;
+  type: string;
+  size: number;
+}
+
+const AUDIO_TYPES: Record<string, string> = {
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.flac': 'audio/flac',
+  '.ogg': 'audio/ogg',
+  '.oga': 'audio/ogg',
+  '.opus': 'audio/ogg',
+};
+
+/**
+ * A file the preview player may fetch: a recording's small editing copy, or a music track. Only
+ * library assets, only those two things; never an arbitrary path.
+ */
+export async function libraryMediaOp(
+  engine: Engine,
+  assetId: string,
+  what: 'proxy' | 'audio',
+): Promise<MediaFile> {
+  await engine.library.reload();
+  const a = engine.library.get(assetId);
+  if (!a) throw new OpError('not-found', `no library asset "${assetId}"`);
+  let path: string;
+  let type: string;
+  if (what === 'proxy') {
+    if (a.kind !== 'video') throw new OpError('usage', 'only recordings have an editing copy');
+    path = assetCachePaths(engine.home, a.quickHash).proxy;
+    type = 'video/mp4';
+  } else {
+    const t = AUDIO_TYPES[extname(a.uri).toLowerCase()];
+    if (a.kind !== 'audio' || !t)
+      throw new OpError('usage', 'that asset is not a music file the player can use');
+    path = a.uri;
+    type = t;
+  }
+  try {
+    return { path, type, size: (await stat(path)).size };
+  } catch {
+    throw new OpError(
+      'not-found',
+      what === 'proxy' ? 'the editing copy is not built yet' : 'the music file is missing',
+    );
+  }
 }
 
 // ---- optional AI take ranking ----------------------------------------------------------------

@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createReadStream } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 import { extname, isAbsolute, join, relative } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { resolve } from 'node:path';
@@ -21,6 +23,8 @@ import {
   captureStatusOp,
   captureTipsOp,
   captureViewOp,
+  cutGridOp,
+  libraryMediaOp,
   footageStatusOp,
   generateCutOp,
   importFootageOp,
@@ -590,6 +594,30 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           .parse(await body());
         notBusy(store);
         return matchAcceptOp(engine, store, o);
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/cut\/grid$/,
+      async ({ params }) => cutGridOp(engine, storeById(params.id!)),
+    ],
+    [
+      'GET',
+      /^\/v1\/library\/assets\/(?<asset>[^/]+)\/(?<what>proxy|audio)$/,
+      async ({ params, res }) => {
+        const f = await libraryMediaOp(
+          engine,
+          decodeURIComponent(params.asset!),
+          params.what as 'proxy' | 'audio',
+        );
+        res.writeHead(200, {
+          ...SECURITY_HEADERS,
+          'Content-Type': f.type,
+          'Content-Length': f.size,
+          'Cache-Control': 'private, max-age=600',
+        });
+        await pipeline(createReadStream(f.path), res);
+        return STREAMING;
       },
     ],
     [

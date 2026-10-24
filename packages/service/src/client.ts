@@ -21,6 +21,7 @@ import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
 import type { CaptureStatus, CaptureView, ExportOutcome, RenderedPack } from '@trailerforge/engine';
 import type {
   analyzeOp,
+  cutGridOp,
   footageStatusOp,
   generateCutOp,
   importFootageOp,
@@ -282,6 +283,28 @@ export class ServiceClient {
       `/v1/projects/${encodeURIComponent(id)}/footage/matches/accept`,
       opts,
     );
+  }
+  cutGrid(id: string) {
+    return this.request<Result<typeof cutGridOp>>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/cut/grid`,
+    );
+  }
+  /** A recording's editing copy or a music file, as a Blob (the player cannot send the token itself). */
+  async media(assetId: string, what: 'proxy' | 'audio'): Promise<Blob> {
+    const res = await this.fetchFn(
+      `${this.opts.baseUrl}/v1/library/assets/${encodeURIComponent(assetId)}/${what}`,
+      {
+        headers: { Authorization: `Bearer ${this.opts.token}` },
+      },
+    );
+    if (!res.ok) {
+      const e = (
+        (await res.json().catch(() => null)) as { error?: { code: string; message: string } } | null
+      )?.error;
+      throw new ServiceError(res.status, e?.code ?? 'http', e?.message ?? res.statusText);
+    }
+    return res.blob();
   }
   generateCut(id: string, opts: { leadFrames?: number } = {}) {
     return this.request<Result<typeof generateCutOp>>(

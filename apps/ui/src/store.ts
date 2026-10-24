@@ -33,6 +33,9 @@ export type ClientLike = Pick<
   ServiceClient,
   | 'info'
   | 'footage'
+  | 'cutGrid'
+  | 'media'
+  | 'generateCut'
   | 'importFootage'
   | 'analyzeFootage'
   | 'footageMatches'
@@ -110,6 +113,8 @@ export interface AppState {
   captureTips: Record<string, { version: number; groups: CaptureView['tips']['groups'] }>;
   /** Recordings, import progress and match suggestions per project (read from the engine). */
   footage: Record<string, FootageSnapshot>;
+  /** The beat grid the cut lands on, per project (null: music not chosen or analysed yet). */
+  cutGrid: Record<string, { version: number; grid: Awaited<ReturnType<ServiceClient['cutGrid']>> }>;
   /** Latest progress message of a running task, per project (cleared when the task ends). */
   notices: Record<string, string>;
   /** Why the storyboard looks the way it does: automated decisions, oldest first. */
@@ -134,6 +139,7 @@ const initial: AppState = {
   briefs: {},
   captureTips: {},
   footage: {},
+  cutGrid: {},
   notices: {},
   decisions: {},
   handoffs: [],
@@ -578,6 +584,48 @@ export class AppStore {
       'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest' | 'capture.tips',
   ): Promise<LlmPreview | null> {
     return (await this.run((c) => c.llmPreview(projectId, task))) ?? null;
+  }
+
+  // ---- the cut ----
+
+  async loadCutGrid(projectId: string): Promise<void> {
+    const version = this.state.projects[projectId]?.version;
+    if (version === undefined || !this.client) return;
+    try {
+      const grid = await this.client.cutGrid(projectId);
+      this.set((s) => ({ cutGrid: { ...s.cutGrid, [projectId]: { version, grid } } }));
+    } catch {
+      // No storyboard yet, or the engine is busy: the page shows what it can.
+    }
+  }
+
+  /** Builds or rebuilds the rough cut (one undo step); returns what happened, or null on failure. */
+  async generateCut(
+    projectId: string,
+  ): Promise<Awaited<ReturnType<ServiceClient['generateCut']>> | null> {
+    const r = await this.run((c) => c.generateCut(projectId));
+    if (!r) return null;
+    this.toast(
+      'info',
+      `Rough cut ready: ${r.items} items, ${r.placeholders} placeholder${r.placeholders === 1 ? '' : 's'}. Undo goes back.`,
+    );
+    return r;
+  }
+
+  private mediaUrls = new Map<string, Promise<string | null>>();
+
+  /** A playable address for a recording's editing copy or a music file (fetched once with the token). */
+  mediaUrl(assetId: string, what: 'proxy' | 'audio'): Promise<string | null> {
+    const key = `${what}:${assetId}`;
+    let url = this.mediaUrls.get(key);
+    if (!url) {
+      url = this.run((c) => c.media(assetId, what)).then((b) =>
+        b ? URL.createObjectURL(b) : null,
+      );
+      this.mediaUrls.set(key, url);
+      void url.then((u) => u === null && this.mediaUrls.delete(key));
+    }
+    return url;
   }
 
   // ---- footage ----

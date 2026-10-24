@@ -5,6 +5,7 @@ import { EditableText } from '../components/EditableText.js';
 import { Link, navigate, projectPath, type ProjectTab } from '../router.js';
 import { BriefPage } from './Brief.js';
 import { CapturePage } from './Capture.js';
+import { CutPage } from './Cut.js';
 import { FootagePage } from './Footage.js';
 import { KnowledgePage } from './Knowledge.js';
 import { StoryboardPage } from './Storyboard.js';
@@ -17,6 +18,7 @@ const TAB_LABEL: Record<ProjectTab, string> = {
   storyboard: 'Storyboard',
   capture: 'Capture',
   footage: 'Footage',
+  cut: 'Cut',
 };
 
 export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
@@ -58,6 +60,8 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
         <CapturePage id={id} />
       ) : tab === 'footage' ? (
         <FootagePage id={id} />
+      ) : tab === 'cut' ? (
+        <CutPage id={id} />
       ) : (
         <Placeholder tab={tab} />
       )}
