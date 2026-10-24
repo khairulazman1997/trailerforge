@@ -214,6 +214,32 @@ describe('knowledge commands', () => {
     }
   });
 
+  it('apply-scan accepts the tags extractors set (a Unity debug command) and keeps them', async () => {
+    const store = await openStore();
+    try {
+      const s = store.dispatch(
+        'core/knowledge.apply-scan',
+        scanPayload([ent('mechanic', 'GodMode', { tags: ['debug-command'] })]),
+      );
+      expect(s.knowledge.find((e) => e.name === 'GodMode')?.tags).toContain('debug-command');
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('names the offending field when a scan payload is refused', async () => {
+    const store = await openStore();
+    try {
+      expect(() =>
+        store.dispatch('core/knowledge.apply-scan', {
+          ...scanPayload([ent('level', 'X', { confidence: 3 })]),
+        }),
+      ).toThrow(/invalid payload \(entities\.0\.confidence:/);
+    } finally {
+      await store.close();
+    }
+  });
+
   it('editing an extracted entity protects it from later scans; undo restores it', async () => {
     const store = await openStore();
     try {

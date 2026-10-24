@@ -27,6 +27,8 @@ const Extracted = z.strictObject({
   description: z.string().optional(),
   sourcePaths: z.array(z.string()),
   confidence: z.number().min(0).max(1),
+  /** Set by extractors (for example `debug-command`); merged in, never removed by a re-scan. */
+  tags: z.array(z.string()).optional(),
 });
 
 const sourceOf = (d: Draft<Project>, id: string) => {
@@ -83,6 +85,7 @@ export const applyScan = defineCommand({
       description: e.description ?? '',
       sourcePaths: e.sourcePaths,
       confidence: e.confidence,
+      ...(e.tags ? { tags: e.tags } : {}),
     }));
     const r = mergeKnowledge(d.knowledge, p.sourceId, incoming, {
       scope: p.scope,

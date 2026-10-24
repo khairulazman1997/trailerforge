@@ -51,7 +51,11 @@ export class CommandError extends Error {
     message: string,
     readonly issues: { path: string; message: string }[] = [],
   ) {
-    super(`${commandType}: ${message}`);
+    // Name the first problem, so a failure shown as plain text can be diagnosed.
+    const first = issues[0];
+    super(
+      `${commandType}: ${message}${first ? ` (${first.path || 'payload'}: ${first.message}${issues.length > 1 ? `, and ${issues.length - 1} more` : ''})` : ''}`,
+    );
     this.name = 'CommandError';
   }
 }
