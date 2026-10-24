@@ -3,6 +3,12 @@
  * not the intent). Commands not listed here still get a generic description.
  */
 export const COMMAND_DESCRIPTIONS: Record<string, string> = {
+  'game-trailer/capture.apply-tips':
+    'Store generated capture tips for groups. Groups the user edited are kept unless overwriteEdited is true.',
+  'game-trailer/capture.edit-tips':
+    'Replace the tips and risk notes of one capture group by hand. Marks them edited so regenerating leaves them alone.',
+  'game-trailer/capture.clear-tips':
+    'Remove the capture tips of one group (key), or of all groups.',
   'game-trailer/capture.set-status':
     'Mark a shot slot empty, recorded, approved or rejected. Works in locked sections; the storyboard itself is unchanged.',
   'game-trailer/capture.set-notes': 'Set the capture notes on a shot slot.',

@@ -1,5 +1,6 @@
 import { definePlugin, PLUGIN_API_VERSION } from '@trailerforge/plugin-api';
 import { PACK_ID } from './brief-ext.js';
+import { captureTipsCommands } from './capture-tips-commands.js';
 import { captureCommands } from './capture-commands.js';
 import { recordingCommands } from './recording-commands.js';
 import { storyboardTemplates } from './templates.js';
@@ -9,6 +10,9 @@ import { videoTypes } from './video-types.js';
 export * from './brief-ext.js';
 export * from './capture.js';
 export * from './capture-hints.js';
+export * from './capture-tips.js';
+export * from './capture-tips-commands.js';
+export * from './pack-ext.js';
 export * from './capture-commands.js';
 export * from './recording.js';
 export * from './recording-commands.js';
@@ -27,6 +31,7 @@ export const gameTrailerPack = definePlugin({
     for (const vt of videoTypes) ctx.videoTypes.register(vt);
     for (const t of storyboardTemplates) ctx.templates.register(t);
     ctx.knowledgeExtractors.register(unityExtractor);
-    for (const c of [...captureCommands, ...recordingCommands]) ctx.commands.register(c);
+    for (const c of [...captureCommands, ...captureTipsCommands, ...recordingCommands])
+      ctx.commands.register(c);
   },
 });

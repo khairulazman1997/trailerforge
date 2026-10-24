@@ -273,6 +273,9 @@ importers:
       '@trailerforge/knowledge':
         specifier: workspace:*
         version: link:../knowledge
+      '@trailerforge/llm':
+        specifier: workspace:*
+        version: link:../llm
       '@trailerforge/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api

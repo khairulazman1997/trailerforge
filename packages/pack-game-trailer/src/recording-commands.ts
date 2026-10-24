@@ -1,28 +1,14 @@
 import { defineCommand, type CommandDef } from '@trailerforge/core';
 import { z } from 'zod';
-import { PACK_ID } from './brief-ext.js';
+import { readPackKey, writePackKey } from './pack-ext.js';
 import { RECORDING_FIELDS, RecordingOverrides, RecordingPatch } from './recording.js';
 
-type Json = Record<string, unknown>;
-const isObject = (v: unknown): v is Json =>
-  v !== null && typeof v === 'object' && !Array.isArray(v);
-
-/**
- * Writes the overrides back under `extensions['game-trailer'].recording`, leaving any other
- * pack data alone and removing the key (and an emptied pack object) when nothing is overridden.
- */
 function store(extensions: Record<string, unknown>, next: RecordingOverrides): void {
-  const current = extensions[PACK_ID];
-  const pack: Json = isObject(current) ? { ...current } : {};
-  if (Object.keys(next).length > 0) pack['recording'] = next;
-  else delete pack['recording'];
-  if (Object.keys(pack).length > 0) extensions[PACK_ID] = pack;
-  else delete extensions[PACK_ID];
+  writePackKey(extensions, 'recording', Object.keys(next).length > 0 ? next : undefined);
 }
 
 function currentOverrides(extensions: Record<string, unknown>): RecordingOverrides {
-  const pack = extensions[PACK_ID];
-  const parsed = RecordingOverrides.safeParse(isObject(pack) ? (pack['recording'] ?? {}) : {});
+  const parsed = RecordingOverrides.safeParse(readPackKey(extensions, 'recording') ?? {});
   return parsed.success ? parsed.data : {};
 }
 
