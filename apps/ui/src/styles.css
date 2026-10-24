@@ -1104,6 +1104,7 @@ span.handle {
 }
 
 .cut-screen {
+  position: relative;
   background: #000;
   color: #fff;
   min-height: 12rem;
@@ -1283,4 +1284,33 @@ progress {
   border-radius: 6px;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* On-screen text over the preview: centred near the bottom, or a name label at the lower left. */
+.cut-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  transform: translateX(-50%);
+  max-width: 85%;
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 1.05rem;
+  text-align: center;
+  border-radius: 4px;
+}
+.cut-caption.lower-third {
+  left: 5%;
+  transform: none;
+  text-align: left;
+  border-left: 4px solid #fff;
+  border-radius: 0;
+}
+.cut-item.caption {
+  font-style: italic;
+}
+.captions .caption-row {
+  align-items: flex-end;
 }

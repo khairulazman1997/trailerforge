@@ -11,7 +11,13 @@ import {
   type FootageAnalysis,
 } from '@trailerforge/analysis';
 import { appendDecisions, type ProjectStore } from '@trailerforge/core';
-import { buildRoughCut, mergeRoughCut, resolveMusicGrid, type TakeSource } from '@trailerforge/cut';
+import {
+  buildRoughCut,
+  mergeRoughCut,
+  placeCaptions,
+  resolveMusicGrid,
+  type TakeSource,
+} from '@trailerforge/cut';
 import { assetCachePaths, mediaWarnings, type MediaWarning } from '@trailerforge/ingest';
 import {
   acceptMatchesPayload,
@@ -374,17 +380,20 @@ export async function generateCutOp(
   });
   const previous = store.state.timelines.find((t) => t.id === ROUGH_CUT_TIMELINE_ID);
   const merged = mergeRoughCut(previous, built.timeline, sources);
-  store.dispatch('core/timeline.set', { timeline: merged.timeline });
+  // Captions follow their shot to wherever the merge put it.
+  const captioned = placeCaptions(merged.timeline, sb);
+  store.dispatch('core/timeline.set', { timeline: captioned.timeline });
   await appendDecisions(store.paths.decisions, built.decisions);
 
-  const items = merged.timeline.tracks.flatMap((t) => t.items);
+  const items = captioned.timeline.tracks.flatMap((t) => t.items);
   const attached = [...attachedAssets(store.state).keys()];
   return {
     timelineId: ROUGH_CUT_TIMELINE_ID,
     items: items.length,
     placeholders: items.filter((i) => i.kind === 'placeholder').length,
     keptEdits: merged.kept,
-    warnings: [...built.warnings, ...merged.warnings],
+    // Caption notes are already in the built cut's warnings; the re-placement repeats them.
+    warnings: [...new Set([...built.warnings, ...merged.warnings, ...captioned.warnings])],
     unanalysed: attached.filter((id) => sources.has(id) && !sources.get(id)!.footage).length,
   };
 }

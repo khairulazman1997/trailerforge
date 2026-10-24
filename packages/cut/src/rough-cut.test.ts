@@ -132,7 +132,7 @@ describe('buildRoughCut', () => {
     for (const lead of [1, 2]) {
       const { timeline } = buildRoughCut({ ...input, options: { leadFrames: lead } });
       const pic = timeline.tracks
-        .filter((k) => k.kind !== 'audio')
+        .filter((k) => k.kind === 'video' || k.kind === 'graphics')
         .flatMap((k) => k.items)
         .sort((a, b) => a.start - b.start);
       for (const it of pic.slice(1)) {
@@ -252,7 +252,7 @@ describe('buildRoughCut properties', () => {
         }
       }
       const pic = a.timeline.tracks
-        .filter((k) => k.kind !== 'audio')
+        .filter((k) => k.kind === 'video' || k.kind === 'graphics')
         .flatMap((k) => k.items)
         .sort((x, y) => x.start - y.start);
       expect(pic[0]!.start).toBe(0);

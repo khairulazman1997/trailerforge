@@ -35,6 +35,19 @@ export function pictureAt(tl: Pick<Timeline, 'tracks'>, t: number): TimelineItem
   return undefined;
 }
 
+/** The on-screen text at `t`, from caption tracks that are not muted. */
+export function captionAt(
+  tl: Pick<Timeline, 'tracks'>,
+  t: number,
+): { text: string; styleId?: string | undefined } | undefined {
+  for (const track of tl.tracks) {
+    if (track.kind !== 'caption' || track.muted) continue;
+    const hit = itemAt(track.items, t);
+    if (hit?.kind === 'caption') return { text: hit.text, styleId: hit.styleId };
+  }
+  return undefined;
+}
+
 /** Where a beat puts a cut: one frame ahead of it, on the frame grid (as the rough cut does). */
 export const cutPointFor = (beat: number, rate: Rate) =>
   Math.round(beat / flicksPerFrame(rate)) * flicksPerFrame(rate) - flicksPerFrame(rate);

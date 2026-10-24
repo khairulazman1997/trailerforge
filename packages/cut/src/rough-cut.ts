@@ -10,6 +10,7 @@ import {
   type Storyboard,
   type TimelineItem,
 } from '@trailerforge/schema';
+import { placeCaptions } from './captions.js';
 import type { MusicGrid } from './grid.js';
 import { layoutOnGrid } from './layout.js';
 
@@ -516,7 +517,20 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
     markers,
     extensions: { core: { roughCut: { generator: ROUGH_CUT_STEP, version: 1 } } },
   });
-  return { timeline, decisions, warnings };
+  const captioned = placeCaptions(timeline, sb, (c) =>
+    decide(
+      c.id,
+      c.slotId ?? '',
+      { text: c.text, start: c.start, duration: c.duration },
+      { from: "the shot's on-screen text in the storyboard" },
+      `Caption "${c.text}" over its shot for ${secs(c.duration)} s`,
+    ),
+  );
+  return {
+    timeline: captioned.timeline,
+    decisions,
+    warnings: [...warnings, ...captioned.warnings],
+  };
 }
 
 /** Stable hash of a timeline, for checking that the same inputs give the same cut. */

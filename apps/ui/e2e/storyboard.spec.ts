@@ -79,10 +79,20 @@ test('edit, retime, reorder, drag, delete and undo', async ({ page }) => {
   await row(page, hook, 'Forest sprint')
     .getByLabel('What to capture')
     .fill('Sprint through the burning forest.');
-  await row(page, hook, 'Forest sprint').getByRole('button', { name: 'Save details' }).click();
+  // On-screen text for this shot, shown over it in the cut.
+  const editor = row(page, hook, 'Forest sprint');
+  await editor.getByRole('button', { name: 'Add on-screen text' }).click();
+  await editor.getByLabel('Text', { exact: true }).fill('Outrun the fire');
+  await editor.getByLabel('From (s)').fill('0.5');
+  await editor.getByRole('button', { name: 'Save details' }).click();
   await expect(row(page, hook, 'Forest sprint')).toContainText(
     'Sprint through the burning forest.',
   );
+  await page.getByRole('button', { name: 'Edit details of Forest sprint' }).click();
+  await expect(row(page, hook, 'Forest sprint').getByLabel('Text', { exact: true })).toHaveValue(
+    'Outrun the fire',
+  );
+  await row(page, hook, 'Forest sprint').getByRole('button', { name: 'Cancel' }).click();
 
   // Reorder with the buttons (the keyboard path).
   await page.getByRole('button', { name: 'Move Forest sprint up' }).click();

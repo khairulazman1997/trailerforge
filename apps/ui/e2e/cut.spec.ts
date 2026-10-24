@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { FLICKS_PER_SECOND } from '@trailerforge/schema';
 import { sampleProject } from '@trailerforge/schema/fixtures';
 import { ServiceClient } from '@trailerforge/service';
 import { startTestService, type TestService } from './support.js';
@@ -98,6 +99,18 @@ test('choose music, analyse, build the cut, inspect, trim, swap, lock, rebuild, 
   await expect(parry).toBeVisible();
   await expect(picture.getByRole('button', { name: /^Boss reveal, placeholder,/ })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Music track' })).toBeVisible();
+  // The boss shot's on-screen text from the storyboard sits over it, and shows in the preview.
+  const captions = page.getByRole('group', { name: 'Captions track' });
+  await expect(captions.getByRole('button', { name: /^The Ash Warden, caption,/ })).toBeVisible();
+  const cut = [...t.engine.projects.values()]
+    .find((s) => s.state.id === ID)!
+    .state.timelines.find((x) => x.tracks.some((k) => k.kind === 'caption'))!;
+  const cap = cut.tracks.flatMap((k) => k.items).find((i) => i.kind === 'caption')!;
+  const perFrame = (FLICKS_PER_SECOND * cut.frameRate.den) / cut.frameRate.num;
+  await page.getByLabel('Playhead').fill(String(Math.round(cap.start / perFrame) + 1));
+  await expect(page.getByTestId('cut-caption')).toHaveText('The Ash Warden');
+  await page.getByLabel('Playhead').fill('0');
+  await expect(page.getByTestId('cut-caption')).toHaveCount(0);
   const before = await parry.getAttribute('aria-label');
 
   // Why: the reason the cut gave, in words.

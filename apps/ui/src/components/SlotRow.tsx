@@ -1,7 +1,58 @@
 import { useState, type DragEvent } from 'react';
-import type { KnowledgeEntity, Slot } from '@trailerforge/schema';
+import type { KnowledgeEntity, Overlay, Slot } from '@trailerforge/schema';
 import { isHandEdited } from '../storyboard-view.js';
 import { EditableText } from './EditableText.js';
+
+/** On-screen text styles the cut understands today; other overlays are kept untouched. */
+const CAPTION_STYLES = [
+  { id: 'core/caption', label: 'Caption' },
+  { id: 'core/lower-third', label: 'Name label (lower third)' },
+] as const;
+
+interface CaptionDraft {
+  id: string;
+  text: string;
+  style: string;
+  from: string;
+  length: string;
+  /** The rest of the overlay (params), kept as it was. */
+  base: Overlay | null;
+}
+
+const newOverlayId = () => `ov_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+const captionDrafts = (overlays: Overlay[]): CaptionDraft[] =>
+  overlays
+    .filter((o) => o.text !== undefined)
+    .map((o) => ({
+      id: o.id,
+      text: o.text ?? '',
+      style: o.templateId,
+      from: String(o.offset),
+      length: o.duration === undefined ? '' : String(o.duration),
+      base: o,
+    }));
+
+/** The shot's overlays with the edited captions: text-less overlays stay first, untouched. */
+function overlaysFrom(original: Overlay[], drafts: CaptionDraft[]): Overlay[] {
+  const kept = original.filter((o) => o.text === undefined);
+  const captions = drafts
+    .filter((d) => d.text.trim())
+    .map((d): Overlay => {
+      const { duration: _old, ...rest } = d.base ?? { params: {} };
+      const length = Number(d.length);
+      return {
+        ...rest,
+        id: d.id,
+        templateId: d.style,
+        text: d.text.trim(),
+        offset: Math.max(0, Number(d.from) || 0),
+        // Empty: on screen until the shot ends.
+        ...(d.length.trim() && length > 0 ? { duration: length } : {}),
+      };
+    });
+  return [...kept, ...captions];
+}
 
 export interface SlotPatch {
   [field: string]: unknown;
@@ -194,7 +245,12 @@ function SlotEditor({
     slot.kind === 'shot' ? slot.alternates.join('\n') : '',
   );
   const [text, setText] = useState(slot.kind === 'card' ? slot.text : '');
+  const [captions, setCaptions] = useState<CaptionDraft[]>(
+    slot.kind === 'shot' ? captionDrafts(slot.overlays) : [],
+  );
   const [saving, setSaving] = useState(false);
+  const setCaption = (i: number, change: Partial<CaptionDraft>) =>
+    setCaptions((cs) => cs.map((c, j) => (j === i ? { ...c, ...change } : c)));
 
   const numMin = Number(min);
   const numMax = Number(max);
@@ -216,6 +272,8 @@ function SlotEditor({
       if (framing !== slot.framing) patch.framing = framing;
       if (hud !== slot.hud) patch.hud = hud;
       if (alternates !== slot.alternates.join('\n')) patch.alternates = lines(alternates);
+      const overlays = overlaysFrom(slot.overlays, captions);
+      if (JSON.stringify(overlays) !== JSON.stringify(slot.overlays)) patch.overlays = overlays;
     } else if (text !== slot.text) {
       patch.text = text;
     }
@@ -269,6 +327,83 @@ function SlotEditor({
             Alternatives if this can&apos;t be captured (one per line)
             <textarea rows={2} value={alternates} onChange={(e) => setAlternates(e.target.value)} />
           </label>
+          <fieldset className="captions">
+            <legend>On-screen text</legend>
+            <p className="muted">
+              Shown over this shot in the cut. Leave the length empty to keep it up until the shot
+              ends.
+            </p>
+            {captions.map((c, i) => (
+              <div className="row caption-row" key={c.id}>
+                <label className="grow">
+                  Text
+                  <input value={c.text} onChange={(e) => setCaption(i, { text: e.target.value })} />
+                </label>
+                <label>
+                  Style
+                  <select
+                    value={c.style}
+                    onChange={(e) => setCaption(i, { style: e.target.value })}
+                  >
+                    {CAPTION_STYLES.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                    {!CAPTION_STYLES.some((s) => s.id === c.style) && (
+                      <option value={c.style}>{c.style}</option>
+                    )}
+                  </select>
+                </label>
+                <label>
+                  From (s)
+                  <input
+                    type="number"
+                    step={0.1}
+                    min={0}
+                    value={c.from}
+                    onChange={(e) => setCaption(i, { from: e.target.value })}
+                  />
+                </label>
+                <label>
+                  For (s)
+                  <input
+                    type="number"
+                    step={0.1}
+                    min={0.1}
+                    placeholder="to the end"
+                    value={c.length}
+                    onChange={(e) => setCaption(i, { length: e.target.value })}
+                  />
+                </label>
+                <button
+                  type="button"
+                  aria-label={`Remove the text "${c.text || 'new'}"`}
+                  onClick={() => setCaptions((cs) => cs.filter((_, j) => j !== i))}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() =>
+                setCaptions((cs) => [
+                  ...cs,
+                  {
+                    id: newOverlayId(),
+                    text: '',
+                    style: 'core/caption',
+                    from: '0',
+                    length: '',
+                    base: null,
+                  },
+                ])
+              }
+            >
+              Add on-screen text
+            </button>
+          </fieldset>
         </>
       ) : (
         <label>

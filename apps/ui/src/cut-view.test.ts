@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   F,
   canTrim,
+  captionAt,
   cutPointFor,
   deltaToBeat,
   fitSourceIn,
@@ -61,6 +62,35 @@ describe('cut view helpers', () => {
     expect(pictureAt(tl, 6.5 * F)?.id).toBe('card');
     expect(pictureAt(tl, 9 * F)).toBeUndefined();
     expect(itemAt(tl.tracks[2]!.items, 7 * F)?.id).toBe('mu');
+  });
+
+  it('finds the on-screen text at a time, and none on a muted caption track', () => {
+    const withCaps = Timeline.parse({
+      ...tl,
+      tracks: [
+        ...tl.tracks,
+        {
+          id: 'c',
+          kind: 'caption',
+          items: [
+            { id: 'c1', kind: 'caption', start: F, duration: F, text: 'Parry!' },
+            {
+              id: 'c2',
+              kind: 'caption',
+              start: 3 * F,
+              duration: F,
+              text: 'The Ash Warden',
+              styleId: 'core/lower-third',
+            },
+          ],
+        },
+      ],
+    });
+    expect(captionAt(withCaps, 0)).toBeUndefined();
+    expect(captionAt(withCaps, 1.5 * F)).toEqual({ text: 'Parry!', styleId: undefined });
+    expect(captionAt(withCaps, 3 * F)?.styleId).toBe('core/lower-third');
+    const muted = { tracks: withCaps.tracks.map((t) => ({ ...t, muted: t.kind === 'caption' })) };
+    expect(captionAt(muted, 1.5 * F)).toBeUndefined();
   });
 
   it('moves an edge to the next or previous beat, one frame ahead of it', () => {

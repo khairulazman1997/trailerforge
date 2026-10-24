@@ -173,6 +173,28 @@ exports[`buildRoughCut > builds the fixture cut: best take at its best moment, a
       "name": "Music",
       "transitions": [],
     },
+    {
+      "id": "trk_captions",
+      "items": [
+        {
+          "decisionId": "dec_185726bafd0bc3",
+          "duration": 1411200000,
+          "extensions": {},
+          "id": "cap_ov_name",
+          "kind": "caption",
+          "label": "The Ash Warden",
+          "slotId": "shot_boss",
+          "start": 1387680000,
+          "styleId": "core/lower-third",
+          "text": "The Ash Warden",
+        },
+      ],
+      "kind": "caption",
+      "locked": false,
+      "muted": false,
+      "name": "Captions",
+      "transitions": [],
+    },
   ],
 }
 `;

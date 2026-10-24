@@ -45,7 +45,7 @@ function input(): RoughCutInput {
 
 const items = (t: Timeline) =>
   t.tracks
-    .filter((k) => k.kind !== 'audio')
+    .filter((k) => k.kind === 'video' || k.kind === 'graphics')
     .flatMap((k) => k.items)
     .sort((a, b) => a.start - b.start);
 const edit = (

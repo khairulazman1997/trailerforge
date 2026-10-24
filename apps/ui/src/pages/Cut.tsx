@@ -13,6 +13,7 @@ import {
   canTrim,
   deltaToBeat,
   fitSourceIn,
+  captionAt,
   kindLabel,
   percent,
   pictureAt,
@@ -469,6 +470,7 @@ function Player({ id }: { id: string }) {
   const clock = useRef({ startedAt: 0, from: 0 });
   const shown = useRef<string | null>(null);
   const item = pictureAt(tl, Math.min(t, Math.max(total - 1, 0)));
+  const caption = captionAt(tl, Math.min(t, Math.max(total - 1, 0)));
 
   // The music is the master clock when it can play; otherwise the wall clock.
   useEffect(() => {
@@ -583,6 +585,14 @@ function Player({ id }: { id: string }) {
             aria-label={item ? `${kindLabel(item)}: ${item.label ?? ''}` : 'Nothing here'}
           >
             {item ? `${kindLabel(item)}${item.label ? `: ${item.label}` : ''}` : 'End'}
+          </p>
+        )}
+        {caption && (
+          <p
+            className={`cut-caption${caption.styleId === 'core/lower-third' ? ' lower-third' : ''}`}
+            data-testid="cut-caption"
+          >
+            {caption.text}
           </p>
         )}
         <audio ref={audio} preload="auto" />
