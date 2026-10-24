@@ -26,6 +26,7 @@
   "dependencies": {
     "@trailerforge/core": "workspace:*",
     "@trailerforge/engine": "workspace:*",
+    "@trailerforge/pack-game-trailer": "workspace:*",
     "@trailerforge/schema": "workspace:*",
     "@trailerforge/storyboard": "workspace:*",
     "zod": "^4.6.7"

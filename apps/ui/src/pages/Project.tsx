@@ -5,6 +5,7 @@ import { EditableText } from '../components/EditableText.js';
 import { Link, navigate, projectPath, type ProjectTab } from '../router.js';
 import { BriefPage } from './Brief.js';
 import { CapturePage } from './Capture.js';
+import { FootagePage } from './Footage.js';
 import { KnowledgePage } from './Knowledge.js';
 import { StoryboardPage } from './Storyboard.js';
 import { busyTask } from '../store.js';
@@ -15,6 +16,7 @@ const TAB_LABEL: Record<ProjectTab, string> = {
   knowledge: 'Game knowledge',
   storyboard: 'Storyboard',
   capture: 'Capture',
+  footage: 'Footage',
 };
 
 export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
@@ -54,6 +56,8 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
         <StoryboardPage id={id} />
       ) : tab === 'capture' ? (
         <CapturePage id={id} />
+      ) : tab === 'footage' ? (
+        <FootagePage id={id} />
       ) : (
         <Placeholder tab={tab} />
       )}

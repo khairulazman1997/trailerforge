@@ -379,6 +379,9 @@ importers:
       '@trailerforge/engine':
         specifier: workspace:*
         version: link:../engine
+      '@trailerforge/pack-game-trailer':
+        specifier: workspace:*
+        version: link:../pack-game-trailer
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema

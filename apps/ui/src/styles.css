@@ -1061,3 +1061,44 @@ span.handle {
   background: transparent;
   user-select: all;
 }
+
+.foot-drop {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+.foot-drop.over {
+  border-color: var(--accent, currentColor);
+  background: var(--border);
+}
+.foot-list,
+.foot-matches,
+.foot-takes,
+.foot-warnings {
+  list-style: none;
+  padding-left: 0;
+}
+.foot-list > li,
+.foot-matches > li,
+.foot-takes > li {
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0;
+}
+.foot-warnings {
+  margin: 0.25rem 0 0 1rem;
+  font-size: 0.85rem;
+}
+.foot-takes ul {
+  list-style: none;
+  padding-left: 1rem;
+}
+.foot-takes li.rejected span:first-child {
+  text-decoration: line-through;
+}
+.warn-text {
+  color: var(--warn-text);
+}
+
+.foot-takes .chip.ok {
+  color: var(--ok-text);
+}

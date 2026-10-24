@@ -22,9 +22,21 @@ import type { Connection } from './connection.js';
 enablePatches();
 
 /** The slice of the service client the store uses; tests supply a fake. */
+export interface FootageSnapshot {
+  status: Awaited<ReturnType<ServiceClient['footage']>>;
+  matches: Awaited<ReturnType<ServiceClient['footageMatches']>>;
+  /** Project version the suggestions were computed at. */
+  version: number;
+}
+
 export type ClientLike = Pick<
   ServiceClient,
   | 'info'
+  | 'footage'
+  | 'importFootage'
+  | 'analyzeFootage'
+  | 'footageMatches'
+  | 'acceptMatches'
   | 'listProjects'
   | 'openProject'
   | 'createProject'
@@ -96,6 +108,8 @@ export interface AppState {
   briefs: Record<string, { version: number; form: BriefForm }>;
   /** Which capture tips are up to date, per project, tagged with the version it was read at. */
   captureTips: Record<string, { version: number; groups: CaptureView['tips']['groups'] }>;
+  /** Recordings, import progress and match suggestions per project (read from the engine). */
+  footage: Record<string, FootageSnapshot>;
   /** Latest progress message of a running task, per project (cleared when the task ends). */
   notices: Record<string, string>;
   /** Why the storyboard looks the way it does: automated decisions, oldest first. */
@@ -119,6 +133,7 @@ const initial: AppState = {
   jobs: {},
   briefs: {},
   captureTips: {},
+  footage: {},
   notices: {},
   decisions: {},
   handoffs: [],
@@ -563,6 +578,69 @@ export class AppStore {
       'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest' | 'capture.tips',
   ): Promise<LlmPreview | null> {
     return (await this.run((c) => c.llmPreview(projectId, task))) ?? null;
+  }
+
+  // ---- footage ----
+
+  /** Reads recordings, job progress and suggestions; a quiet failure leaves the old snapshot. */
+  async refreshFootage(projectId: string): Promise<void> {
+    const version = this.state.projects[projectId]?.version;
+    if (version === undefined || !this.client) return;
+    try {
+      const [status, matches] = await Promise.all([
+        this.client.footage(projectId),
+        this.state.projects[projectId]?.project.storyboard
+          ? this.client.footageMatches(projectId)
+          : Promise.resolve({ matches: [], recordings: [] }),
+      ]);
+      this.set((s) => ({ footage: { ...s.footage, [projectId]: { status, matches, version } } }));
+    } catch {
+      // The engine is busy or the project closed: keep what is shown.
+    }
+  }
+
+  async importFootage(projectId: string, paths: string[]): Promise<boolean> {
+    const r = await this.run((c) => c.importFootage(projectId, paths));
+    if (!r) return false;
+    if (r.jobs.length === 0) {
+      this.toast(
+        'error',
+        'No recordings found there. Choose video files, or a folder that has some.',
+      );
+      return false;
+    }
+    this.toast('info', `Importing ${r.jobs.length} recording${r.jobs.length === 1 ? '' : 's'}…`);
+    await this.refreshFootage(projectId);
+    return true;
+  }
+
+  async analyzeFootage(projectId: string): Promise<boolean> {
+    const r = await this.run((c) => c.analyzeFootage(projectId));
+    if (!r) return false;
+    this.toast(
+      'info',
+      r.jobs.length
+        ? `Analysing ${r.jobs.length} item${r.jobs.length === 1 ? '' : 's'} on this computer…`
+        : 'Everything is already analysed.',
+    );
+    await this.refreshFootage(projectId);
+    return true;
+  }
+
+  async acceptMatches(
+    projectId: string,
+    minConfidence: 'certain' | 'high' | 'medium' = 'high',
+  ): Promise<number> {
+    const r = await this.run((c) => c.acceptMatches(projectId, { minConfidence }));
+    if (!r) return 0;
+    this.toast(
+      r.attached.length ? 'info' : 'error',
+      r.attached.length
+        ? `Attached ${r.attached.length} recording${r.attached.length === 1 ? '' : 's'}. Undo goes back.`
+        : 'Nothing was confident enough to attach on its own. Choose a shot for each recording below.',
+    );
+    await this.refreshFootage(projectId);
+    return r.attached.length;
   }
 
   // ---- capture ----

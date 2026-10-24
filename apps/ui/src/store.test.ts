@@ -122,6 +122,11 @@ class Fake {
       canUndo: true,
       canRedo: false,
     }),
+    footage: async () => ({ footage: [], jobs: { queued: 0, running: 0, failed: [] } }),
+    footageMatches: async () => ({ matches: [], recordings: [] }),
+    importFootage: async () => ({ jobs: [], skipped: [], truncated: false }),
+    analyzeFootage: async () => ({ jobs: [], skipped: [] }),
+    acceptMatches: async () => ({ attached: [] }),
     capture: async () => {
       throw new Error('unused');
     },
