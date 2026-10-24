@@ -1,11 +1,12 @@
 import { posix } from 'node:path';
-import { kindFromWord } from '@trailerforge/knowledge';
+import { kindFromWord, unionTags } from '@trailerforge/knowledge';
 import type {
   ExtractedEntity,
   KnowledgeExtractor,
   KnowledgeExtractorContext,
 } from '@trailerforge/plugin-api';
 import type { KnowledgeEntityKind } from '@trailerforge/schema';
+import { fromScripts, type SaveLocation } from './unity-csharp.js';
 
 type Kind = KnowledgeEntityKind;
 
@@ -93,6 +94,14 @@ function fromProjectSettings(text: string): ExtractedEntity[] {
   ];
 }
 
+/** Company and product name, which Unity uses for `persistentDataPath` and PlayerPrefs. */
+function saveLocationOf(text: string): SaveLocation | null {
+  const f = fields(text);
+  const company = pick(f, ['companyName']);
+  const product = pick(f, ['productName']);
+  return company && product ? { company, product } : null;
+}
+
 function sceneEntity(path: string, confidence: number): ExtractedEntity | null {
   const base = posix.basename(path, '.unity');
   if (PLUMBING_SCENE.test(base)) return null;
@@ -161,13 +170,18 @@ function mergeByName(entities: ExtractedEntity[]): ExtractedEntity[] {
     const key = `${e.kind}\0${e.name.toLowerCase()}`;
     const prev = map.get(key);
     if (!prev) {
-      map.set(key, { ...e, sourcePaths: [...e.sourcePaths] });
+      map.set(key, {
+        ...e,
+        sourcePaths: [...e.sourcePaths],
+        ...(e.tags ? { tags: [...e.tags] } : {}),
+      });
       continue;
     }
     prev.confidence = Math.max(prev.confidence, e.confidence);
     if (e.description && e.description.length > (prev.description?.length ?? 0))
       prev.description = e.description;
     for (const p of e.sourcePaths) if (!prev.sourcePaths.includes(p)) prev.sourcePaths.push(p);
+    if (e.tags?.length) prev.tags = unionTags(prev.tags ?? [], e.tags);
   }
   return [...map.values()];
 }
@@ -175,7 +189,8 @@ function mergeByName(entities: ExtractedEntity[]): ExtractedEntity[] {
 /**
  * Unity projects (text-serialized assets): product name, build scenes as levels, and
  * ScriptableObject / prefab names classified by the folder they live in. Reads only files the
- * scanner accepted, so binary-serialized projects simply yield less.
+ * scanner accepted, so binary-serialized projects simply yield less. C# scripts give debug-console
+ * commands and save locations for capture setup hints (`unity-csharp.ts`).
  */
 export const unityExtractor: KnowledgeExtractor = {
   id: 'game-trailer/unity',
@@ -188,8 +203,12 @@ export const unityExtractor: KnowledgeExtractor = {
   async extract(ctx) {
     const have = new Set(ctx.files);
     const out: ExtractedEntity[] = [];
-    if (have.has(PROJECT_SETTINGS))
-      out.push(...fromProjectSettings(await ctx.readText(PROJECT_SETTINGS)));
+    let saveLocation: SaveLocation | null = null;
+    if (have.has(PROJECT_SETTINGS)) {
+      const text = await ctx.readText(PROJECT_SETTINGS);
+      out.push(...fromProjectSettings(text));
+      saveLocation = saveLocationOf(text);
+    }
 
     const buildScenes = have.has(BUILD_SETTINGS)
       ? fromBuildScenes(await ctx.readText(BUILD_SETTINGS))
@@ -216,6 +235,8 @@ export const unityExtractor: KnowledgeExtractor = {
         if (e) out.push(e);
       }
     }
+    // Scripts last: the MAX_ENTITIES cap then drops hints before levels and bosses.
+    out.push(...(await fromScripts(ctx.files, (p) => ctx.readText(p), saveLocation, ctx.signal)));
     return mergeByName(out).slice(0, MAX_ENTITIES);
   },
 };

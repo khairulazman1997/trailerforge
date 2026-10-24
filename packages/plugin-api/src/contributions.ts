@@ -159,6 +159,8 @@ export interface ExtractedEntity {
   description?: string;
   sourcePaths: string[];
   confidence: number;
+  /** Tags the extractor sets (e.g. `debug-command`). A re-scan adds them; it never removes tags. */
+  tags?: string[];
 }
 
 export interface KnowledgeExtractorContext {

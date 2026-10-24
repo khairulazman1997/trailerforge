@@ -294,15 +294,25 @@ export function dedupe(entities: ExtractedEntity[]): ExtractedEntity[] {
     const key = `${e.kind}\0${e.name.toLowerCase()}`;
     const prev = map.get(key);
     if (!prev) {
-      map.set(key, { ...e, sourcePaths: [...e.sourcePaths] });
+      map.set(key, {
+        ...e,
+        sourcePaths: [...e.sourcePaths],
+        ...(e.tags ? { tags: unionTags([], e.tags) } : {}),
+      });
       continue;
     }
     prev.confidence = Math.max(prev.confidence, e.confidence);
     if (e.description && e.description.length > (prev.description?.length ?? 0))
       prev.description = e.description;
     for (const p of e.sourcePaths) if (!prev.sourcePaths.includes(p)) prev.sourcePaths.push(p);
+    if (e.tags?.length) prev.tags = unionTags(prev.tags ?? [], e.tags);
   }
   return [...map.values()];
+}
+
+/** `a` in order, then the tags of `b` it lacks. */
+export function unionTags(a: readonly string[], b: readonly string[]): string[] {
+  return [...new Set([...a, ...b])];
 }
 
 const MAX_ENTITIES = 1000;

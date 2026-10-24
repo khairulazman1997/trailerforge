@@ -82,13 +82,14 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 
 Design defaults confirmed by the user before 3.1: Markdown + printable HTML (PDF via browser print); recording settings from brief platforms + an editable table; capture notes on the slot (`extensions['game-trailer'].capture`); grouping by location → setup → featured entity.
 
-| Task                     | Commit    | Start    | End      | Build time | Model  | Notes                                                                                                                                                                                                     |
-| ------------------------ | --------- | -------- | -------- | ---------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 3.1 Capture plan builder | `2684a95` | 00:25:46 | 00:28:50 | ~3 min     | Opus   | seeded-PRNG property tests (no new dep); locked sections kept (a lock guards content, not recording); skip via ext                                                                                        |
-| 3.2 Recording settings   | `9fdeb76` | 00:42:04 | 00:46:37 | ~5 min     | Sonnet | derived from platforms, video type, HUD needs and format targets; overrides at `extensions['game-trailer'].recording`; MCP exposes the two commands as tools                                              |
-| 3.3 Capture commands     | `e42ab94` | 00:48:04 | 00:50:30 | ~2 min     | Sonnet | status/notes/takes/skip/reorder-group under `game-trailer/capture.*`; work in locked sections; no storyboard revision bump                                                                                |
-| 3.4 Setup hints          | `a43fcde` | 00:52:24 | 00:53:46 | ~4 min     | Sonnet | derived hints from knowledge; debug commands and save files are tag-driven because the Unity extractor does not detect them; `forLlm` drops excluded entities                                             |
-| 3.5 Capture tips (LLM)   | `070d00a` | 00:55:24 | ENDT     | ~ENDM min  | Sonnet | returns an apply payload, stores nothing on cancel; prompt uses opaque group aliases because real keys embed entity ids (the leak guard caught it); redaction of excluded names/ids/paths + a final guard |
+| Task                                   | Commit    | Start    | End      | Build time | Model  | Notes                                                                                                                                                                                                                      |
+| -------------------------------------- | --------- | -------- | -------- | ---------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.1 Capture plan builder               | `2684a95` | 00:25:46 | 00:28:50 | ~3 min     | Opus   | seeded-PRNG property tests (no new dep); locked sections kept (a lock guards content, not recording); skip via ext                                                                                                         |
+| 3.2 Recording settings                 | `9fdeb76` | 00:42:04 | 00:46:37 | ~5 min     | Sonnet | derived from platforms, video type, HUD needs and format targets; overrides at `extensions['game-trailer'].recording`; MCP exposes the two commands as tools                                                               |
+| 3.3 Capture commands                   | `e42ab94` | 00:48:04 | 00:50:30 | ~2 min     | Sonnet | status/notes/takes/skip/reorder-group under `game-trailer/capture.*`; work in locked sections; no storyboard revision bump                                                                                                 |
+| 3.4 Setup hints                        | `a43fcde` | 00:52:24 | 00:53:46 | ~4 min     | Sonnet | derived hints from knowledge; debug commands and save files are tag-driven because the Unity extractor does not detect them; `forLlm` drops excluded entities                                                              |
+| 3.5 Capture tips (LLM)                 | `070d00a` | 00:55:24 | ENDT     | ~ENDM min  | Sonnet | returns an apply payload, stores nothing on cancel; prompt uses opaque group aliases because real keys embed entity ids (the leak guard caught it); redaction of excluded names/ids/paths + a final guard                  |
+| 3.4b Unity debug commands + save files | `HASH`    | 01:03:21 | 01:08:02 | ~5 min     | Opus   | `ExtractedEntity.tags` + tag-union merge; C# comment-stripping lexer; console attributes/AddCommand, Mirror `[Command]` excluded; persistentDataPath/ES3/PlayerPrefs with Windows paths; names only, never string contents |
 
 | When (M3)  | Session | Week | Note           |
 | ---------- | ------- | ---- | -------------- |
@@ -98,3 +99,4 @@ Design defaults confirmed by the user before 3.1: Markdown + printable HTML (PDF
 | After 3.3  | —       | —    | user to report |
 | After 3.4  | —       | —    | user to report |
 | After 3.5  | —       | —    | user to report |
+| After 3.4b | —       | —    | user to report |

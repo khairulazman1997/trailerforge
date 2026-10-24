@@ -143,6 +143,24 @@ describe('mergeKnowledge', () => {
     expect(added.knowledge[0]?.tags).toEqual([DEEP_SCAN_TAG]);
   });
 
+  it('adds extractor tags, unions them on refresh, and never drops user tags', () => {
+    const tagged = ent('other', 'spawn_boss', { tags: ['debug-command', 'all-levels'] });
+    const first = run([], [tagged, { ...tagged, tags: ['debug-command', 'x'] }]);
+    expect(first.knowledge[0]!.tags).toEqual(['debug-command', 'all-levels', 'x']);
+
+    const mine = { ...first.knowledge[0]!, tags: ['favourite', 'debug-command'] };
+    const again = run([mine], [tagged]);
+    expect(again.updated).toEqual([mine.id]);
+    expect(again.knowledge[0]!.tags).toEqual(['favourite', 'debug-command', 'all-levels']);
+    expect(run(again.knowledge, [tagged]).updated).toEqual([]); // idempotent
+
+    const user = { ...mine, origin: 'user' as const, tags: [] };
+    expect(run([user], [tagged]).knowledge[0]!.tags).toEqual([]);
+
+    const deep = run([], [tagged], { scope: 'deep' });
+    expect(deep.knowledge[0]!.tags).toEqual(['debug-command', 'all-levels', DEEP_SCAN_TAG]);
+  });
+
   it('mints ids that do not collide with anything in the project', () => {
     const taken = new Set(['ent_ash']);
     const r = mergeKnowledge([], 'src', [ent('boss', 'Ash')], { taken, referenced: new Set() });

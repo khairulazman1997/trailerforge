@@ -1,6 +1,6 @@
 import type { ExtractedEntity } from '@trailerforge/plugin-api';
 import { mintId, type KnowledgeEntity } from '@trailerforge/schema';
-import { dedupe } from './generic.js';
+import { dedupe, unionTags } from './generic.js';
 
 /** Tag on entities found by the opt-in deep scan, so a normal re-scan doesn't delete them. */
 export const DEEP_SCAN_TAG = 'deep-scan';
@@ -64,7 +64,11 @@ export function mergeKnowledge(
       if (match.origin === 'user' || (match.sourceId !== undefined && match.sourceId !== sourceId))
         continue;
       const description = inc.description?.trim() ? inc.description : match.description;
-      const tags = match.tags.filter((t) => t !== STALE_TAG);
+      // Extractor tags are added, never removed: a tag the user set on an extracted entity stays.
+      const tags = unionTags(
+        match.tags.filter((t) => t !== STALE_TAG),
+        inc.tags ?? [],
+      );
       const next: KnowledgeEntity = {
         ...match,
         description,
@@ -76,7 +80,7 @@ export function mergeKnowledge(
         description !== match.description ||
         inc.confidence !== match.confidence ||
         !sameList(inc.sourcePaths, match.sourcePaths) ||
-        tags.length !== match.tags.length;
+        !sameList(tags, match.tags);
       if (changed) {
         replaced.set(match.id, next);
         result.updated.push(match.id);
@@ -93,7 +97,7 @@ export function mergeKnowledge(
       confidence: inc.confidence,
       origin: 'extracted',
       excludedFromLlm: false,
-      tags: scope === 'deep' ? [DEEP_SCAN_TAG] : [],
+      tags: unionTags(inc.tags ?? [], scope === 'deep' ? [DEEP_SCAN_TAG] : []),
       extensions: {},
     };
     added.push(entity);
