@@ -2,6 +2,7 @@ import { PackId, ProjectStatus } from '@trailerforge/schema';
 import { z } from 'zod';
 import { addProjectAsset, removeProjectAsset, setProjectAssetRole } from './asset-commands.js';
 import { CommandRegistry, defineCommand } from './commands.js';
+import { musicCommands } from './music-commands.js';
 import { takeCommands } from './take-commands.js';
 
 export const renameProject = defineCommand({
@@ -41,6 +42,6 @@ export function coreCommands(registry = new CommandRegistry()): CommandRegistry 
     .register(addProjectAsset)
     .register(removeProjectAsset)
     .register(setProjectAssetRole);
-  for (const c of takeCommands) registry.register(c);
+  for (const c of [...takeCommands, ...musicCommands]) registry.register(c);
   return registry;
 }

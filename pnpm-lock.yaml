@@ -180,6 +180,12 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
+  packages/cut:
+    dependencies:
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/engine:
     dependencies:
       '@trailerforge/brief':

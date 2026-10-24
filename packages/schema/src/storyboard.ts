@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Extensions, Id, IsoDateTime, PluginRef, Seconds } from './common.js';
 import { Resolution } from './format.js';
-import { Flicks } from './time.js';
+import { FLICKS_PER_SECOND, Flicks } from './time.js';
 
 export const SlotStatus = z.enum(['empty', 'recorded', 'approved', 'rejected']);
 export type SlotStatus = z.infer<typeof SlotStatus>;
@@ -142,8 +142,27 @@ export const VoLine = z.strictObject({
 });
 export type VoLine = z.infer<typeof VoLine>;
 
+/**
+ * The user's corrections to the beat grid found in the music track. Only these nudges are
+ * stored; the beats themselves are analysis (cache) and the grid is computed from both.
+ */
+export const MusicGridSettings = z.strictObject({
+  /** Which beat starts a bar, shifted by this many beats from what analysis found. */
+  downbeatShift: z.int().min(-11).max(11).default(0),
+  /** Replace the detected beats with an even grid at this tempo (BPM), anchored on a downbeat. */
+  tempo: z.number().min(30).max(300).optional(),
+  /** Beats in a bar; analysis assumes 4. */
+  beatsPerBar: z.int().min(1).max(12).optional(),
+  barsPerPhrase: z.int().min(1).max(16).default(4),
+  /** Move the whole grid later (positive) or earlier, in flicks; at most one second. */
+  offset: z.int().min(-FLICKS_PER_SECOND).max(FLICKS_PER_SECOND).default(0),
+});
+export type MusicGridSettings = z.infer<typeof MusicGridSettings>;
+
 export const MusicPlan = z.strictObject({
   trackAssetId: Id.optional(),
+  /** Nudges to the analysed beat grid of `trackAssetId`; reset when the track changes. */
+  grid: MusicGridSettings.optional(),
   direction: z.string().default(''),
   bpm: z
     .strictObject({ min: z.number().positive(), max: z.number().positive() })
