@@ -1,7 +1,8 @@
 """Local image/text embeddings with a CLIP-style ONNX model (opt-in; runs on the CPU, offline).
 
-The model folder holds `vision.onnx`, `text.onnx` and `tokenizer.json`, downloaded and verified
-by the app beforehand. This module never touches the network: tokenizers are read from file,
+The model folder holds `tokenizer.json` plus either one combined `model.onnx` (a CLIP model that
+takes `input_ids`, `attention_mask` and `pixel_values` together) or separate `vision.onnx` and
+`text.onnx`, downloaded and verified by the app beforehand. This module never touches the network: tokenizers are read from file,
 never fetched. Vectors are L2-normalised, so a dot product is the cosine similarity.
 """
 
@@ -19,15 +20,33 @@ SIZE = 224
 MEAN = np.array([0.48145466, 0.4578275, 0.40821073], dtype=np.float32)
 STD = np.array([0.26862954, 0.26130258, 0.27577711], dtype=np.float32)
 MAX_TOKENS = 77
-FILES = ("vision.onnx", "text.onnx", "tokenizer.json")
+SPLIT = ("vision.onnx", "text.onnx", "tokenizer.json")
+COMBINED = ("model.onnx", "tokenizer.json")
 
 
-def _model_dir(params: dict[str, Any]) -> Path:
+def _model_dir(params: dict[str, Any]) -> tuple[Path, bool]:
+    """The model folder and whether it holds one combined model."""
     d = Path(params["modelDir"])
-    missing = [f for f in FILES if not (d / f).is_file()]
+    if all((d / f).is_file() for f in COMBINED):
+        return d, True
+    missing = [f for f in SPLIT if not (d / f).is_file()]
     if missing:
         raise AnalysisError("model-missing", f"vision model files missing: {', '.join(missing)}")
-    return d
+    return d, False
+
+
+def _tokenizer(d: Path):
+    from tokenizers import Tokenizer
+
+    tok = Tokenizer.from_file(str(d / "tokenizer.json"))
+    tok.no_padding()
+    tok.enable_truncation(MAX_TOKENS)
+    return tok
+
+
+def _ids(tok, text: str) -> dict[str, np.ndarray]:
+    ids = np.array([tok.encode(text).ids], dtype=np.int64)
+    return {"input_ids": ids, "attention_mask": np.ones_like(ids)}
 
 
 def _session(path: Path):
@@ -112,34 +131,31 @@ def grab_frame(path: str, at: float, ffmpeg: str = "ffmpeg") -> np.ndarray:
 
 
 def embed_frames(params: dict[str, Any], progress: Progress) -> dict[str, Any]:
-    d = _model_dir(params)
-    session = _session(d / "vision.onnx")
+    d, combined = _model_dir(params)
+    session = _session(d / ("model.onnx" if combined else "vision.onnx"))
+    # A combined model also wants text input: give it the empty text, and ignore its text side.
+    extra = _ids(_tokenizer(d), "") if combined else {}
     times = [float(t) for t in params["times"]]
     ffmpeg = params.get("ffmpeg") or "ffmpeg"
     rows = []
     for i, t in enumerate(times):
         pixels = preprocess(grab_frame(params["path"], t, ffmpeg))
-        rows.append(_run(session, {"pixel_values": pixels}, "image_embeds")[0])
+        rows.append(_run(session, {"pixel_values": pixels, **extra}, "image_embeds")[0])
         progress((i + 1) / max(1, len(times)))
     vectors = _normalise(np.stack(rows)) if rows else []
     return {"dim": len(vectors[0]) if vectors else 0, "vectors": vectors}
 
 
 def embed_texts(params: dict[str, Any], progress: Progress) -> dict[str, Any]:
-    from tokenizers import Tokenizer
-
-    d = _model_dir(params)
-    session = _session(d / "text.onnx")
-    tok = Tokenizer.from_file(str(d / "tokenizer.json"))
-    tok.no_padding()
-    tok.enable_truncation(MAX_TOKENS)
+    d, combined = _model_dir(params)
+    session = _session(d / ("model.onnx" if combined else "text.onnx"))
+    tok = _tokenizer(d)
+    # A combined model also wants an image: give it a blank one, and ignore its image side.
+    extra = {"pixel_values": np.zeros((1, 3, SIZE, SIZE), np.float32)} if combined else {}
     texts = [str(t) for t in params["texts"]]
     rows = []
     for i, text in enumerate(texts):
-        enc = tok.encode(text)
-        ids = np.array([enc.ids], dtype=np.int64)
-        mask = np.ones_like(ids)
-        rows.append(_run(session, {"input_ids": ids, "attention_mask": mask}, "text_embeds")[0])
+        rows.append(_run(session, {**_ids(tok, text), **extra}, "text_embeds")[0])
         progress((i + 1) / max(1, len(texts)))
     vectors = _normalise(np.stack(rows)) if rows else []
     return {"dim": len(vectors[0]) if vectors else 0, "vectors": vectors}

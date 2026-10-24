@@ -12,7 +12,8 @@ import { resolveTools } from '@trailerforge/media';
 import { z } from 'zod';
 import { callSidecar, type SidecarCommand } from './sidecar.js';
 
-export const VISION_FILES = ['vision.onnx', 'text.onnx', 'tokenizer.json'] as const;
+/** Either one combined `model.onnx` or separate vision and text models, plus the tokenizer. */
+export const VISION_FILES = ['model.onnx', 'vision.onnx', 'text.onnx', 'tokenizer.json'] as const;
 
 export interface VisionModelFile {
   name: (typeof VISION_FILES)[number];
@@ -30,6 +31,8 @@ export interface VisionModelManifest {
   /** Where it comes from (repository and revision), for the disclosure. */
   source: string;
   files: VisionModelFile[];
+  /** Hosts the download may be redirected to (a host's file CDN), shown in the disclosure. */
+  servedFrom?: string[];
 }
 
 export type VisionModelStatus = 'unavailable' | 'absent' | 'ready';
@@ -71,7 +74,7 @@ export function visionDownloadDisclosure(m: VisionModelManifest) {
     title: m.title,
     license: m.license,
     source: m.source,
-    hosts: [...new Set(m.files.map((f) => new URL(f.url).host))],
+    hosts: [...new Set([...m.files.map((f) => new URL(f.url).host), ...(m.servedFrom ?? [])])],
     totalBytes: m.files.reduce((n, f) => n + f.bytes, 0),
     sends: 'Nothing about you or your project: this only downloads the model, once.',
     afterwards: 'Matching runs on this computer; footage and frames never leave it.',

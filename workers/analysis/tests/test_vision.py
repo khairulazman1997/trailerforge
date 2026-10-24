@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from synth import write_video
-from tiny_model import DIM, build
+from tiny_model import DIM, build, build_combined
 
 from tforge_analysis.rpc import AnalysisError
 from tforge_analysis.vision import embed_frames, embed_texts, preprocess
@@ -69,3 +69,14 @@ def test_unreadable_video_fails_with_a_code(model, tmp_path):
     with pytest.raises(AnalysisError) as e:
         embed_frames({"modelDir": str(model), "path": str(bad), "times": [0]}, quiet)
     assert e.value.code == "decode-failed"
+
+
+def test_a_combined_model_gives_the_same_kind_of_vectors(tmp_path, red_then_blue):
+    d = build_combined(tmp_path / "combined")
+    frames = embed_frames(
+        {"modelDir": str(d), "path": str(red_then_blue), "times": [0.5, 1.5]}, quiet
+    )
+    a, b = (np.array(v) for v in frames["vectors"])
+    assert frames["dim"] == DIM and a @ b < 0.99
+    texts = embed_texts({"modelDir": str(d), "texts": ["a red boss", "a red boss"]}, quiet)
+    assert texts["vectors"][0] == texts["vectors"][1]

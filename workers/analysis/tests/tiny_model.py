@@ -20,6 +20,44 @@ def _save(graph, path: Path) -> None:
     onnx.save(model, str(path))
 
 
+def build_combined(dir_: Path) -> Path:
+    """One model taking text and image together, like the onnx-community CLIP exports."""
+    dir_.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(7)
+    w = numpy_helper.from_array(rng.normal(size=(3, DIM)).astype(np.float32), "W")
+    table = numpy_helper.from_array(rng.normal(size=(len(WORDS), DIM)).astype(np.float32), "E")
+    graph = helper.make_graph(
+        [
+            helper.make_node("ReduceMean", ["pixel_values"], ["m"], axes=[2, 3], keepdims=0),
+            helper.make_node("MatMul", ["m", "W"], ["image_embeds"]),
+            helper.make_node("Gather", ["E", "input_ids"], ["g"]),
+            helper.make_node("ReduceMean", ["g"], ["text_embeds"], axes=[1], keepdims=0),
+        ],
+        "clip",
+        [
+            helper.make_tensor_value_info("input_ids", TensorProto.INT64, [1, None]),
+            helper.make_tensor_value_info("attention_mask", TensorProto.INT64, [1, None]),
+            helper.make_tensor_value_info("pixel_values", TensorProto.FLOAT, [1, 3, 224, 224]),
+        ],
+        [
+            helper.make_tensor_value_info("text_embeds", TensorProto.FLOAT, [1, DIM]),
+            helper.make_tensor_value_info("image_embeds", TensorProto.FLOAT, [1, DIM]),
+        ],
+        [w, table],
+    )
+    _save(graph, dir_ / "model.onnx")
+    _tokenizer(dir_)
+    return dir_
+
+
+def _tokenizer(dir_: Path) -> None:
+    from tokenizers import Tokenizer, models, pre_tokenizers
+
+    tok = Tokenizer(models.WordLevel({w: i for i, w in enumerate(WORDS)}, unk_token="[UNK]"))
+    tok.pre_tokenizer = pre_tokenizers.Whitespace()
+    tok.save(str(dir_ / "tokenizer.json"))
+
+
 def build(dir_: Path, *, pooled: bool = True) -> Path:
     dir_.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(7)
@@ -55,10 +93,5 @@ def build(dir_: Path, *, pooled: bool = True) -> Path:
         [table],
     )
     _save(text, dir_ / "text.onnx")
-
-    from tokenizers import Tokenizer, models, pre_tokenizers
-
-    tok = Tokenizer(models.WordLevel({w: i for i, w in enumerate(WORDS)}, unk_token="[UNK]"))
-    tok.pre_tokenizer = pre_tokenizers.Whitespace()
-    tok.save(str(dir_ / "tokenizer.json"))
+    _tokenizer(dir_)
     return dir_
