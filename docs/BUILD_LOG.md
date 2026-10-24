@@ -82,9 +82,9 @@ Time and usage per task. Usage is the user's Claude Pro meter (5-hour session % 
 
 Design defaults confirmed by the user before 3.1: Markdown + printable HTML (PDF via browser print); recording settings from brief platforms + an editable table; capture notes on the slot (`extensions['game-trailer'].capture`); grouping by location → setup → featured entity.
 
-| Task                     | Commit | Start    | End      | Build time | Model | Notes                                                                                                              |
-| ------------------------ | ------ | -------- | -------- | ---------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
-| 3.1 Capture plan builder | `HASH` | 00:25:46 | 00:28:50 | ~3 min     | Opus  | seeded-PRNG property tests (no new dep); locked sections kept (a lock guards content, not recording); skip via ext |
+| Task                     | Commit    | Start    | End      | Build time | Model | Notes                                                                                                              |
+| ------------------------ | --------- | -------- | -------- | ---------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
+| 3.1 Capture plan builder | `2684a95` | 00:25:46 | 00:28:50 | ~3 min     | Opus  | seeded-PRNG property tests (no new dep); locked sections kept (a lock guards content, not recording); skip via ext |
 
 | When (M3)  | Session | Week | Note           |
 | ---------- | ------- | ---- | -------------- |
