@@ -639,7 +639,7 @@ export class AppStore {
         this.client.footage(projectId),
         this.state.projects[projectId]?.project.storyboard
           ? this.client.footageMatches(projectId)
-          : Promise.resolve({ matches: [], recordings: [] }),
+          : Promise.resolve({ matches: [], recordings: [], usedVision: false }),
       ]);
       this.set((s) => ({ footage: { ...s.footage, [projectId]: { status, matches, version } } }));
     } catch {

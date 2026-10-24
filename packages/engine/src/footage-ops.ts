@@ -3,7 +3,9 @@ import { extname } from 'node:path';
 import {
   FOOTAGE_JOB,
   MUSIC_JOB,
+  VISION_JOB,
   readFootageAnalysis,
+  readRecordingEmbedding,
   readMusicAnalysis,
   summarizeFootage,
   type FootageAnalysis,
@@ -27,6 +29,7 @@ import {
 } from '@trailerforge/schema';
 import type { Engine } from './engine.js';
 import { OpError } from './ops.js';
+import { readyVisionModel, visionScoresFor } from './vision-ops.js';
 
 /**
  * Footage operations shared by the CLI, MCP server and local service: import, status, analysis,
@@ -160,7 +163,10 @@ export async function footageStatusOp(
 
 // ---- analysis --------------------------------------------------------------------------------
 
-/** Queue footage analysis for recordings (all unanalysed ones by default) and the music track. */
+/**
+ * Queue footage analysis for recordings (all unanalysed ones by default) and the music track.
+ * When the vision model is downloaded, also embed sampled frames of recordings not yet embedded.
+ */
 export async function analyzeOp(
   engine: Engine,
   store: ProjectStore,
@@ -168,6 +174,7 @@ export async function analyzeOp(
 ): Promise<{ jobs: { assetId: string; type: string; jobId: string }[]; skipped: string[] }> {
   await engine.library.reload();
   const analysisDir = store.paths.analysisCache;
+  const vision = await readyVisionModel(engine);
   const jobs: { assetId: string; type: string; jobId: string }[] = [];
   const skipped: string[] = [];
   const wanted = opts.assetIds ? new Set(opts.assetIds) : null;
@@ -176,6 +183,30 @@ export async function analyzeOp(
     if (!a.media?.video[0]) {
       skipped.push(`${a.originalName}: not probed yet`);
       continue;
+    }
+    if (
+      vision &&
+      a.media.duration > 0 &&
+      (wanted || !(await readRecordingEmbedding(vision.modelId, a.quickHash, analysisDir)))
+    ) {
+      jobs.push({
+        assetId: a.id,
+        type: VISION_JOB,
+        jobId: engine.jobs.enqueue(
+          VISION_JOB,
+          {
+            path: a.uri,
+            quickHash: a.quickHash,
+            analysisDir,
+            durationSec: a.media.duration,
+            ...vision,
+          },
+          {
+            projectId: store.state.id,
+            dedupeKey: `${VISION_JOB}:${vision.modelId}:${a.quickHash}`,
+          },
+        ),
+      });
     }
     if (!wanted && (await readFootageAnalysis(analysisDir, a.quickHash))) continue;
     const v = a.media.video[0];
@@ -230,18 +261,28 @@ function recordings(engine: Engine, project: Project, assetIds?: string[]): Matc
     }));
 }
 
-/** Ranked suggestions for which shot each imported recording belongs to. */
+/**
+ * Ranked suggestions for which shot each imported recording belongs to. With the vision model
+ * downloaded, frame vectors the analysis already cached add an "AI vision" signal; recordings
+ * not embedded yet are matched without it (nothing is decoded here).
+ */
 export async function matchSuggestOp(
   engine: Engine,
   store: ProjectStore,
-  opts: { assetIds?: string[] | undefined } = {},
-): Promise<{ matches: RecordingMatch[]; recordings: MatchRecording[] }> {
+  opts: { assetIds?: string[] | undefined; signal?: AbortSignal | undefined } = {},
+): Promise<{ matches: RecordingMatch[]; recordings: MatchRecording[]; usedVision: boolean }> {
   requireStoryboard(store);
   await engine.library.reload();
   const recs = recordings(engine, store.state, opts.assetIds);
+  const vision = await visionScoresFor(engine, store, recs, opts.signal);
   return {
-    matches: suggestMatches({ project: store.state, recordings: recs }).matches,
+    matches: suggestMatches({
+      project: store.state,
+      recordings: recs,
+      ...(vision ? { vision } : {}),
+    }).matches,
     recordings: recs,
+    usedVision: vision !== undefined,
   };
 }
 
@@ -397,24 +438,27 @@ const AUDIO_TYPES: Record<string, string> = {
   '.opus': 'audio/ogg',
 };
 
+export type LibraryMediaKind = 'proxy' | 'audio' | 'thumbnail' | 'filmstrip';
+
 /**
- * A file the preview player may fetch: a recording's small editing copy, or a music track. Only
- * library assets, only those two things; never an arbitrary path.
+ * A file the UI may fetch: a recording's small editing copy, thumbnail or filmstrip (10 frames of
+ * 160 px in one row) from the library cache, or a music track. Only library assets, only those
+ * things; never an arbitrary path.
  */
 export async function libraryMediaOp(
   engine: Engine,
   assetId: string,
-  what: 'proxy' | 'audio',
+  what: LibraryMediaKind,
 ): Promise<MediaFile> {
   await engine.library.reload();
   const a = engine.library.get(assetId);
   if (!a) throw new OpError('not-found', `no library asset "${assetId}"`);
   let path: string;
   let type: string;
-  if (what === 'proxy') {
-    if (a.kind !== 'video') throw new OpError('usage', 'only recordings have an editing copy');
-    path = assetCachePaths(engine.home, a.quickHash).proxy;
-    type = 'video/mp4';
+  if (what !== 'audio') {
+    if (a.kind !== 'video') throw new OpError('usage', `only recordings have a ${what}`);
+    path = assetCachePaths(engine.home, a.quickHash)[what];
+    type = what === 'proxy' ? 'video/mp4' : 'image/jpeg';
   } else {
     const t = AUDIO_TYPES[extname(a.uri).toLowerCase()];
     if (a.kind !== 'audio' || !t)
@@ -427,7 +471,11 @@ export async function libraryMediaOp(
   } catch {
     throw new OpError(
       'not-found',
-      what === 'proxy' ? 'the editing copy is not built yet' : 'the music file is missing',
+      what === 'audio'
+        ? 'the music file is missing'
+        : what === 'proxy'
+          ? 'the editing copy is not built yet'
+          : `the ${what} is not built yet`,
     );
   }
 }

@@ -221,7 +221,23 @@ const TextCache = z.strictObject({
   vector: z.array(z.number()),
 });
 
-const cacheVersion = (e: VisionEmbedder) => `${e.modelId}.1`;
+const cacheVersion = (e: Pick<VisionEmbedder, 'modelId'>) => `${e.modelId}.1`;
+
+/** Frame vectors already computed for a recording, or null; never runs the model. */
+export async function readRecordingEmbedding(
+  modelId: string,
+  quickHash: string,
+  analysisDir: string,
+): Promise<number[][] | null> {
+  const file = analysisCacheFile(
+    analysisDir,
+    quickHash,
+    'vision-frames',
+    cacheVersion({ modelId }),
+  );
+  const hit = await readAnalysisCache(file, FrameCache);
+  return hit && hit.modelId === modelId ? hit.vectors : null;
+}
 
 /** Frame vectors for a recording, cached by its quick hash and the model. */
 export async function embedRecording(

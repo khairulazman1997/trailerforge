@@ -123,7 +123,7 @@ class Fake {
       canRedo: false,
     }),
     footage: async () => ({ footage: [], music: [], jobs: { queued: 0, running: 0, failed: [] } }),
-    footageMatches: async () => ({ matches: [], recordings: [] }),
+    footageMatches: async () => ({ matches: [], recordings: [], usedVision: false }),
     cutGrid: async () => null,
     media: async () => new Blob([]),
     generateCut: async () => ({

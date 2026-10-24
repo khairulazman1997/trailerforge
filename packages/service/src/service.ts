@@ -25,6 +25,9 @@ import {
   captureViewOp,
   cutGridOp,
   libraryMediaOp,
+  visionDownloadOp,
+  visionStatusOp,
+  type LibraryMediaKind,
   footageStatusOp,
   generateCutOp,
   importFootageOp,
@@ -298,7 +301,10 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         : events.emit('handoff.resolved', { id: c.id, outcome: c.outcome }),
     ),
   );
-  const settingsChanged = (what: 'secrets' | 'routes') => events.emit('settings.changed', { what });
+  const settingsChanged = (what: 'secrets' | 'routes' | 'watched-folders') =>
+    events.emit('settings.changed', { what });
+
+  let visionTaskId: string | undefined;
 
   const stores = () => [...engine.projects.values()];
   const storeById = (id: string): ProjectStore => {
@@ -470,6 +476,45 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         return view;
       },
     ],
+    ['GET', /^\/v1\/settings\/watched-folders$/, async () => engine.watched.view()],
+    [
+      'PUT',
+      /^\/v1\/settings\/watched-folders$/,
+      async ({ body }) => {
+        const { folders } = z
+          .strictObject({ folders: z.array(z.string().min(1)).max(20) })
+          .parse(await body());
+        const view = await engine.watched.set(folders);
+        settingsChanged('watched-folders');
+        return view;
+      },
+    ],
+    ['GET', /^\/v1\/vision$/, async () => visionStatusOp(engine)],
+    [
+      'POST',
+      /^\/v1\/vision\/download$/,
+      async ({ body, res }) => {
+        // Only an explicit `true` counts; the dialog shows the disclosure from GET /v1/vision first.
+        const { consent } = z.strictObject({ consent: z.literal(true) }).parse(await body());
+        const running = visionTaskId ? tasks.get(visionTaskId) : undefined;
+        res.statusCode = 202;
+        if (running?.status === 'running') return running;
+        let last = 0;
+        const task = tasks.start('vision-download', APP_TASK, (signal) =>
+          visionDownloadOp(engine, {
+            consent,
+            signal,
+            onProgress: (fraction) => {
+              if (fraction < 1 && fraction - last < 0.01) return;
+              last = fraction;
+              events.emit('vision.progress', { taskId: task.id, fraction });
+            },
+          }),
+        );
+        visionTaskId = task.id;
+        return task;
+      },
+    ],
     ['GET', /^\/v1\/handoffs$/, async () => engine.handoff.pending()],
     [
       'POST',
@@ -603,12 +648,12 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     ],
     [
       'GET',
-      /^\/v1\/library\/assets\/(?<asset>[^/]+)\/(?<what>proxy|audio)$/,
+      /^\/v1\/library\/assets\/(?<asset>[^/]+)\/(?<what>proxy|audio|thumbnail|filmstrip)$/,
       async ({ params, res }) => {
         const f = await libraryMediaOp(
           engine,
           decodeURIComponent(params.asset!),
-          params.what as 'proxy' | 'audio',
+          params.what as LibraryMediaKind,
         );
         res.writeHead(200, {
           ...SECURITY_HEADERS,
@@ -884,6 +929,8 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
 }
 
 const STREAMING = Symbol('streaming');
+/** Tasks that belong to the app rather than a project (the vision model download). */
+const APP_TASK = '';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

@@ -17,6 +17,7 @@ export type {
   SecretsView,
 } from '@trailerforge/engine';
 import type { LlmPreview, PendingHandoff, RoutesView, SecretsView } from '@trailerforge/engine';
+import type { LibraryMediaKind, VisionView, WatchedFoldersView } from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
 import type { CaptureStatus, CaptureView, ExportOutcome, RenderedPack } from '@trailerforge/engine';
 import type {
@@ -212,6 +213,21 @@ export class ServiceClient {
   clearApiKey() {
     return this.request<SecretsView>('DELETE', '/v1/secrets/anthropic-api-key');
   }
+  watchedFolders() {
+    return this.request<WatchedFoldersView>('GET', '/v1/settings/watched-folders');
+  }
+  /** Replace the watched folders (absolute paths of existing folders; at most 20). */
+  setWatchedFolders(folders: string[]) {
+    return this.request<WatchedFoldersView>('PUT', '/v1/settings/watched-folders', { folders });
+  }
+  /** The vision model's state and what downloading it would do. */
+  vision() {
+    return this.request<VisionView>('GET', '/v1/vision');
+  }
+  /** Start the one-time model download (a task; progress arrives as `vision.progress` events). */
+  downloadVision() {
+    return this.request<TaskView>('POST', '/v1/vision/download', { consent: true });
+  }
   handoffs() {
     return this.request<PendingHandoff[]>('GET', '/v1/handoffs');
   }
@@ -290,8 +306,11 @@ export class ServiceClient {
       `/v1/projects/${encodeURIComponent(id)}/cut/grid`,
     );
   }
-  /** A recording's editing copy or a music file, as a Blob (the player cannot send the token itself). */
-  async media(assetId: string, what: 'proxy' | 'audio'): Promise<Blob> {
+  /**
+   * A recording's editing copy, thumbnail or filmstrip, or a music file, as a Blob (an `<img>` or
+   * the player cannot send the token itself).
+   */
+  async media(assetId: string, what: LibraryMediaKind): Promise<Blob> {
     const res = await this.fetchFn(
       `${this.opts.baseUrl}/v1/library/assets/${encodeURIComponent(assetId)}/${what}`,
       {

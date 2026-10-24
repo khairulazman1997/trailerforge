@@ -2,8 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { LibraryStore, type CommandRegistry } from '@trailerforge/core';
-import { registerAnalysisJobs } from '@trailerforge/analysis';
+import { Egress, LibraryStore, type CommandRegistry } from '@trailerforge/core';
+import {
+  PINNED_VISION_MODEL,
+  registerAnalysisJobs,
+  sidecarEmbedder,
+  type VisionEmbedder,
+  type VisionModelManifest,
+} from '@trailerforge/analysis';
 import { Ingestor, registerIngestJobs } from '@trailerforge/ingest';
 import {
   bridgeProjectStore,
@@ -28,6 +34,7 @@ import { gameTrailerPack } from '@trailerforge/pack-game-trailer';
 import { corePlugin } from './core-plugin.js';
 import { HandoffHub } from './handoff.js';
 import { openFileSecretStore, type SecretStore } from './secrets.js';
+import { WatchedFolders } from './watched-folders.js';
 
 export interface EngineOptions {
   /** App data dir (job DB, temp, plugins). Default: $TFORGE_HOME or ~/.trailerforge */
@@ -45,6 +52,14 @@ export interface EngineOptions {
   secrets?: SecretStore;
   /** Options for the Claude Code CLI provider (tests point it at a fake CLI). */
   claudeCode?: ClaudeCodeOptions;
+  /** The network door's fetch (tests inject one). Default: the global `fetch`. */
+  egressFetch?: typeof fetch;
+  /** The opt-in vision model. Default: the one pinned in this build (null hides the feature). */
+  visionModel?: VisionModelManifest | null;
+  /** Builds the vision embedder for a model folder (tests pass a stub). Default: the sidecar. */
+  visionEmbedder?: (modelDir: string, modelId: string) => VisionEmbedder;
+  /** How often watched folders are polled, in ms (default 2,000). */
+  watchIntervalMs?: number;
   /** Disclosure gate for the default client; called before any request leaves the machine. */
   approveSend?: LlmClientOptions['approveSend'];
 }
@@ -70,6 +85,12 @@ export class Engine {
     readonly jobs: JobQueue,
     readonly library: LibraryStore,
     readonly ingestor: Ingestor,
+    readonly watched: WatchedFolders,
+    readonly egress: Egress,
+    readonly vision: {
+      manifest: VisionModelManifest | null;
+      embedder: (modelDir: string, modelId: string) => VisionEmbedder;
+    },
     readonly llm: LlmClient,
     readonly secrets: SecretStore,
     readonly handoff: HandoffHub,
@@ -105,8 +126,14 @@ export class Engine {
     // running by a crash resumes at startup.
     const library = await LibraryStore.open(home);
     registerIngestJobs({ library, queue: jobs, home });
-    registerAnalysisJobs(jobs);
+    const embedder = opts.visionEmbedder ?? ((dir: string, id: string) => sidecarEmbedder(dir, id));
+    registerAnalysisJobs(jobs, { visionEmbedder: embedder });
     const ingestor = new Ingestor({ queue: jobs });
+    const watched = new WatchedFolders(home, ingestor, opts.watchIntervalMs);
+    const egress = new Egress({
+      logFile: join(home, 'logs', 'egress.jsonl'),
+      ...(opts.egressFetch ? { fetch: opts.egressFetch } : {}),
+    });
     jobs.subscribe(({ job }) =>
       bus.emit('core/job.updated', {
         jobId: job.id,
@@ -144,7 +171,7 @@ export class Engine {
         routes: await loadRoutesConfig(routesPath),
         ...(opts.approveSend ? { approveSend: opts.approveSend } : {}),
       });
-    return new Engine(
+    const engine = new Engine(
       home,
       bus,
       host,
@@ -152,6 +179,12 @@ export class Engine {
       jobs,
       library,
       ingestor,
+      watched,
+      egress,
+      {
+        manifest: opts.visionModel === undefined ? PINNED_VISION_MODEL : opts.visionModel,
+        embedder,
+      },
       llm,
       secrets,
       handoff,
@@ -159,6 +192,8 @@ export class Engine {
       status,
       opts.autosaveMs ?? 2000,
     );
+    await watched.start();
+    return engine;
   }
 
   /** Providers shown in settings and accepted in routes: the built-in ones plus any a route names. */
@@ -215,6 +250,7 @@ export class Engine {
   }
 
   async close(): Promise<void> {
+    await this.watched.stop();
     for (const dir of [...this.projects.keys()]) await this.closeProject(dir);
     await this.jobs.close();
   }

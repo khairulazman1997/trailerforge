@@ -408,6 +408,96 @@ describe('tasks', () => {
   });
 });
 
+describe('footage settings, vision and previews', () => {
+  it('saves watched folders and refuses paths that are not existing folders', async () => {
+    const obs = join(root, 'svc-obs');
+    await mkdir(obs);
+    await expect(client.setWatchedFolders(['relative'])).rejects.toMatchObject({ status: 400 });
+    await expect(client.setWatchedFolders([join(root, 'nope')])).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(await client.setWatchedFolders([obs])).toMatchObject({
+      folders: [obs],
+      watching: true,
+    });
+    expect((await client.watchedFolders()).folders).toEqual([obs]);
+    expect(await client.setWatchedFolders([])).toMatchObject({ folders: [], watching: false });
+  });
+
+  it('shows the vision disclosure, and downloads only with an explicit yes', async () => {
+    const view = await client.vision();
+    expect(view.status).not.toBe('ready');
+    expect(view.disclosure?.sends).toMatch(/Nothing about you/);
+    for (const body of [{}, { consent: false }, { consent: 'yes' }]) {
+      const r = await fetch(`${svc.url}/v1/vision/download`, {
+        method: 'POST',
+        headers: { ...auth(), 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(r.status).toBe(400);
+    }
+
+    // A second engine with a test model and a fake network, so the task runs end to end.
+    const file = Buffer.from('m'.repeat(500));
+    const { createHash } = await import('node:crypto');
+    const fetched: string[] = [];
+    const e2 = await Engine.start({
+      home: join(root, 'vision-home'),
+      autosaveMs: 0,
+      loadUserPlugins: false,
+      visionModel: {
+        id: 'svc-clip',
+        title: 'Test',
+        license: 'MIT',
+        source: 'example/test@1',
+        files: [
+          {
+            name: 'model.onnx',
+            url: 'https://models.example.org/model.onnx',
+            bytes: file.length,
+            sha256: createHash('sha256').update(file).digest('hex'),
+          },
+        ],
+      },
+      egressFetch: (async (url: string) => {
+        fetched.push(url);
+        return new Response(new Uint8Array(file));
+      }) as unknown as typeof fetch,
+    });
+    const s2 = await startService({ engine: e2 });
+    try {
+      const c2 = new ServiceClient({ baseUrl: s2.url, token: s2.token });
+      expect((await c2.vision()).status).toBe('absent');
+      const task = await c2.downloadVision();
+      expect(task.kind).toBe('vision-download');
+      expect(await c2.waitForTask(task.id)).toMatchObject({
+        status: 'succeeded',
+        result: { status: 'ready' },
+      });
+      expect(fetched).toEqual(['https://models.example.org/model.onnx']);
+    } finally {
+      await s2.close();
+      await e2.close();
+    }
+  });
+
+  it('serves previews only for library assets', async () => {
+    for (const what of ['thumbnail', 'filmstrip']) {
+      const r = await fetch(`${svc.url}/v1/library/assets/asset_missing/${what}`, {
+        headers: auth(),
+      });
+      expect(r.status).toBe(404);
+      expect(((await r.json()) as { error: { message: string } }).error.message).toMatch(
+        /no library asset/,
+      );
+    }
+    const other = await fetch(`${svc.url}/v1/library/assets/asset_missing/..%2Fsecrets.json`, {
+      headers: auth(),
+    });
+    expect(other.status).toBe(404);
+  });
+});
+
 describe('EventLog', () => {
   it('tells a client that fell too far behind to refetch', async () => {
     const log = new EventLog(3);
