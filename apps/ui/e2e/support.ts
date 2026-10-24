@@ -25,7 +25,8 @@ export interface TestService {
 export async function startTestService(
   opts: {
     claudeBin?: string;
-    claudeBinArgs?: string[];
+    /** Claude Code's settings file for the test (never the real `~/.claude.json`). */
+    claudeConfigPath?: string;
     /** Where Claude Code would launch the MCP server from (enables the Connect button). */
     cliPath?: string;
     /** Make the mock provider claim it sends data off the computer. */ offDevice?: boolean;
@@ -115,7 +116,7 @@ export async function startTestService(
     engine,
     staticDir: resolve(import.meta.dirname, '..', 'dist'),
     ...(opts.claudeBin ? { claudeBin: opts.claudeBin } : {}),
-    ...(opts.claudeBinArgs ? { claudeBinArgs: opts.claudeBinArgs } : {}),
+    ...(opts.claudeConfigPath ? { claudeConfigPath: opts.claudeConfigPath } : {}),
     ...(opts.cliPath ? { cliPath: opts.cliPath } : {}),
   });
   return {

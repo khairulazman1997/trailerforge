@@ -379,6 +379,9 @@ importers:
       '@trailerforge/engine':
         specifier: workspace:*
         version: link:../engine
+      '@trailerforge/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@trailerforge/pack-game-trailer':
         specifier: workspace:*
         version: link:../pack-game-trailer

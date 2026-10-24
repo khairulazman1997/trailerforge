@@ -232,8 +232,9 @@ export class ServiceClient {
   claudeCode() {
     return this.request<ClaudeCodeView>('GET', '/v1/claude-code');
   }
-  connectClaudeCode() {
-    return this.request<ClaudeCodeView>('POST', '/v1/claude-code/connect', {});
+  /** `app` (default): talk to this running app; `standalone`: start its own copy (app closed). */
+  connectClaudeCode(mode: 'app' | 'standalone' = 'app') {
+    return this.request<ClaudeCodeView>('POST', '/v1/claude-code/connect', { mode });
   }
   disconnectClaudeCode() {
     return this.request<ClaudeCodeView>('DELETE', '/v1/claude-code');

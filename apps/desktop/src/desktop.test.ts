@@ -30,6 +30,7 @@ async function harness() {
   };
   const host: DesktopHost = {
     dataDir: join(dir, 'engine'),
+    port: 0,
     uiDir: ui,
     safeStorage: {
       isEncryptionAvailable: () => true,

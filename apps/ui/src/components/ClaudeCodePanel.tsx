@@ -2,15 +2,14 @@ import { useEffect, useState } from 'react';
 import { useAppState, useStore } from '../app-context.js';
 
 /**
- * Connects Claude Code to TrailerForge's tools (an MCP server), so it can read and edit a
- * project from the terminal. One click registers it; the command is shown for anyone who would
- * rather run it themselves.
+ * Connects Claude Code to TrailerForge's tools (MCP). By default Claude Code talks to this app
+ * while it is open: it works on the project open here, its edits appear at once, and undo covers
+ * both. The separate tool (Claude Code starts its own copy) is there for working with the app shut.
  */
 export function ClaudeCodePanel() {
   const store = useStore();
   const cc = useAppState((s) => s.claudeCode);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
   useEffect(() => {
     void store.loadClaudeCode();
   }, [store]);
@@ -23,80 +22,84 @@ export function ClaudeCodePanel() {
       setBusy(false);
     }
   };
+  const canApp = cc.available.includes('app');
+  const canStandalone = cc.available.includes('standalone');
 
   return (
     <section aria-labelledby="cc-h" data-testid="claude-code-panel">
       <h2 id="cc-h">Claude Code</h2>
       <p className="muted">
-        Lets Claude Code in your terminal read and edit your projects: show the capture checklist,
-        change the storyboard, scan the game repo. Edits are saved at once and can be undone. Claude
-        Code can never add footage, and cannot run the deep repo scan.
+        Lets Claude Code read and edit your projects: show the capture checklist, change the
+        storyboard, scan the game repo. With one project open here, just ask; it works on that one.
+        Its edits show up here at once and Undo covers them. It can never add footage or run the
+        deep repo scan.
       </p>
-      <p>
+      <p data-testid="claude-code-state">
         {!cc.installed ? (
           <span className="chip warn">Claude Code not found</span>
-        ) : cc.connected ? (
-          <span className="chip ok">Connected</span>
-        ) : (
+        ) : !cc.mode ? (
           <span className="chip">Not connected</span>
+        ) : !cc.upToDate ? (
+          <span className="chip warn">Needs reconnecting</span>
+        ) : cc.mode === 'app' ? (
+          <span className="chip ok">Connected to this app</span>
+        ) : (
+          <span className="chip ok">Connected (separate tool)</span>
         )}
       </p>
       {!cc.installed && (
         <p className="muted">
-          Neither the claude command nor Claude Code's settings file was found. Install and open
-          Claude Code once, then come back.
+          Claude Code&rsquo;s settings were not found. Install Claude Code and open it once, then
+          come back.
         </p>
       )}
-      {cc.canConnect ? (
-        <div className="row">
-          <button
-            type="button"
-            disabled={busy || !cc.installed}
-            onClick={() => void work(() => store.connectClaudeCode())}
-          >
-            {cc.connected ? 'Reconnect' : 'Connect Claude Code'}
-          </button>
-          {cc.connected && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void work(() => store.disconnectClaudeCode())}
-            >
-              Disconnect
-            </button>
-          )}
-        </div>
-      ) : (
+      {cc.mode && !cc.upToDate && (
         <p className="muted">
-          This copy of TrailerForge does not include the command-line tool Claude Code needs.
+          This app now runs at a different address (or moved), so Claude Code would not reach it.
         </p>
       )}
-      {cc.command && (
-        <details>
-          <summary>Run it yourself instead</summary>
-          <p className="muted">Paste this in a terminal:</p>
-          <pre className="cc-command">
-            <code>{cc.command}</code>
-          </pre>
+      <div className="row">
+        {canApp && (
           <button
             type="button"
-            onClick={() => {
-              void navigator.clipboard
-                ?.writeText(cc.command!)
-                .then(() => setCopied(true))
-                .catch(() =>
-                  store.toast('error', 'Could not copy. Select the command and copy it.'),
-                );
-            }}
+            className={cc.mode === 'app' && cc.upToDate ? '' : 'primary'}
+            disabled={busy || !cc.installed}
+            onClick={() => void work(() => store.connectClaudeCode('app'))}
           >
-            {copied ? 'Copied' : 'Copy command'}
+            {cc.mode === 'app' ? 'Reconnect' : 'Connect Claude Code'}
+          </button>
+        )}
+        {cc.mode && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void work(() => store.disconnectClaudeCode())}
+          >
+            Disconnect
+          </button>
+        )}
+      </div>
+      <p className="muted">
+        After connecting, start a new Claude Code session. Claude Code reaches TrailerForge while
+        this app is open.
+      </p>
+      {canStandalone && (
+        <details>
+          <summary>Use Claude Code while this app is closed</summary>
+          <p className="muted">
+            Claude Code can instead start its own copy of TrailerForge. That works with the app
+            closed, but a project open here is then locked for Claude Code, and you name the project
+            folder in each request.
+          </p>
+          <button
+            type="button"
+            disabled={busy || !cc.installed || cc.mode === 'standalone'}
+            onClick={() => void work(() => store.connectClaudeCode('standalone'))}
+          >
+            Use the separate tool instead
           </button>
         </details>
       )}
-      <p className="muted">
-        A project can be open in only one place at a time. If Claude Code reports that a project is
-        locked, close it in TrailerForge first (or the other way round).
-      </p>
     </section>
   );
 }

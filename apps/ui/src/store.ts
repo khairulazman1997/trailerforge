@@ -610,8 +610,8 @@ export class AppStore {
     if (v) this.set({ claudeCode: v });
   }
 
-  async connectClaudeCode(): Promise<boolean> {
-    const v = await this.run((c) => c.connectClaudeCode());
+  async connectClaudeCode(mode: 'app' | 'standalone' = 'app'): Promise<boolean> {
+    const v = await this.run((c) => c.connectClaudeCode(mode));
     if (!v) return false;
     this.set({ claudeCode: v });
     this.toast('info', 'Claude Code is connected. Start a new Claude Code session to use it.');

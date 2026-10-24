@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createReadStream } from 'node:fs';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { extname, isAbsolute, join, relative } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -28,6 +28,7 @@ import {
   claudeCodeConnectOp,
   claudeCodeDisconnectOp,
   claudeCodeStatusOp,
+  type ClaudeCodeSetup,
   visionDownloadOp,
   visionStatusOp,
   type LibraryMediaKind,
@@ -53,6 +54,7 @@ import {
   suggestBriefAnswerOp,
   type Engine,
 } from '@trailerforge/engine';
+import { serveMcpHttp } from '@trailerforge/mcp';
 import { SectionLockedError } from '@trailerforge/storyboard';
 import { z } from 'zod';
 import { EventLog } from './events.js';
@@ -67,6 +69,8 @@ import {
 import { TaskManager } from './tasks.js';
 
 export const API_VERSION = 'v1';
+/** The app's usual port, so the address Claude Code was given survives a restart. */
+export const DEFAULT_APP_PORT = 47821;
 
 export interface ServiceOptions {
   engine: Engine;
@@ -74,6 +78,13 @@ export interface ServiceOptions {
   host?: string;
   /** Default 0: pick a free port. */
   port?: number;
+  /**
+   * Try this port first and fall back to a free one if it is taken. The app uses a fixed one so
+   * the address Claude Code was given keeps working across launches.
+   */
+  preferredPort?: number;
+  /** Token Claude Code uses on `/mcp`. Default: kept in `<home>/mcp-token`, made on first use. */
+  mcpToken?: string;
   /** Default: a fresh random token per launch. */
   token?: string;
   /**
@@ -85,11 +96,12 @@ export interface ServiceOptions {
   maxBodyBytes?: number;
   /** Path of the `claude` CLI used by the opt-in deep scan; default `claude` on PATH. */
   claudeBin?: string;
-  /** Where Claude Code launches TrailerForge's MCP server from (`apps/cli/dist/bin.js`); null/absent: not offered. */
+  /**
+   * `apps/cli/dist/bin.js`, so Claude Code can also be set up to start its own copy of the engine
+   * (works with the app closed). Null/absent: only the connection to the running app is offered.
+   */
   cliPath?: string | null;
-  /** Arguments before the `claude` CLI's own (tests run a fake CLI through Node). */
-  claudeBinArgs?: string[];
-  /** Claude Code's settings file when there is no `claude` command; default `~/.claude.json`. */
+  /** Claude Code's user settings file; default `~/.claude.json` (tests use a temporary one). */
   claudeConfigPath?: string;
   /**
    * Folder of a built UI (index.html + assets) to serve at `/`, same origin as the API. The
@@ -99,6 +111,8 @@ export interface ServiceOptions {
 }
 
 export interface RunningService {
+  /** Claude Code's address for this app's tools (MCP over HTTP) and the token it must send. */
+  mcp: { url: string; token: string };
   url: string;
   port: number;
   token: string;
@@ -265,6 +279,11 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
   }
   const token = opts.token ?? newToken();
   if (token.length < 32) throw new Error('token must be at least 32 characters');
+  const mcpToken = opts.mcpToken ?? (await loadOrCreateToken(join(engine.home, 'mcp-token')));
+  if (mcpToken.length < 32) throw new Error('MCP token must be at least 32 characters');
+  // With one project open in the window, Claude Code's requests need not name it.
+  const openProject = () =>
+    engine.projects.size === 1 ? [...engine.projects.keys()][0] : undefined;
   const maxBody = opts.maxBodyBytes ?? 5 * 1024 * 1024;
   const events = new EventLog();
   const tasks = new TaskManager(events, (err) => {
@@ -315,12 +334,12 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     events.emit('settings.changed', { what });
 
   let visionTaskId: string | undefined;
-  const claudeCli = {
-    ...(opts.claudeBin ? { bin: opts.claudeBin } : {}),
-    ...(opts.claudeBinArgs ? { binArgs: opts.claudeBinArgs } : {}),
-    ...(opts.claudeConfigPath ? { configPath: opts.claudeConfigPath } : {}),
+  // Read at each request: the port is only known once the server listens.
+  const claudeSetup = (): ClaudeCodeSetup => ({
+    app: { url: `http://127.0.0.1:${port}/mcp`, token: mcpToken },
     cliPath: opts.cliPath ?? null,
-  };
+    ...(opts.claudeConfigPath ? { configPath: opts.claudeConfigPath } : {}),
+  });
 
   const stores = () => [...engine.projects.values()];
   const storeById = (id: string): ProjectStore => {
@@ -505,9 +524,19 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         return view;
       },
     ],
-    ['GET', /^\/v1\/claude-code$/, async () => claudeCodeStatusOp(engine, claudeCli)],
-    ['POST', /^\/v1\/claude-code\/connect$/, async () => claudeCodeConnectOp(engine, claudeCli)],
-    ['DELETE', /^\/v1\/claude-code$/, async () => claudeCodeDisconnectOp(engine, claudeCli)],
+    ['GET', /^\/v1\/claude-code$/, async () => claudeCodeStatusOp(engine, claudeSetup())],
+    [
+      'POST',
+      /^\/v1\/claude-code\/connect$/,
+      async ({ body }) => {
+        const { mode } = z
+          .strictObject({ mode: z.enum(['app', 'standalone']).default('app') })
+          .default({ mode: 'app' })
+          .parse(await body());
+        return claudeCodeConnectOp(engine, claudeSetup(), mode);
+      },
+    ],
+    ['DELETE', /^\/v1\/claude-code$/, async () => claudeCodeDisconnectOp(engine, claudeSetup())],
     ['GET', /^\/v1\/vision$/, async () => visionStatusOp(engine)],
     [
       'POST',
@@ -884,6 +913,20 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         return;
       }
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      // Claude Code's door: its own long-lived token, never the UI's (which changes per launch).
+      if (url.pathname === '/mcp') {
+        if (!tokenMatches(bearer(req), mcpToken))
+          throw new HttpError(401, 'unauthorized', 'missing or wrong token');
+        if (req.method !== 'POST')
+          throw new HttpError(405, 'method-not-allowed', 'this MCP endpoint takes POST only');
+        await serveMcpHttp(
+          { engine, defaultProject: openProject },
+          req,
+          res,
+          await readJson(req, maxBody),
+        );
+        return;
+      }
       // The UI bundle is public code; only the API needs the token.
       if (staticRoot && !url.pathname.startsWith('/v1/') && url.pathname !== '/v1') {
         await serveStatic(staticRoot, req, res, url.pathname);
@@ -922,10 +965,22 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     }
   }
 
-  await new Promise<void>((done, fail) => {
-    server.once('error', fail);
-    server.listen(opts.port ?? 0, host, () => done());
-  });
+  const listen = (p: number) =>
+    new Promise<void>((done, fail) => {
+      server.once('error', fail);
+      server.listen(p, host, () => {
+        server.off('error', fail);
+        done();
+      });
+    });
+  if (opts.port === undefined && opts.preferredPort) {
+    await listen(opts.preferredPort).catch(async (err: NodeJS.ErrnoException) => {
+      if (err.code !== 'EADDRINUSE' && err.code !== 'EACCES') throw err;
+      await listen(0); // taken (another copy of the app?): any free port; Settings says reconnect
+    });
+  } else {
+    await listen(opts.port ?? 0);
+  }
   port = (server.address() as AddressInfo).port;
   for (const h of ['127.0.0.1', 'localhost']) allowedOrigins.add(`http://${h}:${port}`);
 
@@ -933,6 +988,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     url: `http://127.0.0.1:${port}`,
     port,
     token,
+    mcp: { url: `http://127.0.0.1:${port}/mcp`, token: mcpToken },
     events,
     async close() {
       engine.handoff.available = false;
@@ -948,6 +1004,15 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
 }
 
 const STREAMING = Symbol('streaming');
+
+/** A secret kept in a file only this user can read; made once, then reused across launches. */
+async function loadOrCreateToken(path: string): Promise<string> {
+  const existing = (await readFile(path, 'utf8').catch(() => '')).trim();
+  if (existing.length >= 32) return existing;
+  const fresh = newToken();
+  await writeFile(path, `${fresh}\n`, { mode: 0o600 });
+  return fresh;
+}
 /** Tasks that belong to the app rather than a project (the vision model download). */
 const APP_TASK = '';
 

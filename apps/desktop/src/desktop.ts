@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { Engine } from '@trailerforge/engine';
-import { startService } from '@trailerforge/service';
+import { DEFAULT_APP_PORT, startService } from '@trailerforge/service';
 import { openSafeSecretStore, type SafeStorageLike } from './safe-secrets.js';
 import { isSafeExternalUrl, isServiceUrl } from './window-policy.js';
 
@@ -19,6 +19,8 @@ export interface DesktopHost {
   dataDir: string;
   /** Folder of the built UI. */
   uiDir: string;
+  /** Port to try first (tests pass 0 for any free port). Default `DEFAULT_APP_PORT`. */
+  port?: number;
   /** The command-line tool (`apps/cli/dist/bin.js`) when it ships with this build, for Claude Code. */
   cliPath?: string | undefined;
   safeStorage: SafeStorageLike;
@@ -53,6 +55,7 @@ export async function startDesktop(host: DesktopHost): Promise<Desktop> {
     svc = await startService({
       engine,
       staticDir: host.uiDir,
+      preferredPort: host.port ?? DEFAULT_APP_PORT,
       ...(host.cliPath ? { cliPath: host.cliPath } : {}),
     });
   } catch (err) {

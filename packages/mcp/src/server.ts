@@ -32,8 +32,11 @@ import { COMMAND_DESCRIPTIONS, HIDDEN_COMMANDS } from './descriptions.js';
 
 export interface McpServerOptions {
   engine: Engine;
-  /** Project used when a tool call names none. */
-  defaultProject?: string | undefined;
+  /**
+   * Project used when a tool call names none: a folder, or a function asked at each call (the
+   * app passes "the one project open in the window").
+   */
+  defaultProject?: string | (() => string | undefined) | undefined;
   /**
    * Folders under which an agent may register a NEW game repo for scanning. Empty (default):
    * agents can only rescan sources the user already added with the CLI or UI.
@@ -53,7 +56,7 @@ interface ToolDef {
 const PROJECT_PROP = {
   type: 'string',
   description:
-    'Path of the project folder (X.tforge). Optional if the server was started with one.',
+    'Path of the project folder (X.tforge). Optional when the server was started with one, or when exactly one project is open in the TrailerForge app.',
 };
 
 const result = (data: unknown): CallToolResult => ({
@@ -112,9 +115,18 @@ export function createMcpServer(opts: McpServerOptions): Server {
   const tools = new Map<string, ToolDef>();
 
   const project = async (args: Args): Promise<ProjectStore> => {
-    const dir =
-      (typeof args.project === 'string' ? args.project : undefined) ?? opts.defaultProject;
-    if (!dir) throw new OpError('usage', 'no project: pass "project" (path of the .tforge folder)');
+    const fallback =
+      typeof opts.defaultProject === 'function' ? opts.defaultProject() : opts.defaultProject;
+    const dir = (typeof args.project === 'string' ? args.project : undefined) ?? fallback;
+    if (!dir) {
+      const open = [...engine.projects.keys()];
+      throw new OpError(
+        'usage',
+        open.length > 1
+          ? `several projects are open; pass "project", one of: ${open.join('; ')}`
+          : 'no project: pass "project" (path of the .tforge folder)',
+      );
+    }
     return engine.openProject(dir);
   };
   const add = (def: ToolDef) => tools.set(def.tool.name, def);

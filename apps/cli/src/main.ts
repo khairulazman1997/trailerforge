@@ -3,7 +3,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { Engine, type EngineOptions } from '@trailerforge/engine';
 import { createMcpServer, serveStdio } from '@trailerforge/mcp';
 import { MediaError, probe } from '@trailerforge/media';
-import { startService } from '@trailerforge/service';
+import { DEFAULT_APP_PORT, startService } from '@trailerforge/service';
 import { captureCommand } from './capture.js';
 import {
   analyzeCommand,
@@ -213,7 +213,7 @@ export async function main(
       }
       const svc = await startService({
         engine,
-        port,
+        ...(o.port === undefined ? { preferredPort: DEFAULT_APP_PORT } : { port }),
         allowedOrigins: o['allow-origin'] ?? [],
         ...(process.argv[1] ? { cliPath: resolve(process.argv[1]) } : {}),
         ...(o.ui ? { staticDir: resolve(o.ui) } : {}),

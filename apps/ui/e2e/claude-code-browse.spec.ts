@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
@@ -6,32 +6,16 @@ import { sampleProject } from '@trailerforge/schema/fixtures';
 import { startTestService, type TestService } from './support.js';
 
 let t: TestService;
-let servers: string;
+let settings: string;
 const CLI = 'C:/tforge/apps/cli/dist/bin.js';
-
-/** A stand-in `claude` that keeps its MCP registrations in a JSON file. */
-const fakeClaude = (state: string) => `const fs = require('fs'); const f = ${JSON.stringify(state)};
-const db = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
-const [, , a, b, ...rest] = process.argv;
-if (a === 'mcp' && b === 'get') process.exit(db[rest[0]] ? 0 : 1);
-if (a === 'mcp' && b === 'add') {
-  const i = rest.indexOf('--'); db[rest[i - 1]] = { cmd: rest.slice(i + 1) };
-  fs.writeFileSync(f, JSON.stringify(db)); process.exit(0);
-}
-if (a === 'mcp' && b === 'remove') { delete db[rest[rest.length - 1]]; fs.writeFileSync(f, JSON.stringify(db)); process.exit(0); }
-process.exit(2);`;
 
 test.beforeAll(async () => {
   const dir = join(process.env.TEMP ?? process.env.TMPDIR ?? '.', `tforge-cc-${Date.now()}`);
   mkdirSync(dir, { recursive: true });
-  servers = join(dir, 'servers.json');
-  const script = join(dir, 'claude.js');
-  writeFileSync(script, fakeClaude(servers));
-  t = await startTestService({
-    claudeBin: process.execPath,
-    claudeBinArgs: [script],
-    cliPath: CLI,
-  });
+  // A stand-in for Claude Code's ~/.claude.json, with things that must survive.
+  settings = join(dir, 'claude.json');
+  writeFileSync(settings, JSON.stringify({ userID: 'u1', mcpServers: {} }));
+  t = await startTestService({ claudeConfigPath: settings, cliPath: CLI });
 });
 test.afterAll(async () => {
   await t.close();
@@ -56,25 +40,38 @@ const asDesktop = (page: Page) =>
 const picks = (page: Page, path: string) =>
   page.evaluate((p) => ((window as unknown as { __picked?: string }).__picked = p), path);
 
-test('Settings: connect Claude Code in one click, see the command, disconnect', async ({
+test('Settings: connect Claude Code to this app in one click, or the separate tool, then disconnect', async ({
   page,
 }) => {
   await page.goto(`${t.svc.url}/settings#token=${t.svc.token}`);
   const panel = page.getByTestId('claude-code-panel');
-  await expect(panel.getByText('Not connected')).toBeVisible();
+  const state = panel.getByTestId('claude-code-state');
+  await expect(state).toHaveText('Not connected');
   await panel.getByRole('button', { name: 'Connect Claude Code' }).click();
-  await expect(panel.getByText('Connected', { exact: true })).toBeVisible();
+  await expect(state).toHaveText('Connected to this app');
   await expect(page.getByText('Claude Code is connected.')).toBeVisible();
-
-  await panel.getByText('Run it yourself instead').click();
-  await expect(panel.locator('code')).toContainText('claude mcp add --scope user trailerforge --');
-  await expect(panel.locator('code')).toContainText(CLI);
+  const saved = JSON.parse(readFileSync(settings, 'utf8'));
+  expect(saved.userID).toBe('u1');
+  expect(saved.mcpServers.trailerforge).toEqual({
+    type: 'http',
+    url: t.svc.mcp.url,
+    headers: { Authorization: `Bearer ${t.svc.mcp.token}` },
+  });
   expect(await axe(page)).toEqual([]);
 
-  await panel.getByRole('button', { name: 'Reconnect' }).click();
-  await expect(panel.getByRole('button', { name: 'Disconnect' })).toBeVisible();
+  await panel.getByText('Use Claude Code while this app is closed').click();
+  await panel.getByRole('button', { name: 'Use the separate tool instead' }).click();
+  await expect(state).toHaveText('Connected (separate tool)');
+  expect(JSON.parse(readFileSync(settings, 'utf8')).mcpServers.trailerforge.type).toBe('stdio');
+
+  await panel
+    .getByRole('button', { name: 'Reconnect' })
+    .or(panel.getByRole('button', { name: 'Connect Claude Code' }))
+    .click();
+  await expect(state).toHaveText('Connected to this app');
   await panel.getByRole('button', { name: 'Disconnect' }).click();
-  await expect(panel.getByText('Not connected')).toBeVisible();
+  await expect(state).toHaveText('Not connected');
+  expect(JSON.parse(readFileSync(settings, 'utf8')).mcpServers).toEqual({});
 });
 
 test('desktop file chooser: open a project, choose where a new one goes, link a game repo', async ({

@@ -190,7 +190,8 @@ describe('tool surface', () => {
     const bare = await connect({ engine });
     const r = await call(bare, 'project_summary');
     expect(r.isError).toBe(true);
-    expect(r.data.error).toMatch(/no project/);
+    // With several projects open in this engine, the message also lists them.
+    expect(r.data.error).toMatch(/pass "project"/);
     expect((await call(client, 'no_such_tool')).isError).toBe(true);
   });
 });

@@ -68,7 +68,7 @@ In the desktop app, **Browse…** buttons open the Windows file chooser to open 
 
 ### Drive a project from Claude Code (MCP)
 
-Easiest: open **Settings → Claude Code** and press **Connect Claude Code** (it runs `claude mcp add` for you, at user scope, on this app's data folder so Claude Code shares your library and provider settings; **Disconnect** removes it; if there is no `claude` command, as when Claude Code runs only inside the Claude desktop app, it edits that app's `~/.claude.json` instead, changing only its own `trailerforge` entry and keeping a `.tforge-backup` copy; and "Run it yourself instead" shows the command). Claude Code then names the project folder in each request. By hand:
+Easiest: open **Settings → Claude Code** and press **Connect Claude Code**, then start a new Claude Code session. Claude Code then talks to the running app (MCP over HTTP at `http://127.0.0.1:47821/mcp`, its own token kept in `<home>/mcp-token`): it works on the project open in the window without being told the path, its edits appear in the window at once, and Undo covers them. Registering only touches the `trailerforge` entry in Claude Code's `~/.claude.json` (the file the `claude` command and the Claude desktop app both read), keeping a `.tforge-backup` copy. If the fixed port is taken, the app uses another and Settings says "Needs reconnecting". To use Claude Code while the app is closed, choose "Use the separate tool instead": Claude Code then starts its own copy (a project open in the app is locked for it). By hand, the separate tool is:
 
 ```bash
 claude mcp add trailerforge -- node /path/to/trailerforge/apps/cli/dist/bin.js mcp ./Ember.tforge

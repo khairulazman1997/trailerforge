@@ -498,121 +498,149 @@ describe('footage settings, vision and previews', () => {
   });
 });
 
-describe('Claude Code connection', () => {
-  /** A stand-in `claude` that keeps its MCP registrations in a JSON file. */
-  async function fakeClaude() {
-    const dir = await mkdtemp(join(tmpdir(), 'tforge-fake-cc-'));
-    const state = join(dir, 'servers.json');
-    const script = join(dir, 'claude.js');
-    await writeFile(
-      script,
-      `const fs = require('fs'); const f = ${JSON.stringify(state)};
-const db = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
-const [, , a, b, ...rest] = process.argv;
-if (a === 'mcp' && b === 'get') process.exit(db[rest[0]] ? 0 : 1);
-if (a === 'mcp' && b === 'add') {
-  const i = rest.indexOf('--'); const name = rest[i - 1];
-  db[name] = { scope: rest[rest.indexOf('--scope') + 1], cmd: rest.slice(i + 1) };
-  fs.writeFileSync(f, JSON.stringify(db)); process.exit(0);
-}
-if (a === 'mcp' && b === 'remove') { delete db[rest[rest.length - 1]]; fs.writeFileSync(f, JSON.stringify(db)); process.exit(0); }
-process.exit(2);`,
-    );
-    return {
-      script,
-      servers: async () => JSON.parse(await readFile(state, 'utf8').catch(() => '{}')),
-    };
-  }
-
-  it('registers, re-registers and removes the MCP server, and says when it cannot', async () => {
-    const fake = await fakeClaude();
-    const cli = join(root, 'cli', 'bin.js');
-    const s2 = await startService({
-      engine,
-      claudeBin: process.execPath,
-      claudeBinArgs: [fake.script],
-      cliPath: cli,
+describe('Claude Code', () => {
+  const MCP_TOKEN = 'm'.repeat(40);
+  const mcpCall = (url: string, token: string | null, body: unknown, method = 'POST') =>
+    fetch(url, {
+      method,
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
     });
-    try {
-      const c2 = new ServiceClient({ baseUrl: s2.url, token: s2.token });
-      const before = await c2.claudeCode();
-      expect(before).toMatchObject({ installed: true, connected: false, canConnect: true });
-      expect(before.command).toContain('claude mcp add --scope user trailerforge --');
-      expect(before.command).toContain(engine.home);
+  const call = async (url: string, name: string, args: object = {}) => {
+    const r = await mcpCall(url, MCP_TOKEN, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name, arguments: args },
+    });
+    expect(r.status).toBe(200);
+    const out = (await r.json()) as {
+      result: { isError?: boolean; content: { text: string }[] };
+    };
+    return { error: out.result.isError === true, text: out.result.content[0]!.text };
+  };
 
-      expect(await c2.connectClaudeCode()).toMatchObject({ connected: true });
-      expect((await fake.servers()).trailerforge).toMatchObject({
-        scope: 'user',
-        cmd: ['node', cli, 'mcp', '--home', engine.home],
-      });
-      expect(await c2.connectClaudeCode()).toMatchObject({ connected: true }); // reconnect
-      expect(await c2.disconnectClaudeCode()).toMatchObject({ connected: false });
-      expect(await fake.servers()).toEqual({});
+  it('serves the tools to Claude Code on the app itself: own token, the open project by default, edits visible to the window', async () => {
+    const e2 = await Engine.start({
+      home: join(root, 'mcp-home'),
+      autosaveMs: 0,
+      loadUserPlugins: false,
+      llm,
+    });
+    const dir = join(root, 'Mcp.tforge');
+    await e2.createProject(dir, { ...sampleProject(), id: 'proj_mcp' } as never);
+    const s2 = await startService({ engine: e2, mcpToken: MCP_TOKEN });
+    try {
+      expect(s2.mcp).toEqual({ url: `${s2.url}/mcp`, token: MCP_TOKEN });
+      const init = { jsonrpc: '2.0', id: 0, method: 'tools/list', params: {} };
+      expect((await mcpCall(s2.mcp.url, null, init)).status).toBe(401);
+      expect((await mcpCall(s2.mcp.url, s2.token, init)).status).toBe(401); // not the UI token
+      expect((await mcpCall(s2.mcp.url, MCP_TOKEN, null, 'GET')).status).toBe(405);
+
+      const list = (await (await mcpCall(s2.mcp.url, MCP_TOKEN, init)).json()) as {
+        result: { tools: { name: string }[] };
+      };
+      expect(list.result.tools.map((t) => t.name)).toContain('project_summary');
+
+      // One project open in the app: no path needed, and it is the same open store.
+      const summary = await call(s2.mcp.url, 'project_summary');
+      expect(summary.error).toBe(false);
+      expect(summary.text).toContain('proj_mcp');
+      const ui = new ServiceClient({ baseUrl: s2.url, token: s2.token });
+      const before = (await ui.getProject('proj_mcp')).version;
+      const rename = list.result.tools.find((t) => /project.*rename/.test(t.name))!.name;
+      expect((await call(s2.mcp.url, rename, { name: 'Renamed by Claude' })).error).toBe(false);
+      const after = await ui.getProject('proj_mcp');
+      expect(after.project.name).toBe('Renamed by Claude');
+      expect(after.version).toBeGreaterThan(before);
+      expect(after.canUndo).toBe(true); // undoable from the window
+
+      // Two open: it asks which, naming them.
+      const other = join(root, 'Mcp2.tforge');
+      await e2.createProject(other, { ...sampleProject(), id: 'proj_mcp2' } as never);
+      const which = await call(s2.mcp.url, 'project_summary');
+      expect(which.error).toBe(true);
+      expect(which.text).toContain('several projects are open');
+      expect((await call(s2.mcp.url, 'project_summary', { project: other })).text).toContain(
+        'proj_mcp2',
+      );
     } finally {
       await s2.close();
-    }
-
-    const noConfig = join(root, 'no-such-claude.json');
-    const noCli = await startService({
-      engine,
-      claudeBin: process.execPath,
-      claudeBinArgs: [fake.script],
-    });
-    const missing = await startService({
-      engine,
-      claudeBin: join(root, 'no-such-claude'),
-      claudeConfigPath: noConfig,
-      cliPath: cli,
-    });
-    try {
-      const a = new ServiceClient({ baseUrl: noCli.url, token: noCli.token });
-      expect(await a.claudeCode()).toMatchObject({ canConnect: false, command: null });
-      await expect(a.connectClaudeCode()).rejects.toMatchObject({ status: 400 });
-      const b = new ServiceClient({ baseUrl: missing.url, token: missing.token });
-      expect(await b.claudeCode()).toMatchObject({ installed: false, connected: false });
-      await expect(b.connectClaudeCode()).rejects.toMatchObject({ status: 404 });
-    } finally {
-      await noCli.close();
-      await missing.close();
+      await e2.close();
     }
   });
-});
 
-describe('Claude Code connection without a claude command', () => {
-  it('edits only its own entry in the settings file, keeps a backup, and refuses a broken file', async () => {
+  it('keeps the MCP token across launches in the app data folder', async () => {
+    const s2 = await startService({ engine });
+    const t1 = s2.mcp.token;
+    await s2.close();
+    const s3 = await startService({ engine });
+    try {
+      expect(t1.length).toBeGreaterThanOrEqual(32);
+      expect(s3.mcp.token).toBe(t1);
+      expect((await readFile(join(engine.home, 'mcp-token'), 'utf8')).trim()).toBe(t1);
+    } finally {
+      await s3.close();
+    }
+  });
+
+  it('registers with Claude Code by editing only its own entry, in either mode', async () => {
     const file = join(root, 'claude-settings.json');
+    const cli = join(root, 'cli', 'bin.js');
+    const missing = await startService({ engine, claudeConfigPath: join(root, 'none.json') });
+    try {
+      const m = new ServiceClient({ baseUrl: missing.url, token: missing.token });
+      expect(await m.claudeCode()).toMatchObject({ installed: false, mode: null });
+      await expect(m.connectClaudeCode()).rejects.toMatchObject({ status: 404 });
+      await expect(m.connectClaudeCode('standalone')).rejects.toMatchObject({ status: 400 });
+    } finally {
+      await missing.close();
+    }
+
     const original = {
       userID: 'u1',
       projects: { a: { x: 1 } },
       mcpServers: { other: { type: 'stdio', command: 'x' } },
     };
     await writeFile(file, JSON.stringify(original));
-    const cli = join(root, 'cli', 'bin.js');
-    const s2 = await startService({
-      engine,
-      claudeBin: join(root, 'no-such-claude'),
-      claudeConfigPath: file,
-      cliPath: cli,
-    });
+    const s2 = await startService({ engine, claudeConfigPath: file, cliPath: cli });
     try {
       const c = new ServiceClient({ baseUrl: s2.url, token: s2.token });
-      expect(await c.claudeCode()).toMatchObject({ installed: true, connected: false });
-      expect(await c.connectClaudeCode()).toMatchObject({ installed: true, connected: true });
+      expect(await c.claudeCode()).toEqual({
+        installed: true,
+        mode: null,
+        upToDate: false,
+        available: ['app', 'standalone'],
+      });
+      expect(await c.connectClaudeCode()).toMatchObject({ mode: 'app', upToDate: true });
       const after = JSON.parse(await readFile(file, 'utf8'));
       expect(after.userID).toBe('u1');
       expect(after.projects).toEqual(original.projects);
       expect(after.mcpServers.other).toEqual(original.mcpServers.other);
       expect(after.mcpServers.trailerforge).toEqual({
+        type: 'http',
+        url: s2.mcp.url,
+        headers: { Authorization: `Bearer ${s2.mcp.token}` },
+      });
+      expect(JSON.parse(await readFile(`${file}.tforge-backup`, 'utf8'))).toEqual(original);
+
+      expect(await c.connectClaudeCode('standalone')).toMatchObject({
+        mode: 'standalone',
+        upToDate: true,
+      });
+      expect(JSON.parse(await readFile(file, 'utf8')).mcpServers.trailerforge).toEqual({
         type: 'stdio',
         command: 'node',
         args: [cli, 'mcp', '--home', engine.home],
         env: {},
       });
-      expect(JSON.parse(await readFile(`${file}.tforge-backup`, 'utf8'))).toEqual(original);
 
-      expect(await c.disconnectClaudeCode()).toMatchObject({ connected: false });
-      const gone = JSON.parse(await readFile(file, 'utf8'));
-      expect(gone.mcpServers).toEqual(original.mcpServers);
+      expect(await c.disconnectClaudeCode()).toMatchObject({ mode: null });
+      expect(JSON.parse(await readFile(file, 'utf8')).mcpServers).toEqual(original.mcpServers);
 
       await writeFile(file, '{ not json');
       await expect(c.connectClaudeCode()).rejects.toMatchObject({ status: 502 });
