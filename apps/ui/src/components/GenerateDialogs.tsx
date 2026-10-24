@@ -8,10 +8,10 @@ import { Link, projectPath } from '../router.js';
 import { ConfirmDialog } from './Dialog.js';
 import { Disclosure } from './Disclosure.js';
 
-type Task = 'storyboard.generate' | 'storyboard.regenerate-section';
+export type Task = 'storyboard.generate' | 'storyboard.regenerate-section' | 'capture.tips';
 
 /** Loads the disclosure each time a dialog opens; null while loading. */
-function usePreview(projectId: string, task: Task, open: boolean): LlmPreview | null {
+export function usePreview(projectId: string, task: Task, open: boolean): LlmPreview | null {
   const store = useStore();
   const [preview, setPreview] = useState<LlmPreview | null>(null);
   useEffect(() => {
@@ -27,7 +27,7 @@ function usePreview(projectId: string, task: Task, open: boolean): LlmPreview | 
 }
 
 /** Sending to another service needs an explicit yes; it is remembered for this tab session. */
-const needsConsent = (p: LlmPreview | null) =>
+export const needsConsent = (p: LlmPreview | null) =>
   !!p?.provider?.sendsDataOffDevice && !hasConsent(p.provider.id);
 
 export function GenerateDialog({

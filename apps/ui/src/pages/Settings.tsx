@@ -71,8 +71,12 @@ export function SettingsPage() {
           onSubmit={(e) => {
             e.preventDefault();
             void (async () => {
+              // Clear the box at once so the key does not linger on screen; put it back if the
+              // save fails, so nothing has to be typed again.
+              const value = key.trim();
+              setKey('');
               setSaving(true);
-              if (await store.setApiKey(key.trim())) setKey('');
+              if (!(await store.setApiKey(value))) setKey(value);
               setSaving(false);
             })();
           }}

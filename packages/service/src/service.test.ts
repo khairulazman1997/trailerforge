@@ -861,6 +861,19 @@ describe('capture', () => {
     expect((await client.captureStatus(ID)).tips.fresh).toBe(0);
   });
 
+  it('renders the pack for download and validates the request', async () => {
+    const r = await client.renderCapture(ID, { format: 'html' });
+    expect(r).toMatchObject({ filename: 'capture-pack.html', mime: 'text/html; charset=utf-8' });
+    expect(r.content.startsWith('<!doctype html>')).toBe(true);
+    expect(r.content).not.toContain(dir);
+    await expect(client.renderCapture(ID, { format: 'pdf' as never })).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(
+      (await raw({ path: `/v1/projects/${ID}/capture/render`, method: 'POST', body: '{}' })).status,
+    ).toBe(401);
+  });
+
   it('exports the pack under the project folder, and validates the request', async () => {
     const r = await client.exportCapture(ID, { formats: ['md', 'json'] });
     expect(r).toMatchObject({

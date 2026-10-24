@@ -4,6 +4,7 @@ import {
   buildCapturePack,
   buildCapturePlan,
   generateCaptureTips,
+  renderCapturePack,
   RecordingPatch,
   resolveCaptureTips,
   resolveRecordingSettings,
@@ -218,4 +219,35 @@ export async function captureExportOp(
   const pack = buildCapturePack(store.state, { omitExcluded: opts.omitExcluded ?? false });
   const files = await writeCapturePack(store.paths.dir, pack, formats);
   return { files, shots: pack.progress.total, done: pack.progress.done };
+}
+
+const MIME: Record<CapturePackFormat, string> = {
+  md: 'text/markdown; charset=utf-8',
+  html: 'text/html; charset=utf-8',
+  json: 'application/json; charset=utf-8',
+};
+
+export interface RenderedPack {
+  /** A plain file name, never a path. */
+  filename: string;
+  mime: string;
+  content: string;
+}
+
+/** The pack as text for the UI to download; nothing is written on this computer. */
+export function captureRenderOp(
+  _engine: Engine,
+  store: ProjectStore,
+  opts: { format: CapturePackFormat; omitExcluded?: boolean | undefined },
+): RenderedPack {
+  requireStoryboard(store);
+  if (!(opts.format in MIME)) {
+    throw new OpError('usage', `format must be md, html or json, got "${opts.format}"`);
+  }
+  const pack = buildCapturePack(store.state, { omitExcluded: opts.omitExcluded ?? false });
+  return {
+    filename: `capture-pack.${opts.format}`,
+    mime: MIME[opts.format],
+    content: renderCapturePack(pack, opts.format),
+  };
 }

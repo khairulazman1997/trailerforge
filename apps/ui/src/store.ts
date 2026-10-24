@@ -3,8 +3,11 @@ import {
   ServiceError,
   type BriefForm,
   type BriefSuggestion,
+  type CaptureView,
+  type ExportOutcome,
   type LlmPreview,
   type PendingHandoff,
+  type RenderedPack,
   type RoutesView,
   type SecretsView,
   type ProjectView,
@@ -37,6 +40,9 @@ export type ClientLike = Pick<
   | 'answerBrief'
   | 'assumeMissing'
   | 'suggestBrief'
+  | 'capture'
+  | 'exportCapture'
+  | 'renderCapture'
   | 'decisions'
   | 'llmPreview'
   | 'handoffs'
@@ -88,6 +94,8 @@ export interface AppState {
   jobs: Record<string, JobUpdate>;
   /** The brief screen's data per project, tagged with the project version it was read at. */
   briefs: Record<string, { version: number; form: BriefForm }>;
+  /** Which capture tips are up to date, per project, tagged with the version it was read at. */
+  captureTips: Record<string, { version: number; groups: CaptureView['tips']['groups'] }>;
   /** Latest progress message of a running task, per project (cleared when the task ends). */
   notices: Record<string, string>;
   /** Why the storyboard looks the way it does: automated decisions, oldest first. */
@@ -110,6 +118,7 @@ const initial: AppState = {
   tasks: {},
   jobs: {},
   briefs: {},
+  captureTips: {},
   notices: {},
   decisions: {},
   handoffs: [],
@@ -332,9 +341,17 @@ export class AppStore {
     this.set((s) => {
       const { [id]: _gone, ...projects } = s.projects;
       const { [id]: _brief, ...briefs } = s.briefs;
+      const { [id]: _tips, ...captureTips } = s.captureTips;
       const { [id]: _notice, ...notices } = s.notices;
       const { [id]: _why, ...decisions } = s.decisions;
-      return { projects, briefs, notices, decisions, order: s.order.filter((x) => x !== id) };
+      return {
+        projects,
+        briefs,
+        captureTips,
+        notices,
+        decisions,
+        order: s.order.filter((x) => x !== id),
+      };
     });
   }
 
@@ -542,9 +559,53 @@ export class AppStore {
   /** What a generation would send and to whom; null if the request failed (a toast says why). */
   async llmPreview(
     projectId: string,
-    task: 'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest',
+    task:
+      'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest' | 'capture.tips',
   ): Promise<LlmPreview | null> {
     return (await this.run((c) => c.llmPreview(projectId, task))) ?? null;
+  }
+
+  // ---- capture ----
+  private tipsLoading = new Map<string, number>();
+
+  /**
+   * Which stored capture tips are fresh or out of date. That needs the engine (it hashes what a
+   * request would contain), so it is read per project version like the brief form.
+   */
+  async loadCaptureTips(projectId: string): Promise<void> {
+    const version = this.state.projects[projectId]?.version;
+    if (version === undefined || !this.client) return;
+    if (this.state.captureTips[projectId]?.version === version) return;
+    if (this.tipsLoading.get(projectId) === version) return;
+    this.tipsLoading.set(projectId, version);
+    try {
+      const view = await this.client.capture(projectId);
+      if ((this.state.captureTips[projectId]?.version ?? -1) <= version) {
+        this.set((s) => ({
+          captureTips: { ...s.captureTips, [projectId]: { version, groups: view.tips.groups } },
+        }));
+      }
+    } catch {
+      // No storyboard yet, or the engine is busy: the page shows tips without a freshness badge.
+    } finally {
+      if (this.tipsLoading.get(projectId) === version) this.tipsLoading.delete(projectId);
+    }
+  }
+
+  /** Writes the pack under the project's exports folder. */
+  async exportCapture(
+    projectId: string,
+    opts: { formats?: ('md' | 'html' | 'json')[]; omitExcluded?: boolean },
+  ): Promise<ExportOutcome | null> {
+    return (await this.run((c) => c.exportCapture(projectId, opts))) ?? null;
+  }
+
+  /** The pack as text, to hand to the browser's own save or download. */
+  async renderCapture(
+    projectId: string,
+    opts: { format: 'md' | 'html' | 'json'; omitExcluded?: boolean },
+  ): Promise<RenderedPack | null> {
+    return (await this.run((c) => c.renderCapture(projectId, opts))) ?? null;
   }
 
   // ---- decision log ----

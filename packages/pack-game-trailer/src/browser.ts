@@ -6,5 +6,6 @@
 export * from './brief-ext.js';
 export * from './capture.js';
 export * from './capture-hints.js';
+export * from './capture-tips-data.js';
 export * from './pack-ext.js';
 export * from './recording.js';

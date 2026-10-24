@@ -122,6 +122,15 @@ class Fake {
       canUndo: true,
       canRedo: false,
     }),
+    capture: async () => {
+      throw new Error('unused');
+    },
+    exportCapture: async () => {
+      throw new Error('unused');
+    },
+    renderCapture: async () => {
+      throw new Error('unused');
+    },
     briefForm: async (id) => {
       this.briefFetches++;
       return {

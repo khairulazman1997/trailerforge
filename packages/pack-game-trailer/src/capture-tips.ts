@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUILTIN_PROMPTS_DIR, loadPrompt, type LlmClient } from '@trailerforge/llm';
-import { IsoDateTime, type KnowledgeEntity, type Project } from '@trailerforge/schema';
+import type { KnowledgeEntity, Project } from '@trailerforge/schema';
 import { z } from 'zod';
 import { buildCaptureHints, type CaptureHint, type GroupHints } from './capture-hints.js';
 import { buildCapturePlan, type CaptureGroup, type CapturePlan } from './capture.js';
-import { readPackKey } from './pack-ext.js';
+import { readCaptureTips, type CaptureTipsEntry } from './capture-tips-data.js';
 import { resolveRecordingSettings } from './recording.js';
 
 /**
@@ -23,26 +23,14 @@ export const CAPTURE_TIPS_PROMPTS_DIR = resolve(
   'prompts',
 );
 
+export * from './capture-tips-data.js';
+
 export const TIPS_TASK = 'capture.tips';
 const MAX_TIPS = 4;
 const MAX_RISKS = 3;
 const MAX_LINE = 300;
 const GROUPS_PER_CALL = 8;
 const alias = (n: number): string => `group-${n + 1}`;
-
-export const CaptureTipsEntry = z.strictObject({
-  tips: z.array(z.string().min(1)).max(8).default([]),
-  risks: z.array(z.string().min(1)).max(8).default([]),
-  /** Hash of the prompt inputs this was written from; empty for entries typed by hand. */
-  inputsHash: z.string().default(''),
-  generatedAt: IsoDateTime.optional(),
-  /** The user changed it; regenerating leaves it alone unless asked. */
-  edited: z.boolean().default(false),
-});
-export type CaptureTipsEntry = z.infer<typeof CaptureTipsEntry>;
-
-export const CaptureTipsExt = z.record(z.string().min(1), CaptureTipsEntry);
-export type CaptureTipsExt = z.infer<typeof CaptureTipsExt>;
 
 /** What the model returns. Lenient on size: the code trims, so a long reply is not a retry. */
 export const GeneratedCaptureTips = z.strictObject({
@@ -54,11 +42,6 @@ export const GeneratedCaptureTips = z.strictObject({
     }),
   ),
 });
-
-export function readCaptureTips(project: Pick<Project, 'extensions'>): CaptureTipsExt {
-  const parsed = CaptureTipsExt.safeParse(readPackKey(project.extensions, 'captureTips') ?? {});
-  return parsed.success ? parsed.data : {};
-}
 
 const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
 const REDACTED = '[redacted]';

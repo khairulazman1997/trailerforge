@@ -74,6 +74,17 @@ export async function startTestService(
         },
       };
     },
+    'capture.tips': (req: LlmRequest<unknown>) => {
+      prompts.push(req.prompt);
+      const keys = [...req.prompt.matchAll(/"key": "([^"]*)"/g)].map((m) => m[1]!);
+      return {
+        groups: keys.map((key) => ({
+          key,
+          tips: ['Start from the checkpoint.'],
+          risks: ['An autosave popup can ruin a take.'],
+        })),
+      };
+    },
     'brief.suggest': (req: LlmRequest<unknown>) => {
       prompts.push(req.prompt);
       const field = /^Field: .*\(([^()\s]+)\)$/m.exec(req.prompt)?.[1] ?? '';

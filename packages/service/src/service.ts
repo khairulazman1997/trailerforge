@@ -16,6 +16,7 @@ import {
   briefForm,
   briefStatus,
   captureExportOp,
+  captureRenderOp,
   captureStatusOp,
   captureTipsOp,
   captureViewOp,
@@ -527,6 +528,19 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           .parse(await body());
         notBusy(store);
         return captureExportOp(engine, store, o);
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/capture\/render$/,
+      async ({ params, body }) => {
+        const o = z
+          .strictObject({
+            format: z.enum(['md', 'html', 'json']),
+            omitExcluded: z.boolean().optional(),
+          })
+          .parse(await body());
+        return captureRenderOp(engine, storeById(params.id!), o);
       },
     ],
     [

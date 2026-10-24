@@ -1,7 +1,8 @@
-import { useMemo, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import {
   buildCaptureHints,
   buildCapturePlan,
+  readCaptureTips,
   resolveRecordingSettings,
   type CaptureGroup,
   type CaptureHint,
@@ -9,6 +10,9 @@ import {
 } from '@trailerforge/pack-game-trailer/browser';
 import { useAppState, useStore } from '../app-context.js';
 import { CaptureItemRow } from '../components/CaptureItemRow.js';
+import { CaptureTipsBlock, type TipsStatus } from '../components/CaptureTipsBlock.js';
+import { CaptureTipsDialog } from '../components/CaptureTipsDialog.js';
+import { ExportPanel } from '../components/ExportPanel.js';
 import { RecordingPanel } from '../components/RecordingPanel.js';
 import {
   formatSeconds,
@@ -64,6 +68,13 @@ export function CapturePage({ id }: { id: string }) {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [dropMark, setDropMark] = useState<DropMark | null>(null);
   const disabled = !!busy;
+  const [tipsFor, setTipsFor] = useState<{ key?: string; name?: string } | null>(null);
+  const tipStatus = useAppState((s) => s.captureTips[id]);
+  const version = view.version;
+  const hasStoryboard = !!project.storyboard;
+  useEffect(() => {
+    if (hasStoryboard) void store.loadCaptureTips(id);
+  }, [store, id, version, hasStoryboard]);
 
   const data = useMemo(() => {
     if (!project.storyboard) return null;
@@ -77,6 +88,7 @@ export function CapturePage({ id }: { id: string }) {
     };
   }, [project.storyboard, project.knowledge]);
   const { brief, formatTargets, storyboard, extensions } = project;
+  const storedTips = useMemo(() => readCaptureTips({ extensions }), [extensions]);
   const rec = useMemo(
     () => resolveRecordingSettings({ brief, formatTargets, storyboard, extensions }),
     [brief, formatTargets, storyboard, extensions],
@@ -185,6 +197,17 @@ export function CapturePage({ id }: { id: string }) {
               <HintList label="Level" hints={hints.levels} />
               <HintList label="Debug commands" hints={hints.debugCommands} />
               <HintList label="Save files" hints={hints.saveFiles} />
+              <CaptureTipsBlock
+                groupName={groupTitle(g)}
+                entry={storedTips[g.key] ?? null}
+                status={tipsStatusOf(storedTips[g.key], tipStatus, version, g.key)}
+                disabled={disabled}
+                onWrite={() => setTipsFor({ key: g.key, name: groupTitle(g) })}
+                onSave={(tips, risks) =>
+                  cmd('game-trailer/capture.edit-tips', { key: g.key, tips, risks })
+                }
+                onRemove={() => void cmd('game-trailer/capture.clear-tips', { key: g.key })}
+              />
               <ol className="cap-items" aria-label={`Shots to record: ${groupTitle(g)}`}>
                 {g.items.map((it, i) => (
                   <CaptureItemRow
@@ -228,6 +251,29 @@ export function CapturePage({ id }: { id: string }) {
         })
       )}
 
+      <div className="row">
+        <button
+          type="button"
+          disabled={disabled || plan.done === plan.total}
+          onClick={() => setTipsFor({})}
+        >
+          Write tips for every group…
+        </button>
+      </div>
+      <CaptureTipsDialog
+        id={id}
+        open={tipsFor !== null}
+        groupKey={tipsFor?.key}
+        groupName={tipsFor?.name}
+        hasEdited={
+          tipsFor?.key
+            ? !!storedTips[tipsFor.key]?.edited
+            : Object.values(storedTips).some((t) => t.edited)
+        }
+        hasFresh={Object.values(storedTips).some((t) => !t.edited)}
+        onClose={() => setTipsFor(null)}
+      />
+
       {plan.skippedSlotIds.length > 0 && (
         <section className="card" aria-labelledby="cap-skipped-h">
           <h2 id="cap-skipped-h">Skipped shots</h2>
@@ -252,6 +298,21 @@ export function CapturePage({ id }: { id: string }) {
           </ul>
         </section>
       )}
+      <ExportPanel id={id} disabled={disabled} />
     </>
   );
+}
+
+/** Fresh or out of date comes from the engine, and only counts for the version it was read at. */
+function tipsStatusOf(
+  entry: { edited: boolean } | undefined,
+  server: { version: number; groups: { groupKey: string; status: string }[] } | undefined,
+  version: number,
+  key: string,
+): TipsStatus {
+  if (!entry) return null;
+  if (entry.edited) return 'edited';
+  if (!server || server.version !== version) return null;
+  const s = server.groups.find((g) => g.groupKey === key)?.status;
+  return s === 'fresh' || s === 'stale' ? s : null;
 }

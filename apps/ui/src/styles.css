@@ -1021,3 +1021,26 @@ table.routes thead th {
   padding: 0;
   margin: 0;
 }
+.cap-tips {
+  border-top: 1px solid var(--border);
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+}
+.cap-tips h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.cap-tips h4 {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.cap-tips-body ul {
+  margin: 0.2rem 0;
+  padding-left: 1.2rem;
+}
+.cap-formats {
+  border: 0;
+  padding: 0;
+  margin: 0.5rem 0;
+}

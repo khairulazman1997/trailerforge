@@ -10,6 +10,7 @@ export type {
   CaptureView,
   ExportOutcome,
   LlmPreview,
+  RenderedPack,
   PendingHandoff,
   RoutesView,
   ScanSummary,
@@ -17,7 +18,7 @@ export type {
 } from '@trailerforge/engine';
 import type { LlmPreview, PendingHandoff, RoutesView, SecretsView } from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
-import type { CaptureStatus, CaptureView, ExportOutcome } from '@trailerforge/engine';
+import type { CaptureStatus, CaptureView, ExportOutcome, RenderedPack } from '@trailerforge/engine';
 
 export class ServiceError extends Error {
   constructor(
@@ -248,6 +249,14 @@ export class ServiceClient {
     return this.request<ExportOutcome>(
       'POST',
       `/v1/projects/${encodeURIComponent(id)}/capture/export`,
+      opts,
+    );
+  }
+  /** The pack as text, for the browser to save through its own download or save dialog. */
+  renderCapture(id: string, opts: { format: 'md' | 'html' | 'json'; omitExcluded?: boolean }) {
+    return this.request<RenderedPack>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/capture/render`,
       opts,
     );
   }

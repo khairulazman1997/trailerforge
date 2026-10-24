@@ -15,7 +15,7 @@ export function Disclosure({ preview }: { preview: LlmPreview | null }) {
     );
   }
   const { provider, willSend: w } = preview;
-  const nothing = w.brief.length === 0 && w.knowledge.length === 0;
+  const nothing = !w.capture && w.brief.length === 0 && w.knowledge.length === 0;
   return (
     <section className="disclosure" aria-label="What will be sent" data-testid="disclosure">
       <p>
@@ -37,14 +37,23 @@ export function Disclosure({ preview }: { preview: LlmPreview | null }) {
         .
       </p>
       <ul>
+        {w.capture ? (
+          <li>
+            Recording plan: {w.capture.groups} group{w.capture.groups === 1 ? '' : 's'} with{' '}
+            {w.capture.shots} shot{w.capture.shots === 1 ? '' : 's'} (titles, instructions, framing,
+            setup and HUD; not your notes)
+          </li>
+        ) : (
+          <li>
+            Brief: {w.brief.length ? w.brief.join(', ') : 'nothing filled in yet'}
+            {w.assumptions > 0
+              ? ` (+ ${w.assumptions} assumption${w.assumptions === 1 ? '' : 's'})`
+              : ''}
+          </li>
+        )}
         <li>
-          Brief: {w.brief.length ? w.brief.join(', ') : 'nothing filled in yet'}
-          {w.assumptions > 0
-            ? ` (+ ${w.assumptions} assumption${w.assumptions === 1 ? '' : 's'})`
-            : ''}
-        </li>
-        <li>
-          Game facts: {w.knowledge.length} (names, kinds and short descriptions)
+          {w.capture ? 'Setup hints' : 'Game facts'}: {w.knowledge.length} (names, kinds and short
+          descriptions)
           {w.knowledgeExcluded > 0 ? `; ${w.knowledgeExcluded} you excluded are not sent` : ''}
           {w.knowledge.length > 0 && (
             <details>

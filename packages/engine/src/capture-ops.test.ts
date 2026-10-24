@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   captureExportOp,
   captureMarkOp,
+  captureRenderOp,
   captureSettingsOp,
   captureStatusOp,
   captureTipsOp,
@@ -162,5 +163,23 @@ describe('capture ops', () => {
     });
     const bare = await engine.createProject(join(root, 'Bare2.tforge'), { name: 'Bare' });
     await expect(captureExportOp(engine, bare)).rejects.toMatchObject({ code: 'not-found' });
+  });
+
+  it('renders the pack as text for download, without writing anything', async () => {
+    const store = await sample();
+    store.dispatch('core/knowledge.set-excluded', { id: 'ent_forest', excluded: true });
+    const md = captureRenderOp(engine, store, { format: 'md' });
+    expect(md).toMatchObject({ filename: 'capture-pack.md', mime: 'text/markdown; charset=utf-8' });
+    expect(md.content).toContain('capture pack');
+    expect(md.content).toContain('Cinder Forest');
+    const shared = captureRenderOp(engine, store, { format: 'json', omitExcluded: true });
+    expect(shared.filename).toBe('capture-pack.json');
+    expect(shared.content).not.toContain('Cinder Forest');
+    expect(captureRenderOp(engine, store, { format: 'html' }).content).toContain('<!doctype html>');
+    expect(() => captureRenderOp(engine, store, { format: 'pdf' as never })).toThrow(
+      usage('usage'),
+    );
+    const bare = await engine.createProject(join(root, 'Bare3.tforge'), { name: 'Bare' });
+    expect(() => captureRenderOp(engine, bare, { format: 'md' })).toThrow(usage('not-found'));
   });
 });
