@@ -10,3 +10,4 @@ export * from './store/project-store.js';
 export * from './library/hash.js';
 export * from './library/library-store.js';
 export * from './store/analysis-cache.js';
+export * from './egress.js';

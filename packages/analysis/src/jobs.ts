@@ -13,9 +13,11 @@ import {
   type AnalyzeOptions,
 } from './analyze.js';
 import { PERMANENT_SIDECAR_CODES, SidecarError, type SidecarCommand } from './sidecar.js';
+import { embedRecording, sidecarEmbedder, type VisionEmbedder } from './vision.js';
 
 export const MUSIC_JOB = 'analysis/music';
 export const FOOTAGE_JOB = 'analysis/footage';
+export const VISION_JOB = 'analysis/vision-frames';
 
 const Input = z.strictObject({
   path: z.string().min(1),
@@ -35,7 +37,16 @@ type FootageIn = z.infer<typeof FootageInput>;
 export interface AnalysisJobOptions {
   command?: SidecarCommand;
   ffmpeg?: string;
+  /** Builds the embedder for a model folder (tests pass a stub). Default: the sidecar model. */
+  visionEmbedder?: (modelDir: string, modelId: string) => VisionEmbedder;
 }
+
+const VisionInput = Input.extend({
+  durationSec: z.number().positive(),
+  modelDir: z.string().min(1),
+  modelId: z.string().regex(/^[0-9A-Za-z.-]{1,30}$/),
+});
+type VisionIn = z.infer<typeof VisionInput>;
 
 const toJobError = (err: unknown) =>
   err instanceof SidecarError
@@ -111,10 +122,36 @@ export function createAnalysisJobs(opts: AnalysisJobOptions = {}) {
     },
   });
 
-  return { music, footage };
+  const vision = defineJob<VisionIn, never, { cached: boolean; frames: number }>({
+    type: VISION_JOB,
+    input: VisionInput,
+    maxAttempts: 2,
+    concurrency: 1,
+    run: async (ctx) => {
+      const { path, quickHash, analysisDir, durationSec, modelDir, modelId } = ctx.input;
+      const embedder =
+        opts.visionEmbedder?.(modelDir, modelId) ??
+        sidecarEmbedder(modelDir, modelId, {
+          ...(opts.command ? { command: opts.command } : {}),
+          ...(opts.ffmpeg ? { ffmpeg: opts.ffmpeg } : {}),
+        });
+      try {
+        const r = await embedRecording(
+          embedder,
+          { path, quickHash, durationSec, analysisDir },
+          ctx.signal,
+        );
+        return { cached: r.cached, frames: r.vectors.length };
+      } catch (err) {
+        throw toJobError(err);
+      }
+    },
+  });
+
+  return { music, footage, vision };
 }
 
 export function registerAnalysisJobs(queue: JobQueue, opts: AnalysisJobOptions = {}): void {
   const jobs = createAnalysisJobs(opts);
-  queue.register(jobs.music).register(jobs.footage);
+  queue.register(jobs.music).register(jobs.footage).register(jobs.vision);
 }

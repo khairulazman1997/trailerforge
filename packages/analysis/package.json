@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pin:vision": "node scripts/pin-vision-model.mjs"
   },
   "dependencies": {
     "@trailerforge/core": "workspace:*",

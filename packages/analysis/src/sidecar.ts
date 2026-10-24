@@ -29,6 +29,8 @@ export const PERMANENT_SIDECAR_CODES = new Set([
   'too-short',
   'ffmpeg-missing',
   'sidecar-missing',
+  'model-missing',
+  'model-incompatible',
 ]);
 
 /**
