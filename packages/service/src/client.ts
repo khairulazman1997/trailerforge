@@ -8,6 +8,7 @@ export type {
   BriefSuggestion,
   CaptureStatus,
   CaptureView,
+  ClaudeCodeView,
   ExportOutcome,
   LibraryMediaKind,
   LlmPreview,
@@ -20,7 +21,12 @@ export type {
   WatchedFoldersView,
 } from '@trailerforge/engine';
 import type { LlmPreview, PendingHandoff, RoutesView, SecretsView } from '@trailerforge/engine';
-import type { LibraryMediaKind, VisionView, WatchedFoldersView } from '@trailerforge/engine';
+import type {
+  ClaudeCodeView,
+  LibraryMediaKind,
+  VisionView,
+  WatchedFoldersView,
+} from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
 import type { CaptureStatus, CaptureView, ExportOutcome, RenderedPack } from '@trailerforge/engine';
 import type {
@@ -222,6 +228,15 @@ export class ServiceClient {
   /** Replace the watched folders (absolute paths of existing folders; at most 20). */
   setWatchedFolders(folders: string[]) {
     return this.request<WatchedFoldersView>('PUT', '/v1/settings/watched-folders', { folders });
+  }
+  claudeCode() {
+    return this.request<ClaudeCodeView>('GET', '/v1/claude-code');
+  }
+  connectClaudeCode() {
+    return this.request<ClaudeCodeView>('POST', '/v1/claude-code/connect', {});
+  }
+  disconnectClaudeCode() {
+    return this.request<ClaudeCodeView>('DELETE', '/v1/claude-code');
   }
   /** The vision model's state and what downloading it would do. */
   vision() {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { KnowledgeEntity, KnowledgeEntityKind } from '@trailerforge/schema';
 import type { ScanSummary } from '@trailerforge/service/client';
 import { useAppState, useStore } from '../app-context.js';
+import { BrowseButton } from '../components/BrowseButton.js';
 import { ConfirmDialog, ConsentDialog } from '../components/Dialog.js';
 import { EntityRow } from '../components/EntityRow.js';
 import {
@@ -143,6 +144,7 @@ export function KnowledgePage({ id }: { id: string }) {
               spellCheck={false}
             />
           </label>
+          <BrowseButton label="Browse for the repo…" disabled={!!busy} onPick={(p) => setRepo(p)} />
           <button type="submit" className="primary" disabled={!!busy || !repo.trim()}>
             Add repo and scan
           </button>

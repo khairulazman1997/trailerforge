@@ -4,6 +4,7 @@ import {
   type BriefForm,
   type BriefSuggestion,
   type CaptureView,
+  type ClaudeCodeView,
   type ExportOutcome,
   type LibraryMediaKind,
   type LlmPreview,
@@ -76,6 +77,9 @@ export type ClientLike = Pick<
   | 'vision'
   | 'downloadVision'
   | 'watchedFolders'
+  | 'claudeCode'
+  | 'connectClaudeCode'
+  | 'disconnectClaudeCode'
   | 'setWatchedFolders'
 >;
 
@@ -134,6 +138,8 @@ export interface AppState {
   vision: VisionView | null;
   /** Download progress 0–1 and its task, while the model is downloading. */
   visionDownload: { taskId: string; fraction: number } | null;
+  /** Whether Claude Code is connected to this app's tools; null until Settings asks. */
+  claudeCode: ClaudeCodeView | null;
   /** Folders whose new recordings are imported automatically; null until a screen asks. */
   watched: WatchedFoldersView | null;
   toasts: Toast[];
@@ -160,6 +166,7 @@ const initial: AppState = {
   vision: null,
   visionDownload: null,
   watched: null,
+  claudeCode: null,
   toasts: [],
   lastSeq: 0,
 };
@@ -596,6 +603,24 @@ export class AppStore {
   async cancelVisionDownload(): Promise<void> {
     const d = this.state.visionDownload;
     if (d) await this.run((c) => c.cancelTask(d.taskId));
+  }
+
+  async loadClaudeCode(): Promise<void> {
+    const v = await this.run((c) => c.claudeCode());
+    if (v) this.set({ claudeCode: v });
+  }
+
+  async connectClaudeCode(): Promise<boolean> {
+    const v = await this.run((c) => c.connectClaudeCode());
+    if (!v) return false;
+    this.set({ claudeCode: v });
+    this.toast('info', 'Claude Code is connected. Start a new Claude Code session to use it.');
+    return true;
+  }
+
+  async disconnectClaudeCode(): Promise<void> {
+    const v = await this.run((c) => c.disconnectClaudeCode());
+    if (v) this.set({ claudeCode: v });
   }
 
   async loadWatched(): Promise<void> {

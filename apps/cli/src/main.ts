@@ -215,6 +215,7 @@ export async function main(
         engine,
         port,
         allowedOrigins: o['allow-origin'] ?? [],
+        ...(process.argv[1] ? { cliPath: resolve(process.argv[1]) } : {}),
         ...(o.ui ? { staticDir: resolve(o.ui) } : {}),
       });
       // The token goes after a `#` so it never reaches any server or log.

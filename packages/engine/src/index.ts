@@ -6,5 +6,6 @@ export * from './secrets.js';
 export * from './handoff.js';
 export * from './settings.js';
 export * from './footage-ops.js';
+export * from './claude-code-ops.js';
 export * from './vision-ops.js';
 export * from './watched-folders.js';

@@ -43,6 +43,7 @@ const pick = async (properties: Array<'openDirectory' | 'openFile' | 'createDire
 const host: DesktopHost = {
   dataDir: join(app.getPath('userData'), 'engine'),
   uiDir: app.isPackaged ? join(process.resourcesPath, 'ui') : join(here, '..', '..', 'ui', 'dist'),
+  cliPath: app.isPackaged ? undefined : join(here, '..', '..', 'cli', 'dist', 'bin.js'),
   safeStorage,
   createWindow,
   openExternal: (url) => void shell.openExternal(url),

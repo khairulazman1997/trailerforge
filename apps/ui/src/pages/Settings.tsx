@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppState, useStore } from '../app-context.js';
+import { ClaudeCodePanel } from '../components/ClaudeCodePanel.js';
 import { ConfirmDialog } from '../components/Dialog.js';
 import { RoutesEditor } from '../components/RoutesEditor.js';
 import { VisionPanel } from '../components/VisionPanel.js';
@@ -110,6 +111,7 @@ export function SettingsPage() {
         </p>
       </section>
 
+      <ClaudeCodePanel />
       <WatchedFoldersPanel />
       <VisionPanel />
 

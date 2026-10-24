@@ -43,7 +43,8 @@ import type { Engine } from './engine.js';
 /** A problem the caller can explain to the user. `usage` means the request itself was wrong. */
 export class OpError extends Error {
   constructor(
-    readonly code: 'usage' | 'no-video-type' | 'brief-incomplete' | 'not-found' | 'takes-attached',
+    readonly code:
+      'usage' | 'no-video-type' | 'brief-incomplete' | 'not-found' | 'takes-attached' | 'failed',
     message: string,
     readonly details?: unknown,
   ) {

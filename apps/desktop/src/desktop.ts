@@ -19,6 +19,8 @@ export interface DesktopHost {
   dataDir: string;
   /** Folder of the built UI. */
   uiDir: string;
+  /** The command-line tool (`apps/cli/dist/bin.js`) when it ships with this build, for Claude Code. */
+  cliPath?: string | undefined;
   safeStorage: SafeStorageLike;
   createWindow(): WindowLike;
   openExternal(url: string): void;
@@ -48,7 +50,11 @@ export async function startDesktop(host: DesktopHost): Promise<Desktop> {
   const engine = await Engine.start({ home: host.dataDir, secrets });
   let svc;
   try {
-    svc = await startService({ engine, staticDir: host.uiDir });
+    svc = await startService({
+      engine,
+      staticDir: host.uiDir,
+      ...(host.cliPath ? { cliPath: host.cliPath } : {}),
+    });
   } catch (err) {
     await engine.close();
     throw err;

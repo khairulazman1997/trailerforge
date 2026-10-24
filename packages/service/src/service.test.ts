@@ -498,6 +498,84 @@ describe('footage settings, vision and previews', () => {
   });
 });
 
+describe('Claude Code connection', () => {
+  /** A stand-in `claude` that keeps its MCP registrations in a JSON file. */
+  async function fakeClaude() {
+    const dir = await mkdtemp(join(tmpdir(), 'tforge-fake-cc-'));
+    const state = join(dir, 'servers.json');
+    const script = join(dir, 'claude.js');
+    await writeFile(
+      script,
+      `const fs = require('fs'); const f = ${JSON.stringify(state)};
+const db = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
+const [, , a, b, ...rest] = process.argv;
+if (a === 'mcp' && b === 'get') process.exit(db[rest[0]] ? 0 : 1);
+if (a === 'mcp' && b === 'add') {
+  const i = rest.indexOf('--'); const name = rest[i - 1];
+  db[name] = { scope: rest[rest.indexOf('--scope') + 1], cmd: rest.slice(i + 1) };
+  fs.writeFileSync(f, JSON.stringify(db)); process.exit(0);
+}
+if (a === 'mcp' && b === 'remove') { delete db[rest[rest.length - 1]]; fs.writeFileSync(f, JSON.stringify(db)); process.exit(0); }
+process.exit(2);`,
+    );
+    return {
+      script,
+      servers: async () => JSON.parse(await readFile(state, 'utf8').catch(() => '{}')),
+    };
+  }
+
+  it('registers, re-registers and removes the MCP server, and says when it cannot', async () => {
+    const fake = await fakeClaude();
+    const cli = join(root, 'cli', 'bin.js');
+    const s2 = await startService({
+      engine,
+      claudeBin: process.execPath,
+      claudeBinArgs: [fake.script],
+      cliPath: cli,
+    });
+    try {
+      const c2 = new ServiceClient({ baseUrl: s2.url, token: s2.token });
+      const before = await c2.claudeCode();
+      expect(before).toMatchObject({ installed: true, connected: false, canConnect: true });
+      expect(before.command).toContain('claude mcp add --scope user trailerforge --');
+      expect(before.command).toContain(engine.home);
+
+      expect(await c2.connectClaudeCode()).toMatchObject({ connected: true });
+      expect((await fake.servers()).trailerforge).toMatchObject({
+        scope: 'user',
+        cmd: ['node', cli, 'mcp', '--home', engine.home],
+      });
+      expect(await c2.connectClaudeCode()).toMatchObject({ connected: true }); // reconnect
+      expect(await c2.disconnectClaudeCode()).toMatchObject({ connected: false });
+      expect(await fake.servers()).toEqual({});
+    } finally {
+      await s2.close();
+    }
+
+    const noCli = await startService({
+      engine,
+      claudeBin: process.execPath,
+      claudeBinArgs: [fake.script],
+    });
+    const missing = await startService({
+      engine,
+      claudeBin: join(root, 'no-such-claude'),
+      cliPath: cli,
+    });
+    try {
+      const a = new ServiceClient({ baseUrl: noCli.url, token: noCli.token });
+      expect(await a.claudeCode()).toMatchObject({ canConnect: false, command: null });
+      await expect(a.connectClaudeCode()).rejects.toMatchObject({ status: 400 });
+      const b = new ServiceClient({ baseUrl: missing.url, token: missing.token });
+      expect(await b.claudeCode()).toMatchObject({ installed: false, connected: false });
+      await expect(b.connectClaudeCode()).rejects.toMatchObject({ status: 404 });
+    } finally {
+      await noCli.close();
+      await missing.close();
+    }
+  });
+});
+
 describe('EventLog', () => {
   it('tells a client that fell too far behind to refetch', async () => {
     const log = new EventLog(3);

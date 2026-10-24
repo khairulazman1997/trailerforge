@@ -9,17 +9,10 @@ import {
   parsePaths,
 } from '../footage-view.js';
 import { Filmstrip, Thumb } from '../components/Thumb.js';
+import { desktop } from '../desktop.js';
 import { VisionPanel } from '../components/VisionPanel.js';
 import { Link, projectPath } from '../router.js';
 import { busyTask } from '../store.js';
-
-interface Desktop {
-  pickFolder?: () => Promise<string | null>;
-  pickFile?: () => Promise<string | null>;
-  pathForFile?: (file: File) => string;
-}
-const desktop = (): Desktop | undefined =>
-  (window as unknown as { trailerforgeDesktop?: Desktop }).trailerforgeDesktop;
 
 /** Paths of dropped files, where the host can say (the desktop app); browsers hide them. */
 function droppedPaths(e: DragEvent): string[] {

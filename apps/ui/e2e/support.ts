@@ -25,6 +25,9 @@ export interface TestService {
 export async function startTestService(
   opts: {
     claudeBin?: string;
+    claudeBinArgs?: string[];
+    /** Where Claude Code would launch the MCP server from (enables the Connect button). */
+    cliPath?: string;
     /** Make the mock provider claim it sends data off the computer. */ offDevice?: boolean;
     /** Use the engine's real providers and default routes instead of the mock LLM. */
     realProviders?: boolean;
@@ -112,6 +115,8 @@ export async function startTestService(
     engine,
     staticDir: resolve(import.meta.dirname, '..', 'dist'),
     ...(opts.claudeBin ? { claudeBin: opts.claudeBin } : {}),
+    ...(opts.claudeBinArgs ? { claudeBinArgs: opts.claudeBinArgs } : {}),
+    ...(opts.cliPath ? { cliPath: opts.cliPath } : {}),
   });
   return {
     root,

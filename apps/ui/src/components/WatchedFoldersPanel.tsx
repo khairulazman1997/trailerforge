@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppState, useStore } from '../app-context.js';
 import { parsePaths } from '../footage-view.js';
+import { BrowseButton } from './BrowseButton.js';
 
 /**
  * Folders (such as OBS's output folder) whose new recordings are imported on their own. Only
@@ -66,6 +67,10 @@ export function WatchedFoldersPanel() {
             onChange={(e) => setText(e.target.value)}
           />
         </label>
+        <BrowseButton
+          label="Browse for a folder…"
+          onPick={(p) => void store.setWatched([...new Set([...watched.folders, p])])}
+        />
         <button type="submit" disabled={parsePaths(text).length === 0}>
           Watch this folder
         </button>

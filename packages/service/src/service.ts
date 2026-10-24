@@ -25,6 +25,9 @@ import {
   captureViewOp,
   cutGridOp,
   libraryMediaOp,
+  claudeCodeConnectOp,
+  claudeCodeDisconnectOp,
+  claudeCodeStatusOp,
   visionDownloadOp,
   visionStatusOp,
   type LibraryMediaKind,
@@ -82,6 +85,10 @@ export interface ServiceOptions {
   maxBodyBytes?: number;
   /** Path of the `claude` CLI used by the opt-in deep scan; default `claude` on PATH. */
   claudeBin?: string;
+  /** Where Claude Code launches TrailerForge's MCP server from (`apps/cli/dist/bin.js`); null/absent: not offered. */
+  cliPath?: string | null;
+  /** Arguments before the `claude` CLI's own (tests run a fake CLI through Node). */
+  claudeBinArgs?: string[];
   /**
    * Folder of a built UI (index.html + assets) to serve at `/`, same origin as the API. The
    * files are public (no token); only `/v1/*` needs one. Served with a strict CSP.
@@ -119,6 +126,7 @@ export function describeError(err: unknown): HttpError {
       'no-video-type': 422,
       'brief-incomplete': 422,
       'takes-attached': 409,
+      failed: 502,
     }[err.code];
     return new HttpError(status, err.code, err.message, err.details);
   }
@@ -305,6 +313,11 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     events.emit('settings.changed', { what });
 
   let visionTaskId: string | undefined;
+  const claudeCli = {
+    ...(opts.claudeBin ? { bin: opts.claudeBin } : {}),
+    ...(opts.claudeBinArgs ? { binArgs: opts.claudeBinArgs } : {}),
+    cliPath: opts.cliPath ?? null,
+  };
 
   const stores = () => [...engine.projects.values()];
   const storeById = (id: string): ProjectStore => {
@@ -489,6 +502,9 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         return view;
       },
     ],
+    ['GET', /^\/v1\/claude-code$/, async () => claudeCodeStatusOp(engine, claudeCli)],
+    ['POST', /^\/v1\/claude-code\/connect$/, async () => claudeCodeConnectOp(engine, claudeCli)],
+    ['DELETE', /^\/v1\/claude-code$/, async () => claudeCodeDisconnectOp(engine, claudeCli)],
     ['GET', /^\/v1\/vision$/, async () => visionStatusOp(engine)],
     [
       'POST',

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useAppState, useStore } from '../app-context.js';
+import { BrowseButton } from '../components/BrowseButton.js';
+import { joinPath } from '../desktop.js';
 import { Link, navigate, projectPath } from '../router.js';
 import type { Info } from '../store.js';
 
@@ -88,9 +90,19 @@ export function HomePage() {
                 spellCheck={false}
               />
             </label>
-            <button type="submit" className="primary" disabled={busy || !openDir.trim()}>
-              Open
-            </button>
+            <div className="row">
+              <BrowseButton
+                label="Browse for a project…"
+                disabled={busy}
+                onPick={(p) => {
+                  setOpenDir(p);
+                  void open(p);
+                }}
+              />
+              <button type="submit" className="primary" disabled={busy || !openDir.trim()}>
+                Open
+              </button>
+            </div>
           </form>
           {recent.length > 0 && (
             <>
@@ -158,6 +170,11 @@ export function HomePage() {
                 spellCheck={false}
               />
             </label>
+            <BrowseButton
+              label="Choose where to put it…"
+              disabled={busy || !name.trim()}
+              onPick={(parent) => setNewDir(joinPath(parent, `${name.trim()}.tforge`))}
+            />
             <button
               type="submit"
               className="primary"

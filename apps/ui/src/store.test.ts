@@ -206,6 +206,24 @@ class Fake {
       this.keySet = false;
       return {} as never;
     },
+    claudeCode: async () => ({
+      installed: true,
+      connected: false,
+      canConnect: true,
+      command: 'claude mcp add',
+    }),
+    connectClaudeCode: async () => ({
+      installed: true,
+      connected: true,
+      canConnect: true,
+      command: 'claude mcp add',
+    }),
+    disconnectClaudeCode: async () => ({
+      installed: true,
+      connected: false,
+      canConnect: true,
+      command: 'claude mcp add',
+    }),
     vision: async () => ({ status: 'unavailable', disclosure: null }),
     downloadVision: async () => {
       throw new Error('unused');
