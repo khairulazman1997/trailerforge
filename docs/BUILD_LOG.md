@@ -85,7 +85,7 @@ Design defaults confirmed by the user before 3.1: Markdown + printable HTML (PDF
 | Task                     | Commit    | Start    | End      | Build time | Model  | Notes                                                                                                                                                        |
 | ------------------------ | --------- | -------- | -------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 3.1 Capture plan builder | `2684a95` | 00:25:46 | 00:28:50 | ~3 min     | Opus   | seeded-PRNG property tests (no new dep); locked sections kept (a lock guards content, not recording); skip via ext                                           |
-| 3.2 Recording settings   | `HASH`    | 00:42:04 | 00:46:37 | ~5 min     | Sonnet | derived from platforms, video type, HUD needs and format targets; overrides at `extensions['game-trailer'].recording`; MCP exposes the two commands as tools |
+| 3.2 Recording settings   | `9fdeb76` | 00:42:04 | 00:46:37 | ~5 min     | Sonnet | derived from platforms, video type, HUD needs and format targets; overrides at `extensions['game-trailer'].recording`; MCP exposes the two commands as tools |
 
 | When (M3)  | Session | Week | Note           |
 | ---------- | ------- | ---- | -------------- |
