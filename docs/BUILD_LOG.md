@@ -157,3 +157,15 @@ Planned: 14 tasks (4.1–4.14), about 270–400k output tokens, ~75% Opus, six s
 | After 4.14 (M4 done)         | 0%      | 68%  | new session window |
 
 M4 summary: 14 planned tasks (4.1–4.14) plus 4.5b (pinning the vision model) and the 4.11a/b split, from 02:48 to about 14:30 UTC across four session windows; session readings 2% → 88% (window 1), 3% → 17%+ (window 2), week 50% → 68% (reading after 4.14, new window at 0%). Planned 270–400k output tokens over 2–3 windows and 18–30% of the week. Left: 4.12b (vision wiring, watched-folder setting, previews on screen), the live vision download test (blocked by the network policy), a human review of a cut and the Windows checks in `docs/NEXT_SESSION.md`.
+
+## Milestone 5 — Variants + graphics (broken down 2026-10-25, UTC)
+
+Breakdown at 18:31 UTC: 13 tasks (5.1–5.13), six design defaults to confirm at the start of M5, about 200–300k output tokens (~65% Opus) over 4–6 session windows, roughly 15–25% of a week. Prompt for the first session: `docs/NEXT_SESSION.md`. Also this session: storyboard rows show each shot's on-screen text without opening it.
+
+| Task | Commit | Start | End | Duration | Model | Notes |
+| ---- | ------ | ----- | --- | -------- | ----- | ----- |
+
+| When (M5)        | Session | Week | Note           |
+| ---------------- | ------- | ---- | -------------- |
+| Before breakdown | 34%     | 72%  | last reading   |
+| Before 5.1       | —       | —    | user to report |

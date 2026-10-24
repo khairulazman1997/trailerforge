@@ -88,6 +88,10 @@ test('edit, retime, reorder, drag, delete and undo', async ({ page }) => {
   await expect(row(page, hook, 'Forest sprint')).toContainText(
     'Sprint through the burning forest.',
   );
+  // Shown on the shot's row without opening it.
+  await expect(row(page, hook, 'Forest sprint').getByTestId('slot-captions')).toContainText(
+    'Outrun the fire',
+  );
   await page.getByRole('button', { name: 'Edit details of Forest sprint' }).click();
   await expect(row(page, hook, 'Forest sprint').getByLabel('Text', { exact: true })).toHaveValue(
     'Outrun the fire',

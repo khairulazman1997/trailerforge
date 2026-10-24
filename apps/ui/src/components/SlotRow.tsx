@@ -198,6 +198,15 @@ export function SlotRow(p: SlotRowProps) {
         )}
       </div>
       {summary && !open && <p className="slot-summary">{summary}</p>}
+      {slot.kind === 'shot' && !open && slot.overlays.some((o) => o.text) && (
+        <p className="slot-captions" data-testid="slot-captions">
+          <span className="muted">On-screen text: </span>
+          {slot.overlays
+            .filter((o) => o.text)
+            .map((o) => `“${o.text}”${o.templateId === 'core/lower-third' ? ' (name label)' : ''}`)
+            .join(', ')}
+        </p>
+      )}
       {slot.entityIds.length > 0 && !open && (
         <p className="slot-entities">
           {slot.entityIds.map((id) => (
