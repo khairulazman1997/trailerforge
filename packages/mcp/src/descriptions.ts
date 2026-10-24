@@ -3,6 +3,14 @@
  * not the intent). Commands not listed here still get a generic description.
  */
 export const COMMAND_DESCRIPTIONS: Record<string, string> = {
+  'game-trailer/capture.set-status':
+    'Mark a shot slot empty, recorded, approved or rejected. Works in locked sections; the storyboard itself is unchanged.',
+  'game-trailer/capture.set-notes': 'Set the capture notes on a shot slot.',
+  'game-trailer/capture.set-takes': 'Set how many takes have been recorded for a shot slot.',
+  'game-trailer/capture.set-skipped':
+    'Skip a shot (leave it out of the capture checklist) or restore it.',
+  'game-trailer/capture.reorder-group':
+    "Reorder the shots of one capture group: pass exactly that group's slot ids in the new order. The storyboard order is unchanged.",
   'game-trailer/recording.set-overrides':
     'Override recording settings (resolution, fps, bitrateMbps, codec, container, hud, hdr). Send null to clear one override and go back to the derived value.',
   'game-trailer/recording.reset-overrides':
