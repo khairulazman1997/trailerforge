@@ -207,3 +207,4 @@ Breakdown at 15:37 UTC: 13 tasks (6.1–6.13), eight design defaults, all confir
 | When (M6)        | Session | Week | Note           |
 | ---------------- | ------- | ---- | -------------- |
 | Before breakdown | 60%     | 8%   | user's reading |
+| After 6.1        | 70%     | 10%  | before 6.2     |
