@@ -4,7 +4,7 @@ import { request } from 'node:http';
 import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Engine } from '@trailerforge/engine';
+import { Engine, brandImportOp } from '@trailerforge/engine';
 import { createMockProvider, LlmClient, RoutesConfig } from '@trailerforge/llm';
 import { sampleProject } from '@trailerforge/schema/fixtures';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -1296,6 +1296,27 @@ describe('review, quality and render tasks', { timeout: 120_000 }, () => {
   const id = 'proj_render';
   beforeAll(async () => {
     await engine.createProject(join(root, 'Render.tforge'), { ...sampleProject(), id } as never);
+  });
+
+  it("serves only the project's own logo and font files to the preview", async () => {
+    const store = await engine.openProject(join(root, 'Render.tforge'));
+    const logo = join(root, 'brand-logo.svg');
+    await writeFile(
+      logo,
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>',
+    );
+    await brandImportOp(store, { kind: 'logo', path: logo });
+    const f = store.state.brand!.logo!;
+    const blob = await client.brandFile(id, `${f.hash}.${f.ext}`);
+    expect(blob.type).toBe('image/svg+xml');
+    expect(await blob.text()).toContain('<rect');
+    await expect(client.brandFile(id, 'project.json')).rejects.toMatchObject({ status: 404 });
+    await expect(client.brandFile(id, '..%2F..%2Fproject.json')).rejects.toMatchObject({
+      status: 404,
+    });
+    await expect(client.brandFile(id, `${'0'.repeat(64)}.svg`)).rejects.toMatchObject({
+      status: 404,
+    });
   });
 
   it('lists presets and the versions with their review state', async () => {

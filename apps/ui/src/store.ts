@@ -43,6 +43,35 @@ export interface BrandSnapshot {
   version: number;
 }
 
+export interface ReviewSnapshot {
+  views: Awaited<ReturnType<ServiceClient['review']>>;
+  version: number;
+}
+
+export interface QualitySnapshot {
+  report: Awaited<ReturnType<ServiceClient['quality']>>;
+  version: number;
+  /** The overrides it was computed with, so a changed reason refetches. */
+  overrides: string;
+}
+
+export interface RenderProgressView {
+  kind: string;
+  phase: string;
+  fraction: number;
+  message?: string | undefined;
+}
+
+/** The brand's logo and fonts as the browser holds them, for the preview. */
+export interface BrandAssets {
+  /** Identifies the files these were loaded from. */
+  key: string;
+  /** `<hash>.<ext>` names that loaded. */
+  present: ReadonlySet<string>;
+  /** `media/<hash>.<ext>` → data URI (the logo). */
+  images: Record<string, string>;
+}
+
 export interface Catalog {
   templates: Awaited<ReturnType<ServiceClient['graphicTemplates']>>;
   effects: Awaited<ReturnType<ServiceClient['effects']>>;
@@ -54,8 +83,13 @@ export type ClientLike = Pick<
   | 'graphicTemplates'
   | 'effects'
   | 'variants'
+  | 'review'
+  | 'approveVersion'
+  | 'quality'
+  | 'draft'
   | 'createDefaultVariants'
   | 'brand'
+  | 'brandFile'
   | 'importBrandFile'
   | 'footage'
   | 'cutGrid'
@@ -150,6 +184,16 @@ export interface AppState {
   /** What is installed: graphics templates, transitions, effects and sounds (read once). */
   catalog: Catalog | null;
   brands: Record<string, BrandSnapshot>;
+  /** The brand's own fonts and logo, loaded into the page for the graphics preview. */
+  brandAssets: Record<string, BrandAssets>;
+  /** Each version's review state, per project. */
+  review: Record<string, ReviewSnapshot>;
+  /** The Quality Gate on a version's plan, by `<project>|<version>`. */
+  quality: Record<string, QualitySnapshot>;
+  /** Overrides the user has chosen for the next export, by `<project>|<version>` → check id → reason. */
+  gateOverrides: Record<string, Record<string, string>>;
+  /** Progress of the render running in a project (events from the engine). */
+  renderProgress: Record<string, RenderProgressView>;
   /** The beat grid the cut lands on, per project (null: music not chosen or analysed yet). */
   cutGrid: Record<string, { version: number; grid: Awaited<ReturnType<ServiceClient['cutGrid']>> }>;
   /** Latest progress message of a running task, per project (cleared when the task ends). */
@@ -187,6 +231,11 @@ const initial: AppState = {
   versions: {},
   catalog: null,
   brands: {},
+  brandAssets: {},
+  review: {},
+  quality: {},
+  gateOverrides: {},
+  renderProgress: {},
   cutGrid: {},
   notices: {},
   decisions: {},
@@ -358,6 +407,13 @@ export class AppStore {
             );
           break;
         }
+        if (RENDER_KINDS.has(t.kind) && t.status !== 'running') {
+          this.set((s) => {
+            const { [t.projectId]: _p, ...renderProgress } = s.renderProgress;
+            return { renderProgress };
+          });
+          if (t.status === 'succeeded') await this.refreshReview(t.projectId);
+        }
         if (t.status === 'failed') {
           this.toast('error', `${t.kind} failed: ${t.error?.message ?? 'unknown error'}`);
         } else if (t.status === 'succeeded' && t.kind === 'generate') {
@@ -397,6 +453,11 @@ export class AppStore {
       case 'vision.progress': {
         const p = data as { taskId: string; fraction: number };
         this.set({ visionDownload: { taskId: p.taskId, fraction: p.fraction } });
+        break;
+      }
+      case 'render.progress': {
+        const { projectId, ...p } = data as unknown as { projectId: string } & RenderProgressView;
+        this.set((s) => ({ renderProgress: { ...s.renderProgress, [projectId]: p } }));
         break;
       }
       case 'job.updated': {
@@ -443,7 +504,20 @@ export class AppStore {
       const { [id]: _why, ...decisions } = s.decisions;
       const { [id]: _versions, ...versions } = s.versions;
       const { [id]: _brand, ...brands } = s.brands;
+      const { [id]: _review, ...review } = s.review;
+      const { [id]: _assets, ...brandAssets } = s.brandAssets;
+      const { [id]: _progress, ...renderProgress } = s.renderProgress;
+      const mine = (k: string) => !k.startsWith(`${id}|`);
+      const quality = Object.fromEntries(Object.entries(s.quality).filter(([k]) => mine(k)));
+      const gateOverrides = Object.fromEntries(
+        Object.entries(s.gateOverrides).filter(([k]) => mine(k)),
+      );
       return {
+        review,
+        brandAssets,
+        renderProgress,
+        quality,
+        gateOverrides,
         versions,
         brands,
         projects,
@@ -761,6 +835,129 @@ export class AppStore {
     return url;
   }
 
+  // ---- the brand's own fonts and logo in the preview ----
+
+  /**
+   * Loads the brand's font files into the page (as the family the brand declares) and its logo as
+   * a data URI, so the preview draws what the final render draws. Files that fail to load are left
+   * out, and the preview falls back to Inter for them, as the render does for a missing file.
+   */
+  async loadBrandAssets(projectId: string): Promise<void> {
+    const brand = this.state.projects[projectId]?.project.brand;
+    if (!this.client || !brand) return;
+    const files = [
+      ...(brand.logo ? [{ file: brand.logo }] : []),
+      ...brand.fonts.map((f) => ({ file: f.file, font: f })),
+    ];
+    const key = files.map((f) => `${f.file.hash}.${f.file.ext}`).join('|');
+    if (this.state.brandAssets[projectId]?.key === key) return;
+    const present = new Set<string>();
+    const images: Record<string, string> = {};
+    for (const f of files) {
+      const name = `${f.file.hash}.${f.file.ext}`;
+      try {
+        const blob = await this.client.brandFile(projectId, name);
+        if ('font' in f && f.font) {
+          if (typeof FontFace === 'undefined') continue;
+          const face = new FontFace(f.font.family, await blob.arrayBuffer(), {
+            weight: f.font.bold ? '700' : '400',
+          });
+          document.fonts.add(await face.load());
+        } else {
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          let bin = '';
+          for (let i = 0; i < bytes.length; i += 0x8000)
+            bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+          images[`media/${name}`] =
+            `data:${f.file.ext === 'svg' ? 'image/svg+xml' : 'image/png'};base64,${btoa(bin)}`;
+        }
+        present.add(name);
+      } catch {
+        // Missing or unreadable: the preview falls back, with the brand page's warning.
+      }
+    }
+    this.set((s) => ({ brandAssets: { ...s.brandAssets, [projectId]: { key, present, images } } }));
+  }
+
+  // ---- review, quality gate and drafts ----
+
+  /** Reads every version's review state; a quiet failure keeps the old snapshot. */
+  async refreshReview(projectId: string): Promise<void> {
+    const version = this.state.projects[projectId]?.version;
+    if (version === undefined || !this.client) return;
+    try {
+      const views = await this.client.review(projectId);
+      this.set((s) => ({ review: { ...s.review, [projectId]: { views, version } } }));
+    } catch {
+      // Busy or closed: keep what is shown.
+    }
+  }
+
+  /** The Quality Gate on a version's plan, with the overrides chosen so far. */
+  async loadQuality(projectId: string, variantId: string | null): Promise<void> {
+    const version = this.state.projects[projectId]?.version;
+    if (version === undefined || !this.client) return;
+    const key = `${projectId}|${variantId ?? 'master'}`;
+    const chosen = this.state.gateOverrides[key] ?? {};
+    const overrides = Object.entries(chosen)
+      .filter(([, reason]) => reason.trim())
+      .map(([checkId, reason]) => ({ checkId, reason }));
+    const stamp = JSON.stringify(overrides);
+    try {
+      const report = await this.client.quality(projectId, variantId, overrides);
+      this.set((s) => ({
+        quality: { ...s.quality, [key]: { report, version, overrides: stamp } },
+      }));
+    } catch {
+      // Keep what is shown.
+    }
+  }
+
+  /** Chooses (or with an empty reason, drops) an override for the next export of a version. */
+  setGateOverride(projectId: string, variantId: string | null, checkId: string, reason: string) {
+    const key = `${projectId}|${variantId ?? 'master'}`;
+    this.set((s) => {
+      const mine = { ...(s.gateOverrides[key] ?? {}) };
+      if (reason) mine[checkId] = reason;
+      else delete mine[checkId];
+      return { gateOverrides: { ...s.gateOverrides, [key]: mine } };
+    });
+  }
+
+  async startDraft(projectId: string, variantId: string | null): Promise<boolean> {
+    const t = await this.startTask(projectId, { kind: 'render-draft', options: { variantId } });
+    return t !== null;
+  }
+
+  /** Approve a version as it is now. */
+  async approve(projectId: string, variantId: string | null, note?: string): Promise<boolean> {
+    const r = await this.run((c) => c.approveVersion(projectId, variantId, note));
+    if (!r) return false;
+    await this.waitForVersion(projectId, (this.state.projects[projectId]?.version ?? 0) + 1);
+    await this.refreshReview(projectId);
+    return true;
+  }
+
+  private draftUrls = new Map<string, Promise<string | null>>();
+
+  /** A playable address for a version's current draft (fetched once per content, with the token). */
+  draftUrl(
+    projectId: string,
+    variantId: string | null,
+    contentHash: string,
+  ): Promise<string | null> {
+    const key = `${projectId}|${variantId ?? 'master'}|${contentHash}`;
+    let url = this.draftUrls.get(key);
+    if (!url) {
+      url = Promise.resolve(this.client?.draft(projectId, variantId).catch(() => undefined)).then(
+        (b) => (b ? URL.createObjectURL(b) : null),
+      );
+      this.draftUrls.set(key, url);
+      void url.then((u) => u === null && this.draftUrls.delete(key));
+    }
+    return url;
+  }
+
   // ---- versions and brand ----
 
   /** Reads what is installed once; a quiet failure leaves it unset (the screens say so). */
@@ -954,9 +1151,12 @@ export class AppStore {
     this.set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
 }
 
-/** The task currently running on a project, if any. */
+/** Renders only read the project, so editing goes on while they run. */
+const RENDER_KINDS = new Set(['render-draft', 'export', 'handoff']);
+
+/** The task currently running on a project, if any that pauses editing. */
 export function busyTask(state: AppState, projectId: string): TaskView | undefined {
   return Object.values(state.tasks).find(
-    (t) => t.projectId === projectId && t.status === 'running',
+    (t) => t.projectId === projectId && t.status === 'running' && t.blocking !== false,
   );
 }

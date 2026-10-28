@@ -131,6 +131,17 @@ class Fake {
       sounds: { folder: null, generated: [], files: [], warnings: [] },
     }),
     variants: async () => ({ hasMaster: false, variants: [], missing: [] }),
+    review: async () => [],
+    approveVersion: async () => ({ contentHash: 'h' }),
+    quality: async () => ({
+      variantId: null,
+      contentHash: 'h',
+      preset: { id: 'core/youtube', name: 'YouTube', extension: 'mp4' },
+      findings: [],
+      verdict: { allowed: true, blocking: [], needsOverride: [], overridden: [], warnings: [] },
+    }),
+    draft: async () => new Blob([]),
+    brandFile: async () => new Blob([]),
     createDefaultVariants: async () => ({ added: [] }),
     brand: async () => ({
       brand: null,

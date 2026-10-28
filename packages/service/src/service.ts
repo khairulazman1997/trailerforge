@@ -829,6 +829,39 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     ],
     [
       'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/brand\/files\/(?<name>[^/]+)$/,
+      async ({ params, res }) => {
+        // Only the project's own logo and font files, by their `<hash>.<ext>` names.
+        const store = storeById(params.id!);
+        const name = decodeURIComponent(params.name!);
+        const b = store.state.brand;
+        const files = [b?.logo, ...(b?.fonts.map((f) => f.file) ?? [])].filter(Boolean);
+        if (!files.some((f) => `${f!.hash}.${f!.ext}` === name))
+          throw new HttpError(404, 'not-found', 'not a brand file of this project');
+        const bytes = await readFile(join(store.paths.media, name));
+        const ext = name.slice(name.lastIndexOf('.') + 1);
+        res.writeHead(200, {
+          ...SECURITY_HEADERS,
+          'Content-Type':
+            (
+              {
+                svg: 'image/svg+xml',
+                png: 'image/png',
+                ttf: 'font/ttf',
+                otf: 'font/otf',
+                woff: 'font/woff',
+                woff2: 'font/woff2',
+              } as Record<string, string>
+            )[ext] ?? 'application/octet-stream',
+          'Content-Length': bytes.length,
+          'Cache-Control': 'private, max-age=3600',
+        });
+        res.end(bytes);
+        return STREAMING;
+      },
+    ],
+    [
+      'GET',
       /^\/v1\/projects\/(?<id>[^/]+)\/brand$/,
       async ({ params }) => brandViewOp(storeById(params.id!)),
     ],

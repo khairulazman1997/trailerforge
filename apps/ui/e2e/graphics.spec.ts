@@ -1,6 +1,9 @@
+import { copyFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { brandImportOp } from '@trailerforge/engine';
 import { sampleProject } from '@trailerforge/schema/fixtures';
 import { hashText } from '../src/graphics-view.js';
 import { ServiceClient } from '@trailerforge/service/client';
@@ -117,6 +120,48 @@ test('graphics: pick a template, edit the words, scrub the animation, and the pr
   // Everything was a command: undo takes the last edit back.
   await undoButton(page).click();
   await expect(page.getByLabel('Text', { exact: true })).toHaveValue('The Ash Warden');
+});
+
+test("graphics: the preview draws the brand's own font and logo", async ({ page }) => {
+  const store = await t.engine.openProject(join(t.root, 'Graphics.tforge'));
+  const font = join(t.root, 'Acme-Bold.otf');
+  copyFileSync(
+    fileURLToPath(new URL('../../../assets/fonts/inter/Inter-Bold.otf', import.meta.url)),
+    font,
+  );
+  await brandImportOp(store, {
+    kind: 'font',
+    path: font,
+    family: 'Acme Display',
+    bold: true,
+    role: 'heading',
+  });
+  const logo = join(t.root, 'logo.svg');
+  writeFileSync(
+    logo,
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#c92a2a"/></svg>',
+  );
+  await brandImportOp(store, { kind: 'logo', path: logo });
+
+  await page.goto(`${t.svc.url}/p/${ID}/graphics#token=${t.svc.token}`);
+  const nav = page.getByRole('navigation', { name: 'Cards and on-screen text' });
+  await nav.getByRole('button').first().click();
+  const frame = page.getByTestId('gfx-preview');
+  const scrub = page.getByLabel(/^Time \(/);
+
+  // The font file is loaded into the page under the family the brand declares, and used.
+  await page.getByLabel('Template').selectOption('core/cta-card');
+  await scrub.fill('1.5');
+  await expect
+    .poll(() => page.evaluate(() => [...document.fonts].map((f) => f.family.replace(/"/g, ''))))
+    .toContain('Acme Display');
+  expect(await frame.innerHTML()).toContain('Acme Display');
+
+  // The logo card shows the logo as an image.
+  await page.getByLabel('Template').selectOption('core/logo-card');
+  await scrub.fill('1.5');
+  await expect(frame.locator('image[href^="data:image/svg+xml"]')).toHaveCount(1);
+  expect(await axe(page)).toEqual([]);
 });
 
 test('cut: effects, a transition into a clip and a sound, all undoable', async ({ page }) => {

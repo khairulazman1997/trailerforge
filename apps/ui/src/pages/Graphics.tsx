@@ -147,6 +147,11 @@ function Editor({
   const store = useStore();
   const view = useAppState((s) => s.projects[id])!;
   const project = view.project;
+  const assets = useAppState((s) => s.brandAssets[id]);
+  const brand = project.brand;
+  useEffect(() => {
+    void store.loadBrandAssets(id);
+  }, [store, id, brand]);
   const [text, setText] = useState(item.text);
   const [params, setParams] = useState<Record<string, unknown>>(item.params);
   const [at, setAt] = useState(Math.min(1.5, item.seconds / 2));
@@ -198,6 +203,7 @@ function Editor({
     size,
     seconds: item.seconds,
     at,
+    ...(assets ? { present: assets.present } : {}),
   });
   const cleaned = (p: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(p).filter(([, v]) => v !== '' && v !== undefined));
@@ -292,6 +298,7 @@ function Editor({
           <GraphicPreview
             svg={preview.svg}
             label={`Preview of ${item.title} at ${Math.round(at * 100) / 100} seconds`}
+            {...(assets ? { images: assets.images } : {})}
           />
           {preview.warnings.length > 0 && (
             <ul aria-label="Problems with this graphic">

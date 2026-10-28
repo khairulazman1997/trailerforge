@@ -99,6 +99,8 @@ export interface TaskView {
   finishedAt?: string;
   result?: unknown;
   error?: { code: string; message: string; details?: unknown };
+  /** False for renders: they only read the project, so editing goes on while they run. */
+  blocking?: boolean;
 }
 
 export type TaskRequest =
@@ -479,6 +481,15 @@ export class ServiceClient {
       )?.error;
       throw new ServiceError(res.status, e?.code ?? 'http', e?.message ?? res.statusText);
     }
+    return res.blob();
+  }
+  /** A logo or font of the project's brand kit (`<hash>.<ext>`), as a Blob, for the preview. */
+  async brandFile(id: string, name: string): Promise<Blob> {
+    const res = await this.fetchFn(
+      `${this.opts.baseUrl}/v1/projects/${encodeURIComponent(id)}/brand/files/${encodeURIComponent(name)}`,
+      { headers: { Authorization: `Bearer ${this.opts.token}` } },
+    );
+    if (!res.ok) throw new ServiceError(res.status, 'http', res.statusText);
     return res.blob();
   }
   generateCut(id: string, opts: { leadFrames?: number } = {}) {

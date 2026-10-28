@@ -111,6 +111,8 @@ export function previewFrame(o: {
   size: Resolution;
   seconds: number;
   at: number;
+  /** `<hash>.<ext>` names of the brand's logo and fonts that the browser has loaded. */
+  present?: ReadonlySet<string>;
 }): Preview | { error: string } {
   const t = registry.get(o.templateId);
   if (!t)
@@ -119,10 +121,16 @@ export function previewFrame(o: {
     };
   const duration = Math.max(1, Math.round(o.seconds * FLICKS_PER_SECOND));
   const safe = safeBox(o.size);
+  const present = o.present ?? new Set<string>();
   try {
     const scene = buildScene(t, {
       params: o.params,
-      brand: brandTokens(o.brand, resolveBrandFonts(null, new Set()), o.size, true),
+      brand: brandTokens(
+        o.brand,
+        resolveBrandFonts(o.brand, present),
+        o.size,
+        !o.brand?.logo || present.has(`${o.brand.logo.hash}.${o.brand.logo.ext}`),
+      ),
       size: o.size,
       duration,
       safe,
@@ -136,6 +144,16 @@ export function previewFrame(o: {
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * Swaps the project's own images (`media/<hash>.<ext>`, the logo) for data URIs the page holds,
+ * for display only: the frame's hash is taken from the SVG as the engine writes it.
+ */
+export function inlineImages(svg: string, images: Readonly<Record<string, string>>): string {
+  return svg.replace(/href="(media\/[^"]+)"/g, (whole, href: string) =>
+    images[href] ? `href="${images[href]}"` : whole,
+  );
 }
 
 /** Seconds as flicks on the frame grid, at least one frame. */

@@ -1,9 +1,10 @@
-import { defaultBrand } from '@trailerforge/schema';
+import { Brand, defaultBrand } from '@trailerforge/schema';
 import { describe, expect, it } from 'vitest';
 import {
   defaultsOf,
   fieldsOf,
   hashText,
+  inlineImages,
   labelFor,
   previewFrame,
   secondsToFrameFlicks,
@@ -83,6 +84,39 @@ describe('graphics view', () => {
     expect(
       previewFrame({ ...base, templateId: 'core/title-card', params: { nope: 1 } }),
     ).toHaveProperty('error');
+  });
+
+  it("draws with the brand's own font and logo once the browser has them, Inter and no logo until then", () => {
+    const font = { hash: 'a'.repeat(64), ext: 'otf', name: 'Acme.otf' } as const;
+    const logo = { hash: 'b'.repeat(64), ext: 'svg', name: 'logo.svg' } as const;
+    const brand = Brand.parse({
+      fonts: [{ role: 'heading', family: 'Acme Display', bold: true, file: font }],
+      logo,
+    });
+    const o = {
+      brand,
+      size: { width: 1920, height: 1080 },
+      seconds: 3,
+      at: 1.5,
+      templateId: 'core/logo-card',
+      params: { text: 'Ember Knight' },
+    };
+    const present = new Set([`${font.hash}.otf`, `${logo.hash}.svg`]);
+    const svg = (p: ReturnType<typeof previewFrame>) => ('svg' in p ? p.svg : '');
+    expect(svg(previewFrame(o))).not.toContain(`media/${logo.hash}.svg`);
+    expect(svg(previewFrame({ ...o, present }))).toContain(`href="media/${logo.hash}.svg"`);
+    const title = { ...o, templateId: 'core/title-card' };
+    expect(svg(previewFrame(title))).not.toContain('Acme Display');
+    expect(svg(previewFrame({ ...title, present }))).toContain('Acme Display');
+  });
+
+  it("swaps the project's own images for data URIs for display only", () => {
+    const svg =
+      '<image href="media/abc.svg"/><image href="media/other.png"/><image href="https://x/y.png"/>';
+    expect(inlineImages(svg, { 'media/abc.svg': 'data:image/svg+xml;base64,AAA' })).toBe(
+      '<image href="data:image/svg+xml;base64,AAA"/><image href="media/other.png"/><image href="https://x/y.png"/>',
+    );
+    expect(inlineImages(svg, {})).toBe(svg);
   });
 
   it('puts a typed length on the frame grid', () => {
