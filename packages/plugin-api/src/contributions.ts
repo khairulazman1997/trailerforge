@@ -125,20 +125,8 @@ export interface StoryboardTemplate {
   build(input: { targetDuration: number }): z.input<typeof Storyboard>;
 }
 
-/** Shared shape for transitions and effects rendered through FFmpeg filtergraphs. */
-export interface FilterContribution<P> {
-  id: string;
-  name: string;
-  params: z.ZodType<P>;
-  /** Filtergraph fragment for the render compiler (M4+). Must be deterministic. */
-  ffmpeg?: (params: P, ctx: { duration: Flicks; width: number; height: number }) => string;
-}
-
-export interface TransitionDef<P = unknown> extends FilterContribution<P> {
-  defaultDuration: Flicks;
-}
-
-export type EffectDef<P = unknown> = FilterContribution<P>;
+/** Transitions and effects: FFmpeg filtergraph fragments with param schemas (`@trailerforge/effects`). */
+export type { EffectDef, TransitionDef } from '@trailerforge/effects';
 
 /** A step in the footage-analysis pipeline (M4). Python steps run in the analysis sidecar. */
 export interface AnalysisStep {

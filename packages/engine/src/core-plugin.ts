@@ -1,4 +1,5 @@
 import { briefCommands } from '@trailerforge/brief';
+import { builtinEffects, builtinTransitions } from '@trailerforge/effects';
 import { builtinTemplates } from '@trailerforge/graphics';
 import { genericExtractor, knowledgeCommands } from '@trailerforge/knowledge';
 import { storyboardCommands } from '@trailerforge/storyboard';
@@ -93,6 +94,8 @@ export const corePlugin = definePlugin({
     for (const command of storyboardCommands) ctx.commands.register(command);
     for (const command of knowledgeCommands) ctx.commands.register(command);
     for (const template of builtinTemplates) ctx.graphicTemplates.register(template);
+    for (const t of builtinTransitions) ctx.transitions.register(t);
+    for (const e of builtinEffects) ctx.effects.register(e);
     ctx.knowledgeExtractors.register(genericExtractor);
     ctx.jobs.register(probeJob);
     ctx.jobs.register(proxyJob);
