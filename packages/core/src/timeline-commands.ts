@@ -275,6 +275,36 @@ export const setItemEffects = defineCommand({
   },
 });
 
+/** J and L offsets are capped at one second (the compiler caps them too). */
+const AudioOffset = Flicks.max(FLICKS_PER_SECOND);
+
+/**
+ * A clip's own sound: off by default (music and sound effects carry a trailer). On, it plays at
+ * `gainDb`, and may start `lead` before the picture (J cut) or run `lag` past it (L cut).
+ */
+export const setClipAudio = defineCommand({
+  type: 'core/timeline.set-clip-audio',
+  payload: z.strictObject({
+    ...Ref,
+    enabled: z.boolean(),
+    gainDb: z.number().min(-60).max(12).optional(),
+    lead: AudioOffset.default(0),
+    lag: AudioOffset.default(0),
+  }),
+  label: ({ enabled }) => (enabled ? "Use the clip's sound" : "Mute the clip's sound"),
+  apply: (d, { timelineId, itemId, enabled, gainDb, lead, lag }) => {
+    const type = 'core/timeline.set-clip-audio';
+    const { track, item } = find(d, timelineId, itemId, type);
+    if (item.kind !== 'clip') throw new CommandError(type, `a ${item.kind} has no sound`);
+    if (track.kind !== 'video')
+      throw new CommandError(type, 'only clips on a picture track have their own sound setting');
+    const core = (item.extensions.core as Record<string, unknown> | undefined) ?? {};
+    item.extensions.core = { ...core, clipAudio: { enabled, lead, lag } };
+    if (gainDb !== undefined) item.gainDb = gainDb;
+    markEdited(item);
+  },
+});
+
 export const deleteItem = defineCommand({
   type: 'core/timeline.delete',
   payload: z.strictObject(Ref),
@@ -309,6 +339,7 @@ export const timelineCommands = [
   toPlaceholder,
   setItemEffects,
   setTransition,
+  setClipAudio,
   deleteItem,
   setTrackLocked,
 ] as unknown as readonly CommandDef<unknown>[];

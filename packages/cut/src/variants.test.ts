@@ -286,6 +286,42 @@ describe('deriveVariant properties', () => {
     }
   });
 
+  it("moves cuts after a change back onto the beat, within each slot's range", () => {
+    let snapped = 0;
+    for (const seed of SEEDS) {
+      const input = randomCase(seed);
+      const v = input.project.storyboard!.variants[0]!;
+      const fmt = input.project.formatTargets.find((f) => f.id === v.formatTargetId)!;
+      const fpf = flicksPerFrame(fmt.frameRate);
+      const step = 8 + (seed % 9); // frames per beat
+      const beats = Array.from({ length: 400 }, (_, i) => Math.round((3 + i * step) * fpf));
+      const d = deriveVariant({ ...input, beats });
+      const again = deriveVariant({ ...structuredClone(input), beats });
+      expect(timelineHash(again.timeline)).toBe(timelineHash(d.timeline));
+      if (!d.shortfall)
+        expect(Math.abs(d.duration - d.target), `seed ${seed}`).toBeLessThanOrEqual(fpf + 1);
+      const ends = new Map<string, number>();
+      for (const tr of d.timeline.tracks)
+        if (tr.kind === 'video' || tr.kind === 'graphics')
+          for (const it of tr.items)
+            if (it.slotId) ends.set(it.slotId, Math.max(ends.get(it.slotId) ?? 0, itemEnd(it)));
+      const kept = d.slots.filter((x) => x.fate !== 'dropped' && ends.has(x.slotId));
+      const order = [...kept].sort((a, b) => ends.get(a.slotId)! - ends.get(b.slotId)!);
+      const first = order.findIndex((x) => x.fate !== 'kept');
+      if (first < 0 || !d.slots.some((x) => x.fate !== 'kept')) continue;
+      const offBeat = d.warnings.filter((w) => w.includes('off the beat')).length;
+      let onBeat = 0;
+      const checked = order.slice(first, -1);
+      for (const x of checked) {
+        const f = Math.round(ends.get(x.slotId)! / fpf) + 1; // one frame ahead of the beat
+        if ((f - 3) % step === 0) onBeat++;
+      }
+      expect(onBeat, `seed ${seed}`).toBeGreaterThanOrEqual(checked.length - offBeat);
+      snapped += onBeat;
+    }
+    expect(snapped).toBeGreaterThan(50);
+  });
+
   it('drops "nice to have" slots before "must" slots, and keeps kept slots within their range', () => {
     for (const seed of SEEDS) {
       const input = randomCase(seed);

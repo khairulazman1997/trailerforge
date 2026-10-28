@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { n, pad, type EffectDef } from './contract.js';
+import { n, pad, retimeFilter, type EffectDef } from './contract.js';
 
 /**
  * Finishing effects on one picture item (or a whole timeline). Each builds a fragment from
@@ -121,13 +121,13 @@ export const speedRamp: EffectDef<{ from: number; to: number }> = {
   sourceSeconds: (p, out) => (out * (p.from + p.to)) / 2,
   filter: (p, ctx, io) => {
     const d = Math.max(0.04, ctx.duration);
-    const rate = `${ctx.rate.num}/${ctx.rate.den}`;
+    const rate = retimeFilter(ctx);
     if (Math.abs(p.to - p.from) < 1e-6)
-      return chain(io, `setpts=(PTS-STARTPTS)/${n(p.from)},fps=${rate}`);
+      return chain(io, `setpts=(PTS-STARTPTS)/${n(p.from)},${rate}`);
     // Source time s(t) = from·t + (to−from)·t²/(2d); invert for the output time of source T.
     const k = (p.to - p.from) / d;
     const t = `(-${n(p.from)}+sqrt(${n(p.from * p.from)}+2*${n(k)}*(T-STARTT)))/${n(k)}`;
-    return chain(io, `setpts='(${t})/TB',fps=${rate}`);
+    return chain(io, `setpts='(${t})/TB',${rate}`);
   },
 };
 

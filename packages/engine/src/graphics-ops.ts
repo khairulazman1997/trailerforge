@@ -35,7 +35,7 @@ import {
 } from '@trailerforge/schema';
 import { z } from 'zod';
 import type { Engine } from './engine.js';
-import { takeSources } from './footage-ops.js';
+import { cutGridOp, takeSources } from './footage-ops.js';
 import { OpError } from './ops.js';
 
 /**
@@ -76,6 +76,7 @@ export async function variantsViewOp(engine: Engine, store: ProjectStore): Promi
   const hasMaster = project.timelines.some((t) => t.id === 'tl_rough' || !t.variantId);
   const cache = caches.get(engine) ?? caches.set(engine, new VariantCache(32)).get(engine)!;
   const sources = hasMaster ? await takeSources(engine, store) : undefined;
+  const beats = hasMaster ? (await cutGridOp(engine, store))?.beats : undefined;
   const variants: VariantEntry[] = [];
   for (const v of sb?.variants ?? []) {
     const f = project.formatTargets.find((x) => x.id === v.formatTargetId);
@@ -93,7 +94,12 @@ export async function variantsViewOp(engine: Engine, store: ProjectStore): Promi
     };
     if (hasMaster) {
       try {
-        const d = cache.get({ project, variantId: v.id, ...(sources ? { sources } : {}) });
+        const d = cache.get({
+          project,
+          variantId: v.id,
+          ...(sources ? { sources } : {}),
+          ...(beats ? { beats } : {}),
+        });
         entry.derived = {
           duration: d.duration,
           target: d.target,
@@ -125,9 +131,10 @@ export function createDefaultVariantsOp(store: ProjectStore): { added: string[] 
 /** The derived timeline of one version (for the preview and, later, the renderer). */
 export async function deriveVariantOp(engine: Engine, store: ProjectStore, variantId: string) {
   const sources = await takeSources(engine, store);
+  const beats = (await cutGridOp(engine, store))?.beats;
   const cache = caches.get(engine) ?? caches.set(engine, new VariantCache(32)).get(engine)!;
   try {
-    return cache.get({ project: store.state, variantId, sources });
+    return cache.get({ project: store.state, variantId, sources, ...(beats ? { beats } : {}) });
   } catch (err) {
     throw new OpError('not-found', err instanceof Error ? err.message : String(err));
   }

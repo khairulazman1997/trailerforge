@@ -119,6 +119,8 @@ export interface CompileInput {
   range?: FrameRange;
   /** Font for placeholder slate labels; without it the slate is plain. */
   slateFont?: { path: string; contentHash: string };
+  /** How speed ramps make frames: blended (default) or motion-interpolated (slow). */
+  retime?: 'blend' | 'optical-flow';
 }
 
 export type PlanInput =
@@ -380,7 +382,7 @@ export function compileRender(input: CompileInput): RenderPlan {
     const fmtTail = `format=${fmt},setsar=1,settb=${rate.den}/${rate.num}`;
     let body: string;
     if (it.kind === 'clip' && input.sources.has(it.assetId)) {
-      body = clipChain(it, input.sources.get(it.assetId)!, lead, frames);
+      body = clipChain(it, input.sources.get(it.assetId)!, lead, frames, rampOf(it));
     } else if ((it.kind === 'graphic' || it.kind === 'caption') && graphics.has(it.id)) {
       const g = graphics.get(it.id)!;
       const k = inputs.length;
@@ -433,7 +435,9 @@ export function compileRender(input: CompileInput): RenderPlan {
         return;
       }
       if (def.sourceSeconds) {
-        warnings.push(`effect ${e.effectId} on "${it.id}" changes speed; not rendered yet (6.4)`);
+        // The first one retimes the clip as it is read (see `clipChain`); a second cannot.
+        if (it.kind !== 'clip' || rampOf(it)?.effect !== e)
+          warnings.push(`effect ${e.effectId} on "${it.id}": only one speed change per clip`);
         return;
       }
       const params = safeParams(def, e.params, `effect ${e.effectId} on "${it.id}"`);
@@ -469,29 +473,35 @@ export function compileRender(input: CompileInput): RenderPlan {
     return `color=${opts({ c: SLATE_COLOR, s: `${W}x${H}`, r: rateText(rate) })},trim=end_frame=${frames}${text}`;
   }
 
-  function clipChain(
-    item: Extract<TimelineItem, { kind: 'clip' }>,
-    src: SourceMedia,
-    lead: number,
-    frames: number,
-  ): string {
-    const speed = item.speed;
-    const srcFrame = (speed * rate.den) / rate.num; // source seconds per output frame
+  type ClipItem = Extract<TimelineItem, { kind: 'clip' }>;
+  interface Ramp {
+    effect: ClipItem['effects'][number];
+    def: EffectDef<unknown>;
+    params: unknown;
+  }
+  function rampOf(item: ClipItem): Ramp | undefined {
+    for (const effect of item.effects) {
+      if (!effect.enabled) continue;
+      const def = filters.get(effect.effectId);
+      if (def?.kind !== 'effect' || !def.sourceSeconds) continue;
+      const d = def as unknown as EffectDef<unknown>;
+      return { effect, def: d, params: safeParams(d, effect.params, `effect ${effect.effectId}`) };
+    }
+    return undefined;
+  }
+
+  /**
+   * A clip with a speed ramp: the whole item is read from its source start at normal speed
+   * (times the clip's own speed), retimed by the ramp's fragment (frames blended by default),
+   * then cut to the frames this member shows; handles hold the first and last frame.
+   */
+  function rampChain(item: ClipItem, src: SourceMedia, ramp: Ramp, lead: number, frames: number) {
+    const itemSec = item.duration / FLICKS_PER_SECOND;
+    const startSec = item.sourceIn / FLICKS_PER_SECOND;
+    const needSec = ramp.def.sourceSeconds!(ramp.params, itemSec) * item.speed;
     const half = (0.5 * src.frameRate.den) / src.frameRate.num;
-    let startSec = (item.sourceIn + framesToFlicks(lead, rate) * speed) / FLICKS_PER_SECOND;
-    let pre = 0;
-    if (startSec < -1e-9) {
-      pre = Math.ceil(-startSec / srcFrame - 1e-9);
-      startSec += pre * srcFrame;
-      warnings.push(`clip "${item.id}": no recording before its start; first frame held`);
-    }
-    if (startSec >= src.duration) {
-      warnings.push(`clip "${item.id}" starts past the end of its recording; drawn as a slate`);
-      return slate(item.label ?? 'Missing recording', frames);
-    }
-    const needSec = (frames - pre) * srcFrame;
-    if (startSec + needSec - srcFrame > src.duration - half)
-      warnings.push(`clip "${item.id}" runs past the end of its recording; last frame held`);
+    if (startSec + needSec > src.duration + half)
+      warnings.push(`clip "${item.id}": its speed ramp reads past the end of the recording`);
     const k = inputs.length;
     inputs.push({
       kind: 'media',
@@ -501,29 +511,93 @@ export function compileRender(input: CompileInput): RenderPlan {
       seek: n(Math.max(0, Math.floor((startSec - half) * 1e6) / 1e6)),
       duration: n(Math.ceil((needSec + half * 8) * 1e6) / 1e6),
     });
-    // Exact timestamps on a flick time base, shifted a hair early, then `fps` rounding up:
-    // output frame k shows the newest source frame at or before k (sample and hold), with
-    // no ties when source frames land exactly on, or halfway between, output frames.
-    const eps = Math.floor(fpf / 1000);
+    const ctx = {
+      width: src.width,
+      height: src.height,
+      rate,
+      duration: itemSec,
+      retime: input.retime ?? 'blend',
+    } as const;
     const pts = src.variableFrameRate
-      ? `(PTS-STARTPTS)/${n(speed)}-${eps}`
-      : `N*${src.frameRate.den * FLICKS_PER_SECOND}/(${src.frameRate.num}*${n(speed)})-${eps}`;
-    const parts = [
-      `settb=1/${FLICKS_PER_SECOND}`,
-      `setpts=${esc(pts)}`,
-      `fps=${rateText(rate)}:round=up`,
+      ? `(PTS-STARTPTS)/${n(item.speed)}`
+      : `N*${src.frameRate.den * FLICKS_PER_SECOND}/(${src.frameRate.num}*${n(item.speed)})`;
+    const L = `rp${k}`;
+    chains.push(`[${k}:v]settb=1/${FLICKS_PER_SECOND},setpts=${esc(pts)}[${L}i]`);
+    chains.push(ramp.def.filter(ramp.params, ctx, { in: `${L}i`, out: `${L}o` }));
+    const pre = Math.max(0, -lead);
+    return [
+      `[${L}o]settb=${rate.den}/${rate.num},setpts=N`,
       ...(pre ? [`tpad=start=${pre}:start_mode=clone`] : []),
+      ...(lead > 0 ? [`trim=start_frame=${lead}`, 'setpts=PTS-STARTPTS'] : []),
       'tpad=stop_mode=clone:stop=-1',
       `trim=end_frame=${frames}`,
       'setpts=PTS-STARTPTS',
-    ];
+    ].join(',');
+  }
+
+  function clipChain(
+    item: ClipItem,
+    src: SourceMedia,
+    lead: number,
+    frames: number,
+    ramp?: Ramp,
+  ): string {
+    const plainHead = (): string | { slate: string } => {
+      const speed = item.speed;
+      const srcFrame = (speed * rate.den) / rate.num; // source seconds per output frame
+      const half = (0.5 * src.frameRate.den) / src.frameRate.num;
+      let startSec = (item.sourceIn + framesToFlicks(lead, rate) * speed) / FLICKS_PER_SECOND;
+      let pre = 0;
+      if (startSec < -1e-9) {
+        pre = Math.ceil(-startSec / srcFrame - 1e-9);
+        startSec += pre * srcFrame;
+        warnings.push(`clip "${item.id}": no recording before its start; first frame held`);
+      }
+      if (startSec >= src.duration) {
+        warnings.push(`clip "${item.id}" starts past the end of its recording; drawn as a slate`);
+        return { slate: slate(item.label ?? 'Missing recording', frames) };
+      }
+      const needSec = (frames - pre) * srcFrame;
+      if (startSec + needSec - srcFrame > src.duration - half)
+        warnings.push(`clip "${item.id}" runs past the end of its recording; last frame held`);
+      const k = inputs.length;
+      inputs.push({
+        kind: 'media',
+        assetId: item.assetId,
+        path: src.path,
+        contentHash: src.contentHash,
+        seek: n(Math.max(0, Math.floor((startSec - half) * 1e6) / 1e6)),
+        duration: n(Math.ceil((needSec + half * 8) * 1e6) / 1e6),
+      });
+      // Exact timestamps on a flick time base, shifted a hair early, then `fps` rounding up:
+      // output frame k shows the newest source frame at or before k (sample and hold), with
+      // no ties when source frames land exactly on, or halfway between, output frames.
+      const eps = Math.floor(fpf / 1000);
+      const pts = src.variableFrameRate
+        ? `(PTS-STARTPTS)/${n(speed)}-${eps}`
+        : `N*${src.frameRate.den * FLICKS_PER_SECOND}/(${src.frameRate.num}*${n(speed)})-${eps}`;
+      const parts = [
+        `settb=1/${FLICKS_PER_SECOND}`,
+        `setpts=${esc(pts)}`,
+        `fps=${rateText(rate)}:round=up`,
+        ...(pre ? [`tpad=start=${pre}:start_mode=clone`] : []),
+        'tpad=stop_mode=clone:stop=-1',
+        `trim=end_frame=${frames}`,
+        'setpts=PTS-STARTPTS',
+      ];
+      return `[${k}:v]${parts.join(',')}`;
+    };
+    const h = ramp ? rampChain(item, src, ramp, lead, frames) : plainHead();
+    if (typeof h !== 'string') return h.slate;
     const geo = geometry(item, src, W, H, lead, fpf, warnings);
-    if (!geo.fill) return `[${k}:v]${parts.join(',')}${geo.crop},${geo.scale}`;
+    const head = h;
+    const k = inputs.length - 1;
+    if (!geo.fill) return `${head}${geo.crop},${geo.scale}`;
     const out = `f${k}`;
     const bw = Math.max(2, Math.round(W / 8));
     const bh = Math.max(2, Math.round(H / 8));
     const blur = Math.max(1, Math.min(4, Math.floor(Math.min(bw, bh) / 2) - 1));
-    chains.push(`[${k}:v]${parts.join(',')}${geo.crop},split=2[${out}a][${out}b]`);
+    chains.push(`${head}${geo.crop},split=2[${out}a][${out}b]`);
     chains.push(
       `[${out}a]scale=${bw}:${bh}:force_original_aspect_ratio=increase:flags=bilinear,crop=${bw}:${bh},format=${WORK_FMT},boxblur=${opts({ luma_radius: blur, luma_power: 2, chroma_radius: blur, chroma_power: 2 })},scale=${W}:${H}:flags=bicubic,format=${WORK_FMT}[${out}bg]`,
     );

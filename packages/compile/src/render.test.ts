@@ -245,9 +245,32 @@ describe('transitions, effects and graphics', { timeout: 120_000 }, () => {
       const plain = render(tl([{ ...items[0], effects: [] }], RES), sources).raw;
       const { raw, plan } = render(tl(items, RES), sources);
       expect(raw.length, id).toBe(20 * FB);
-      if (id === 'core/speed-ramp') expect(plan.warnings.join(), id).toContain('not rendered yet');
-      else expect(raw.equals(plain), `${id} changes the picture`).toBe(false);
+      expect(plan.warnings, id).toEqual([]);
+      expect(raw.equals(plain), `${id} changes the picture`).toBe(false);
     }
+  });
+
+  it('a speed ramp reads exactly its source span, slowing evenly, frames blended', () => {
+    const sources = new Map([['r', ramp]]);
+    const items = [{ id: 'c1', kind: 'clip', start: 0, duration: f30(20), assetId: 'r', sourceIn: f30(10),
+      effects: [{ id: 'e1', effectId: 'core/speed-ramp', params: { from: 1, to: 0.25 } }] }]; // prettier-ignore
+    const { raw, plan } = render(tl(items, RES), sources);
+    expect(plan.warnings).toEqual([]);
+    expect(plan.filtergraph).toContain('framerate=fps=30/1');
+    // 20 frames at a speed falling 1 → 0.25 read 20 × 0.625 = 12.5 source frames from frame 10.
+    expect(plan.inputs[0]).toMatchObject({ seek: '0.316666' });
+    const lv = frames(raw).map((fr) => luma(fr) / 2);
+    expect(lv).toHaveLength(20);
+    expect(lv[0]).toBeCloseTo(10, 0);
+    expect(lv[19]!).toBeGreaterThan(21);
+    expect(lv[19]!).toBeLessThan(23.5);
+    for (let i = 1; i < 20; i++)
+      expect(lv[i]! + 0.6, `frame ${i}`).toBeGreaterThanOrEqual(lv[i - 1]!);
+    // Slowing down: the second half moves through less source than the first.
+    expect(lv[19]! - lv[10]!).toBeLessThan(lv[10]! - lv[0]!);
+    const flow = compileRender({ timeline: tl(items, RES), sources, retime: 'optical-flow' });
+    expect(flow.filtergraph).toContain('minterpolate=fps=30/1');
+    expect(flow.planHash).not.toBe(plan.planHash);
   });
 
   function cardFrames(name: string, count: number): GraphicFrames {

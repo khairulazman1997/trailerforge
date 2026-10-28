@@ -14,6 +14,24 @@ export interface FilterContext {
   rate: Rate;
   /** Length of the effect (or of the transition overlap), seconds. */
   duration: number;
+  /**
+   * How a speed change makes frames at the output rate: repeat/drop the nearest (default),
+   * blend neighbouring frames, or motion-interpolate (optical flow; slow).
+   */
+  retime?: 'drop' | 'blend' | 'optical-flow';
+}
+
+/** The filter that brings retimed frames to the output rate, per `FilterContext.retime`. */
+export function retimeFilter(ctx: FilterContext): string {
+  const rate = `${ctx.rate.num}/${ctx.rate.den}`;
+  switch (ctx.retime ?? 'drop') {
+    case 'blend':
+      return `framerate=fps=${rate}:interp_start=0:interp_end=255:scene=100`;
+    case 'optical-flow':
+      return `minterpolate=fps=${rate}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=none`;
+    default:
+      return `fps=${rate}`;
+  }
 }
 
 export interface TransitionContext extends FilterContext {

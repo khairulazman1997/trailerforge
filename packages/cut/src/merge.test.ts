@@ -92,6 +92,31 @@ describe('mergeRoughCut', () => {
     expect(c).toEqual(gc);
   });
 
+  it("keeps a clip's sound setting (J/L offsets) on regenerate", () => {
+    const inp = input();
+    const first = buildRoughCut(inp).timeline;
+    const clipAudio = { enabled: true, lead: F / 4, lag: F / 2 };
+    const withSound: Timeline = {
+      ...first,
+      tracks: first.tracks.map((k) => ({
+        ...k,
+        items: k.items.map((i) =>
+          i.id === 'rc_shot_parry'
+            ? ({
+                ...i,
+                gainDb: -6,
+                extensions: { core: { userEdited: true, clipAudio } },
+              } as typeof i)
+            : i,
+        ),
+      })),
+    };
+    const { timeline } = mergeRoughCut(withSound, buildRoughCut(inp).timeline, inp.sources);
+    const a = items(timeline)[0]!;
+    expect(a.extensions.core).toMatchObject({ clipAudio });
+    expect(a.kind === 'clip' && a.gainDb).toBe(-6);
+  });
+
   it('keeps locked tracks exactly as they were', () => {
     const inp = input();
     const first = buildRoughCut(inp).timeline;

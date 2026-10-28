@@ -30,7 +30,7 @@ import { stableHash, type TakeSource } from './rough-cut.js';
  */
 
 /** Bumped whenever the derivation changes its output for the same inputs. */
-export const VARIANT_DERIVATION_VERSION = 2;
+export const VARIANT_DERIVATION_VERSION = 3;
 
 export interface VariantInput {
   project: Pick<Project, 'storyboard' | 'formatTargets' | 'timelines'>;
@@ -43,6 +43,14 @@ export interface VariantInput {
    * subject. Without it a clip never grows past its master length and crops are centred.
    */
   sources?: ReadonlyMap<string, TakeSource>;
+  /**
+   * Beat times in flicks (the resolved music grid). After a slot is shortened, lengthened or
+   * dropped, later cuts move to the nearest beat (`leadFrames` early, as in the rough cut).
+   * Without it the master's bar markers are used.
+   */
+  beats?: readonly number[];
+  /** Frames a cut lands ahead of its beat; default 1. */
+  leadFrames?: number;
 }
 
 export type SlotFate = 'kept' | 'shortened' | 'lengthened' | 'dropped';
@@ -141,6 +149,8 @@ export function variantInputHash(input: VariantInput): string {
       master,
       sections: sb?.sections,
       sources,
+      beats: input.beats ? [input.beats.length, stableHash(input.beats.join(','))] : null,
+      lead: input.leadFrames ?? 1,
     }),
   );
 }
@@ -372,6 +382,54 @@ function derive(
         : `runs ${secs(delta, fps)} s under ${goal}: every slot is at its longest (the recordings or the storyboard's maximum lengths)`;
   }
 
+  // Back on the beat: from the first slot this version changed, each cut moves to the nearest
+  // cut point (a beat, `leadFrames` early) that the slot's min/max and the room the later slots
+  // need still allow; the last slot ends on the target as before.
+  const lead = Math.max(0, Math.min(2, input.leadFrames ?? 1));
+  const beatFrames = (
+    input.beats ?? master.markers.filter((m) => m.kind === 'downbeat').map((m) => m.at)
+  ).map((b) => F(b) - lead);
+  const points = [...new Set(beatFrames)].filter((p) => p > 0).sort((a, b) => a - b);
+  const offBeat: Segment[] = [];
+
+  if (points.length && kept.length > 1) {
+    const ends: number[] = [];
+    let pos = 0;
+    let first = -1;
+    kept.forEach((s, i) => {
+      pos += s.gap;
+      if (first < 0 && (pos !== s.masterStart || s.len !== s.masterLen)) first = i;
+      pos += s.len;
+      ends.push(pos);
+    });
+    const finish = pos;
+    if (first >= 0) {
+      pos = ends[first]! - kept[first]!.len;
+      for (let i = first; i < kept.length - 1; i++) {
+        const s = kept[i]!;
+        let restMin = 0;
+        let restMax = 0;
+        for (const r of kept.slice(i + 1)) {
+          restMin += r.gap + r.min;
+          restMax += r.gap + r.max;
+        }
+        const lo = Math.max(pos + s.min, finish - restMax);
+        const hi = Math.min(pos + s.max, finish - restMin);
+        const cur = pos + s.len;
+        let best: number | undefined;
+        for (const p of points) {
+          if (p < lo || p > hi) continue;
+          if (best === undefined || Math.abs(p - cur) < Math.abs(best - cur)) best = p;
+        }
+        if (best === undefined) offBeat.push(s);
+        const next = best ?? Math.min(Math.max(cur, lo), Math.max(lo, hi));
+        s.len = next - pos;
+        pos = next + kept[i + 1]!.gap;
+      }
+      kept.at(-1)!.len = finish - pos;
+    }
+  }
+
   // Place the picture.
   const out = new Map<string, TimelineItem[]>(master.tracks.map((t) => [t.id, []]));
   const placed = new Map<string, { start: number; len: number }>();
@@ -560,13 +618,17 @@ function derive(
     };
   }
 
-  if (
-    segs.some((s) => s.dropped || s.len !== s.masterLen) &&
-    master.tracks.some((t) => t.kind === 'audio')
-  )
-    warnings.push(
-      'the music plays on unchanged, so cuts after a shortened or dropped slot may fall off the beat',
-    );
+  const changed = segs.some((s) => s.dropped || s.len !== s.masterLen);
+  if (changed && master.tracks.some((t) => t.kind === 'audio')) {
+    if (!points.length)
+      warnings.push(
+        'the music plays on unchanged and no beats are known, so cuts after a shortened or dropped slot may fall off the beat',
+      );
+    for (const s of offBeat)
+      warnings.push(
+        `"${s.slot.title || s.slot.id}": no beat fits its length range, so the cut after it is off the beat`,
+      );
+  }
 
   return {
     timeline,

@@ -178,6 +178,34 @@ describe('core/timeline commands', () => {
     );
   });
 
+  it("turns a clip's own sound on with J/L offsets, marks it edited, undoes", () => {
+    store.dispatch('core/timeline.set-clip-audio', {
+      ...ref('rc_a'),
+      enabled: true,
+      gainDb: -6,
+      lead: F / 4,
+      lag: F / 2,
+    });
+    const a = it_('rc_a');
+    expect(a.extensions.core).toMatchObject({
+      clipAudio: { enabled: true, lead: F / 4, lag: F / 2 },
+    });
+    expect(a.kind === 'clip' && a.gainDb).toBe(-6);
+    expect(isUserEdited(a)).toBe(true);
+    store.undo();
+    expect(it_('rc_a').extensions.core).toBeUndefined();
+    expect(() =>
+      store.dispatch('core/timeline.set-clip-audio', {
+        ...ref('rc_a'),
+        enabled: true,
+        lead: 2 * F,
+      }),
+    ).toThrow();
+    expect(() =>
+      store.dispatch('core/timeline.set-clip-audio', { ...ref('rc_b'), enabled: true }),
+    ).toThrow(/placeholder has no sound/);
+  });
+
   it('set creates or replaces a whole timeline in one undo step', () => {
     expect(tl().name).toBe('Rough cut');
     store.dispatch('core/timeline.set', { timeline: { ...cut(), name: 'Rough cut 2' } });
