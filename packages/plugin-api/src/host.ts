@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { CommandDef } from '@trailerforge/core';
+import type { GraphicTemplate } from '@trailerforge/graphics';
 import type { JobDefinition } from '@trailerforge/jobs';
 import {
   ExportPreset,
@@ -62,6 +63,8 @@ export interface PluginContext {
   analysisSteps: { register(def: AnalysisStep): void };
   knowledgeExtractors: { register(def: KnowledgeExtractor): void };
   motionRenderers: { register(def: MotionRenderer): void };
+  /** Title cards, captions and other graphics (`@trailerforge/graphics` contract). */
+  graphicTemplates: { register<P>(def: GraphicTemplate<P>): void };
   llmProviders: { register(def: LlmProvider): void };
   uiPanels: { register(def: UiPanel): void };
   commands: { register<P>(def: CommandDef<P>): void };
@@ -89,6 +92,7 @@ export class PluginHost {
     analysisSteps: new Registry<AnalysisStep>('analysis step'),
     knowledgeExtractors: new Registry<KnowledgeExtractor>('knowledge extractor'),
     motionRenderers: new Registry<MotionRenderer>('motion renderer'),
+    graphicTemplates: new Registry<GraphicTemplate>('graphics template'),
     llmProviders: new Registry<LlmProvider>('LLM provider'),
     uiPanels: new Registry<z.output<typeof UiPanel>>('UI panel', UiPanel),
     commands: new Registry<CommandContribution>('command'),
@@ -226,6 +230,7 @@ export class PluginHost {
       analysisSteps: reg(r.analysisSteps),
       knowledgeExtractors: reg(r.knowledgeExtractors),
       motionRenderers: reg(r.motionRenderers),
+      graphicTemplates: reg(r.graphicTemplates),
       llmProviders: reg(r.llmProviders),
       uiPanels: reg(r.uiPanels),
       commands: { register: (def) => void r.commands.add(owner, { id: def.type, def }) },

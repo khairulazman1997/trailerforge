@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@trailerforge/core": "workspace:*",
+    "@trailerforge/graphics": "workspace:*",
     "@trailerforge/jobs": "workspace:*",
     "@trailerforge/schema": "workspace:*",
     "zod": "^4.6.7"
