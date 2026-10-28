@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@trailerforge/core": "workspace:*",
+    "@trailerforge/graphics": "workspace:*",
     "@trailerforge/knowledge": "workspace:*",
     "@trailerforge/llm": "workspace:*",
     "@trailerforge/plugin-api": "workspace:*",

@@ -33,7 +33,7 @@ export const BrandFont = z.strictObject({
 });
 export type BrandFont = z.infer<typeof BrandFont>;
 
-/** Text sizes as a share of the frame height, so they hold at any resolution and aspect ratio. */
+/** Text sizes as a share of the frame's shorter side, so they hold at any resolution and aspect ratio. */
 export const TypeScale = z.strictObject({
   title: z.number().min(0.02).max(0.5).default(0.12),
   heading: z.number().min(0.02).max(0.5).default(0.07),

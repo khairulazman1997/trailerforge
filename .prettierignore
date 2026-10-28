@@ -6,3 +6,4 @@ workers/analysis/uv.lock
 test-results
 playwright-report
 packages/pack-game-trailer/src/__golden__
+packages/graphics/src/__golden__

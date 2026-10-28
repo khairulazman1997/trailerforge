@@ -20,6 +20,7 @@
     "@trailerforge/analysis": "workspace:*",
     "@trailerforge/brief": "workspace:*",
     "@trailerforge/core": "workspace:*",
+    "@trailerforge/graphics": "workspace:*",
     "@trailerforge/cut": "workspace:*",
     "@trailerforge/ingest": "workspace:*",
     "@trailerforge/jobs": "workspace:*",

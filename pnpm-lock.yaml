@@ -204,6 +204,9 @@ importers:
       '@trailerforge/cut':
         specifier: workspace:*
         version: link:../cut
+      '@trailerforge/graphics':
+        specifier: workspace:*
+        version: link:../graphics
       '@trailerforge/ingest':
         specifier: workspace:*
         version: link:../ingest
@@ -347,6 +350,9 @@ importers:
       '@trailerforge/core':
         specifier: workspace:*
         version: link:../core
+      '@trailerforge/graphics':
+        specifier: workspace:*
+        version: link:../graphics
       '@trailerforge/knowledge':
         specifier: workspace:*
         version: link:../knowledge

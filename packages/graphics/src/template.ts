@@ -41,7 +41,7 @@ export function safeBox(size: Resolution, safe: SafeInsets = TITLE_SAFE): Box {
 export interface BrandTokens {
   colors: Brand['colors'];
   fonts: { heading: FontSpec; body: FontSpec };
-  /** Text sizes in px for this frame height. */
+  /** Text sizes in px for this frame (a share of its shorter side). */
   sizes: { title: number; heading: number; body: number; caption: number };
   /** `media/<hash>.<ext>` of the logo, if it is in the project. */
   logo?: { href: string; ext: 'svg' | 'png' };
@@ -62,7 +62,8 @@ export function brandTokens(
           family: (choice?.source === 'fallback' ? choice.fallback : FALLBACK_FONTS[0]!).family,
           weight: bold ? 700 : 400,
         };
-  const h = size.height;
+  // The shorter side, so the same brand gives the same type size at 1080p on every aspect ratio.
+  const h = Math.min(size.width, size.height);
   return {
     colors: b.colors,
     fonts: { heading: spec(fonts?.heading, true), body: spec(fonts?.body, false) },
@@ -256,15 +257,15 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 // -- animation helpers for templates -------------------------------------------------------------
 
 /** Keyframes fading in over `inF` and out over `outF` flicks of an item `duration` long. */
-export function fadeInOut(duration: number, inF: number, outF: number): Animatable {
+export function fadeInOut(duration: number, inF: number, outF: number, peak = 1): Animatable {
   const i = Math.max(1, Math.min(inF, Math.floor(duration / 2)));
   const o = Math.max(1, Math.min(outF, Math.floor(duration / 2)));
-  if (i + o >= duration) return 1;
+  if (i + o >= duration) return peak;
   return {
     keyframes: [
       { at: 0, value: 0, easing: 'ease-out' },
-      { at: i, value: 1, easing: 'linear' },
-      { at: duration - o, value: 1, easing: 'ease-in' },
+      { at: i, value: peak, easing: 'linear' },
+      { at: duration - o, value: peak, easing: 'ease-in' },
       { at: duration, value: 0, easing: 'linear' },
     ],
   };

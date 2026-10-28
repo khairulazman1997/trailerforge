@@ -95,7 +95,7 @@ describe('brand tokens', () => {
       { width: 1080, height: 1920 },
     );
     expect(withLogo.logo).toEqual({ href: `media/${'c'.repeat(64)}.svg`, ext: 'svg' });
-    expect(withLogo.sizes.title).toBe(230.4);
+    expect(withLogo.sizes.title).toBe(129.6); // the shorter side, 1080
   });
 });
 

@@ -1,4 +1,5 @@
 import { briefCommands } from '@trailerforge/brief';
+import { builtinTemplates } from '@trailerforge/graphics';
 import { genericExtractor, knowledgeCommands } from '@trailerforge/knowledge';
 import { storyboardCommands } from '@trailerforge/storyboard';
 import { JobError, defineJob } from '@trailerforge/jobs';
@@ -91,6 +92,7 @@ export const corePlugin = definePlugin({
     for (const command of briefCommands) ctx.commands.register(command);
     for (const command of storyboardCommands) ctx.commands.register(command);
     for (const command of knowledgeCommands) ctx.commands.register(command);
+    for (const template of builtinTemplates) ctx.graphicTemplates.register(template);
     ctx.knowledgeExtractors.register(genericExtractor);
     ctx.jobs.register(probeJob);
     ctx.jobs.register(proxyJob);

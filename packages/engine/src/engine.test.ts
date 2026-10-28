@@ -40,6 +40,8 @@ describe('Engine', () => {
         ['extra', 'active'],
       ]);
       expect(engine.plugins.registries.platforms.get('core/tiktok')?.maxDuration).toBe(600);
+      expect(engine.plugins.registries.graphicTemplates.get('core/title-card')?.kind).toBe('card');
+      expect(engine.plugins.registries.graphicTemplates.list().length).toBe(11);
 
       const store = await engine.createProject(join(home, 'P.tforge'), { name: 'P' });
       store.dispatch('extra/set-status-scripted', {});
