@@ -1,13 +1,17 @@
 /// <reference lib="dom" />
 import { existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { fallbackFontPath } from '@trailerforge/core';
 import {
   brandTokens,
   buildScene,
   builtinRegistry,
+  builtinTemplates,
   renderSvg,
   safeBox,
   type Scene,
@@ -25,6 +29,7 @@ import { FrameRenderer, isCompletePng } from './renderer.js';
 
 const F = FLICKS_PER_SECOND;
 const HD = { width: 1920, height: 1080 };
+const VERTICAL = { width: 1080, height: 1920 };
 const reg = builtinRegistry();
 
 function scene(
@@ -33,18 +38,26 @@ function scene(
   brand: Brand | null = null,
   logoPresent = false,
   present: ReadonlySet<string> = new Set(),
+  duration?: number,
 ): Scene {
   const t = reg.get(id)!;
   return buildScene(t, {
     params,
     brand: brandTokens(brand, resolveBrandFonts(brand, present), HD, logoPresent),
     size: HD,
-    duration: t.duration.default,
+    duration: duration ?? t.duration.default,
     safe: safeBox(HD),
   });
 }
-const title = () =>
-  scene('core/title-card', { text: 'Ember Knight', subtitle: 'A dark fantasy action RPG' });
+const title = (duration?: number) =>
+  scene(
+    'core/title-card',
+    { text: 'Ember Knight', subtitle: 'A dark fantasy action RPG' },
+    null,
+    false,
+    new Set(),
+    duration,
+  );
 
 /** Count pixels brighter than `min` in a channel, over a region. */
 function bright(
@@ -96,6 +109,53 @@ describe('FrameRenderer', () => {
     expect(again.png.equals(f.png)).toBe(true);
     expect((await readFile(file)).equals(f.png)).toBe(true);
   });
+
+  it('a render killed mid-way leaves only complete frames, and stale temp files are swept', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tforge-frames-k-'));
+    const here = dirname(fileURLToPath(import.meta.url));
+    const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+    const pid = await new Promise<number>((resolve, reject) => {
+      const child = spawn(process.execPath, ['--import', tsx, join(here, 'crash-child.ts'), dir], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let err = '';
+      let seen = 0;
+      child.stderr.on('data', (d: Buffer) => (err += d.toString()));
+      child.stdout.on('data', (d: Buffer) => {
+        seen += d.toString().split('rendered').length - 1;
+        if (seen >= 12) child.kill('SIGKILL');
+      });
+      child.on('exit', (_c, signal) =>
+        signal === 'SIGKILL' ? resolve(child.pid!) : reject(new Error(err)),
+      );
+    });
+    // What a kill between write and rename leaves, from the dead process and from a live one.
+    const sub = join(dir, 'ab');
+    await mkdir(sub, { recursive: true });
+    await writeFile(join(sub, `${'ab'.repeat(32)}.png.tmp-${pid}-0badf00d`), 'torn');
+    await writeFile(join(sub, `${'ab'.repeat(32)}.png.tmp-${process.pid}-0badf00d`), 'busy');
+
+    const r = await FrameRenderer.create({ cacheDir: dir });
+    const fresh = await FrameRenderer.create({ cacheDir: false });
+    const files = (await readdir(dir, { recursive: true })).filter((f) => f.endsWith('.png'));
+    expect(files.length).toBeGreaterThan(5);
+    const leftover = (await readdir(dir, { recursive: true })).filter((f) => f.includes('.tmp-'));
+    expect(leftover).toEqual([join('ab', `${'ab'.repeat(32)}.png.tmp-${process.pid}-0badf00d`)]);
+    // Every cached frame is whole and is the frame a fresh render draws for that input.
+    const byHash = new Map<string, Buffer>();
+    for (let k = 0; k < 90; k++) {
+      const f = await fresh.renderFrame(title(3 * F), Math.round((k * F) / 30));
+      byHash.set(f.hash, f.png);
+    }
+    for (const f of files) {
+      const png = await readFile(join(dir, f));
+      expect(isCompletePng(png)).toBe(true);
+      const want = byHash.get(f.slice(3, -4));
+      expect(want && png.equals(want)).toBe(true);
+    }
+    const again = await r.renderFrame(title(3 * F), 0);
+    expect(again.cached).toBe(true);
+  }, 60_000);
 
   it('writes a numbered PNG sequence, rendering still frames once', async () => {
     const work = await mkdtemp(join(tmpdir(), 'tforge-seq-'));
@@ -226,6 +286,22 @@ describe('FrameRenderer', () => {
   }, 30_000);
 });
 
+/** Full parameters, so the parity sweep draws every part of each built-in template. */
+const PARITY_PARAMS: Record<string, unknown> = {
+  'core/title-card': { text: 'Ember Knight', subtitle: 'A dark fantasy action RPG' },
+  'core/date-card': { text: '14 March 2027', label: 'Coming', platforms: 'PC and consoles' },
+  'core/laurels-card': { text: 'Best Indie Game', score: '9/10', source: 'Pixel Weekly' },
+  'core/quote-card': {
+    text: 'The tightest combat I have played all year.',
+    source: 'Game Informer',
+  },
+  'core/cta-card': { text: 'Wishlist now', detail: 'on Steam' },
+  'core/end-slate': { text: 'Ember Knight', cta: 'Wishlist on Steam', detail: 'Coming 2027' },
+  'core/custom-card': { text: 'Three years in the making', subtitle: 'by a team of four' },
+  'core/lower-third': { text: 'The Ash Warden', role: 'Final boss' },
+  'core/caption': { text: 'Parry to counter' },
+};
+
 /** Chromium for the parity check: TFORGE_CHROMIUM, or the sandbox's preinstalled one. */
 const CHROMIUM =
   process.env.TFORGE_CHROMIUM ??
@@ -236,30 +312,34 @@ describe.skipIf(!CHROMIUM)('parity with the browser preview', () => {
     const { chromium } = await import('playwright-core');
     const browser = await chromium.launch({ executablePath: CHROMIUM!, args: ['--no-sandbox'] });
     try {
-      const page = await browser.newPage({ viewport: HD, deviceScaleFactor: 1 });
       const font = async (i: number) =>
         (await readFile(fallbackFontPath(FALLBACK_FONTS[i]!))).toString('base64');
       const faces = `@font-face{font-family:Inter;font-weight:400;src:url(data:font/otf;base64,${await font(0)})}@font-face{font-family:Inter;font-weight:700;src:url(data:font/otf;base64,${await font(1)})}`;
       const r = await FrameRenderer.create({ cacheDir: false });
-      const cases: [string, Scene, number][] = [
-        ['title', title(), 1.5 * F],
-        ['title fading in', title(), 0.2 * F],
-        [
-          'quote',
-          scene('core/quote-card', {
-            text: 'The tightest combat I have played all year.',
-            source: 'Game Informer',
-          }),
-          2 * F,
-        ],
-        [
-          'name label',
-          scene('core/lower-third', { text: 'The Ash Warden', role: 'Final boss' }),
-          1.5 * F,
-        ],
-        ['caption', scene('core/caption', { text: 'Parry to counter' }), 1.25 * F],
-      ];
-      for (const [name, s, at] of cases) {
+      // Every built-in template, wide and tall, mid-way; plus a frame mid-fade.
+      const cases: [string, Scene, number, typeof HD][] = [];
+      for (const size of [HD, VERTICAL])
+        for (const t of builtinTemplates) {
+          const s = buildScene(t, {
+            params: PARITY_PARAMS[t.id] ?? { text: 'Ember Knight' },
+            brand: brandTokens(null, resolveBrandFonts(null, new Set()), size, false),
+            size,
+            duration: t.duration.default,
+            safe: safeBox(size),
+          });
+          cases.push([
+            `${t.id} ${size.width}x${size.height}`,
+            s,
+            Math.round(t.duration.default / 2),
+            size,
+          ]);
+        }
+      cases.push(['title fading in', title(), 0.2 * F, HD]);
+      const pages = new Map<typeof HD, Awaited<ReturnType<typeof browser.newPage>>>();
+      for (const size of [HD, VERTICAL])
+        pages.set(size, await browser.newPage({ viewport: size, deviceScaleFactor: 1 }));
+      for (const [name, s, at, size] of cases) {
+        const page = pages.get(size)!;
         const svg = renderSvg(s, at);
         await page.setContent(
           `<html><head><style>${faces}html,body{margin:0;background:#28503c}</style></head><body>${svg}</body></html>`,
@@ -306,5 +386,5 @@ describe.skipIf(!CHROMIUM)('parity with the browser preview', () => {
     } finally {
       await browser.close();
     }
-  }, 60_000);
+  }, 180_000);
 });

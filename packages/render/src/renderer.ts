@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Resvg } from '@resvg/resvg-js';
 import { fallbackFontPath, mediaFileNames, writeFileAtomic } from '@trailerforge/core';
-import { renderSvg as sceneSvg, type Scene } from '@trailerforge/graphics';
+import { renderSvg as sceneSvg, type Scene, type TimelineScene } from '@trailerforge/graphics';
 import {
   FALLBACK_FONTS,
   flicksPerFrame,
@@ -43,6 +43,58 @@ const PNG_IEND = Buffer.from([0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]);
 /** A complete PNG: right signature and an IEND chunk at the very end (not cut off). */
 export const isCompletePng = (b: Buffer) =>
   b.length > 20 && b.subarray(0, 8).equals(PNG_SIGNATURE) && b.subarray(-8).equals(PNG_IEND);
+
+/** `<file>.tmp-<pid>-<hex>`, as `writeFileAtomic` names its temp files. */
+const TEMP_FILE = /\.tmp-(\d+)-[0-9a-f]+$/;
+
+const alive = (pid: number) => {
+  if (pid === process.pid) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM: the process exists but belongs to someone else.
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+};
+
+/**
+ * Remove temp files a crashed render left in the frame cache. Files of a process still running
+ * (another window rendering into the same project) are left alone. Finished frames are only
+ * ever renamed into place, so a crash leaves at worst a stray temp file, never a torn PNG.
+ */
+export async function sweepTempFiles(cacheDir: string): Promise<number> {
+  let removed = 0;
+  let dirs: string[];
+  try {
+    dirs = await readdir(cacheDir);
+  } catch {
+    return 0;
+  }
+  for (const d of dirs) {
+    let names: string[];
+    try {
+      names = await readdir(join(cacheDir, d));
+    } catch {
+      continue; // not a folder
+    }
+    for (const name of names) {
+      const m = TEMP_FILE.exec(name);
+      if (!m || alive(Number(m[1]))) continue;
+      await rm(join(cacheDir, d, name), { force: true });
+      removed++;
+    }
+  }
+  return removed;
+}
+
+/** Frame times sampled across a scene: first, last and evenly between, on whole flicks. */
+export function sampleTimes(duration: number, samples: number): number[] {
+  const n = Math.max(1, Math.floor(samples));
+  if (n === 1) return [0];
+  const last = Math.max(0, duration - 1);
+  return [...new Set(Array.from({ length: n }, (_, i) => Math.round((last * i) / (n - 1))))];
+}
 
 const escapeAttr = (s: string) =>
   s.replace(
@@ -98,6 +150,7 @@ export class FrameRenderer {
         ? undefined
         : (opts.cacheDir ??
           (opts.projectDir ? join(opts.projectDir, 'cache', 'frames') : undefined));
+    if (cacheDir) await sweepTempFiles(cacheDir);
     return new FrameRenderer(
       files,
       aliases,
@@ -186,6 +239,29 @@ export class FrameRenderer {
   /** The frame `at` flicks into a scene. */
   renderFrame(scene: Scene, at: number): Promise<RenderedFrame> {
     return this.render(sceneSvg(scene, at));
+  }
+
+  /**
+   * The graphics of a timeline (from `timelineScenes`), `samples` frames each: per frame its cache
+   * key and the hash of its PNG, so two renders of a version can be compared.
+   */
+  async renderScenes(
+    scenes: readonly TimelineScene[],
+    opts: { samples?: number; signal?: AbortSignal } = {},
+  ): Promise<
+    { itemId: string; templateId: string; frames: { at: number; hash: string; png: string }[] }[]
+  > {
+    const out = [];
+    for (const s of scenes) {
+      const frames = [];
+      for (const at of sampleTimes(s.duration, opts.samples ?? 5)) {
+        opts.signal?.throwIfAborted();
+        const f = await this.renderFrame(s.scene, at);
+        frames.push({ at, hash: f.hash, png: createHash('sha256').update(f.png).digest('hex') });
+      }
+      out.push({ itemId: s.itemId, templateId: s.templateId, frames });
+    }
+    return out;
   }
 
   /**

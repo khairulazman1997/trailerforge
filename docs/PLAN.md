@@ -282,6 +282,8 @@ Design defaults (proposed 2026-10-25; all six confirmed 2026-10-28):
 
 Rough budget: 5.1, 5.2, 5.4, 5.6, 5.7, 5.9 and 5.13 on Opus, the rest on Sonnet (about 65% Opus by tokens); about 200–300k output tokens (the earlier 170–255k plus reframing and effect suggestions), roughly 15–25% of a week on Pro across 4–6 session windows. Suggested sessions: (1) 5.1–5.2 Opus, 45–65k; (2) 5.3 Sonnet then 5.4 Opus, 35–50k; (3) 5.5 Sonnet then 5.6 Opus, 40–55k; (4) 5.7 and 5.9 Opus, 45–65k; (5) 5.8, 5.10, 5.11 and 5.12 Sonnet, 40–60k; (6) 5.13 Opus, 15–25k. A session short of budget stops at a task boundary.
 
+**M5 complete (2026-10-28).** Actual: 13 tasks over five session windows and roughly 22% of a week (readings in `docs/BUILD_LOG.md`), against 4–6 windows and 15–25% planned. Known gaps carried forward: cuts in a shortened version are not re-snapped to the beat; the browser preview draws Inter and no logo (the renderer uses the brand files); a card between two shots gets no transition (separate tracks); plugin transitions are not flash-checked; the desktop package must bundle `assets/` and resvg's win32 binary.
+
 ## Potential extensions (not scheduled, not in any milestone)
 
 Ideas recorded so they are not lost. None of these is planned work; do not build them or design around them without the user asking.

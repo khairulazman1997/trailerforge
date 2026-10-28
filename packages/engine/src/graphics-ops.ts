@@ -10,11 +10,19 @@ import {
 import {
   VariantCache,
   defaultVariants,
+  timelineHash,
   type DerivedVariant,
   type SoundSetup,
 } from '@trailerforge/cut';
 import { SFX_KINDS, generatedCatalog, type SfxOption } from '@trailerforge/effects';
-import { brandTokens, buildScene, checkScene, renderSvg, safeBox } from '@trailerforge/graphics';
+import {
+  brandTokens,
+  buildScene,
+  checkScene,
+  renderSvg,
+  safeBox,
+  timelineScenes,
+} from '@trailerforge/graphics';
 import { buildSfxCatalog, scanSfxFolder } from '@trailerforge/media';
 import { FrameRenderer, fontFamilyName } from '@trailerforge/render';
 import {
@@ -123,6 +131,43 @@ export async function deriveVariantOp(engine: Engine, store: ProjectStore, varia
   } catch (err) {
     throw new OpError('not-found', err instanceof Error ? err.message : String(err));
   }
+}
+
+/**
+ * Render the cards and captions of a version (its derived timeline) with the brand kit: `samples`
+ * frames per item into the frame cache, with the hash of every frame, so a check (or M6's
+ * export) can see that two renders agree. Nothing is stored in the project.
+ */
+export async function renderVariantGraphicsOp(
+  engine: Engine,
+  store: ProjectStore,
+  variantId: string,
+  o: { samples?: number; cacheDir?: string; signal?: AbortSignal } = {},
+) {
+  const derived = await deriveVariantOp(engine, store, variantId);
+  const status = await brandStatus(store.paths.dir, store.state.brand);
+  const { scenes, warnings } = timelineScenes({
+    timeline: derived.timeline,
+    templates: engine.plugins.registries.graphicTemplates,
+    brand: store.state.brand,
+    fonts: status.fonts,
+    logoPresent: !status.warnings.some((w) => w.startsWith('The logo')),
+  });
+  const r = await FrameRenderer.create({
+    projectDir: store.paths.dir,
+    brand: store.state.brand,
+    ...(o.cacheDir ? { cacheDir: o.cacheDir } : {}),
+  });
+  const items = await r.renderScenes(scenes, {
+    ...(o.samples ? { samples: o.samples } : {}),
+    ...(o.signal ? { signal: o.signal } : {}),
+  });
+  return {
+    variantId,
+    timelineHash: timelineHash(derived.timeline),
+    items: items.map((it, i) => ({ ...it, kind: scenes[i]!.kind, start: scenes[i]!.start })),
+    warnings: [...new Set([...status.warnings, ...warnings, ...r.warnings])],
+  };
 }
 
 // ---- brand kit -------------------------------------------------------------------------------
