@@ -238,6 +238,9 @@ importers:
       '@trailerforge/brief':
         specifier: workspace:*
         version: link:../brief
+      '@trailerforge/compile':
+        specifier: workspace:*
+        version: link:../compile
       '@trailerforge/core':
         specifier: workspace:*
         version: link:../core

@@ -127,6 +127,20 @@ export function validateProjectRefs(project: Project): RefIssue[] {
     if (!assetIds.has(id)) issue('brief.referenceAssetIds', `unknown asset "${id}"`);
   });
 
+  const versionOk = (v: string | null) => v === null || variantIds.has(v);
+  project.review.comments.forEach((c, i) => {
+    claim(c.id, `review.comments[${i}]`);
+    if (!versionOk(c.variantId)) issue(`review.comments[${i}]`, `unknown variant "${c.variantId}"`);
+  });
+  const approved = new Set<string>();
+  project.review.approvals.forEach((a, i) => {
+    const key = a.variantId ?? '(master)';
+    if (approved.has(key)) issue(`review.approvals[${i}]`, `two approvals for "${key}"`);
+    approved.add(key);
+    if (!versionOk(a.variantId))
+      issue(`review.approvals[${i}]`, `unknown variant "${a.variantId}"`);
+  });
+
   const timelineIds = new Set(project.timelines.map((t) => t.id));
   const nested = new Map<string, string[]>();
   project.timelines.forEach((tl, ti) => {

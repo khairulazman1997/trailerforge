@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { Brand } from './brand.js';
 import { Brief } from './brief.js';
 import { Extensions, Id, IsoDate, IsoDateTime, PluginRef } from './common.js';
+import { Review } from './review.js';
 import { FormatTarget } from './format.js';
 import { KnowledgeEntity, KnowledgeSource } from './knowledge.js';
 import { ProjectAssetRef } from './media.js';
@@ -46,6 +47,8 @@ export const Project = z.strictObject({
   formatTargets: z.array(FormatTarget).default([]),
   storyboard: Storyboard.nullable().default(null),
   timelines: z.array(Timeline).default([]),
+  /** Comments and approvals per version. */
+  review: Review.default({ comments: [], approvals: [] }),
   assets: z.array(ProjectAssetRef).default([]),
   /** Local sources (e.g. the game repo) and the curated facts extracted from them. */
   sources: z.array(KnowledgeSource).default([]),

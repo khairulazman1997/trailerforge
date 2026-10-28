@@ -10,6 +10,7 @@ import {
 } from '@trailerforge/schema';
 import { z } from 'zod';
 import { CommandError, defineCommand, type CommandDef } from './commands.js';
+import { dropVersionReview } from './review-commands.js';
 
 /**
  * Variants: versions of the trailer (aspect ratio, length) derived from the master cut on
@@ -85,6 +86,7 @@ export const removeVariant = defineCommand({
     const sb = storyboard(d, type);
     findVariant(d, variantId, type);
     sb.variants = sb.variants.filter((v) => v.id !== variantId);
+    dropVersionReview(d, variantId);
   },
 });
 
