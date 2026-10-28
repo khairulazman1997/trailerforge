@@ -817,16 +817,16 @@ export function cropPath(a: Animatable, duration: number, skip: number, fpf: num
   return out;
 }
 
-/** A piecewise-linear expression of the frame number `n` through the given points. */
-export function piecewise(pts: readonly { f: number; v: number }[]): string {
+/** A piecewise-linear expression of `x` (default the frame number `n`) through the given points. */
+export function piecewise(pts: readonly { f: number; v: number }[], x = 'n'): string {
   if (pts.length === 1 || pts.every((p) => p.v === pts[0]!.v)) return n(pts[0]!.v);
   let expr = n(pts[pts.length - 1]!.v);
   for (let i = pts.length - 2; i >= 0; i--) {
     const a = pts[i]!;
     const b = pts[i + 1]!;
     const slope = (b.v - a.v) / (b.f - a.f);
-    const seg = slope === 0 ? n(a.v) : `${n(a.v)}+(n-${a.f})*${n(slope)}`;
-    expr = `if(lt(n,${b.f}),${seg},${expr})`;
+    const seg = slope === 0 ? n(a.v) : `${n(a.v)}+(${x}-${n(a.f)})*${n(slope)}`;
+    expr = `if(lt(${x},${n(b.f)}),${seg},${expr})`;
   }
   return expr;
 }

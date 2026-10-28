@@ -23,5 +23,8 @@
     "@trailerforge/effects": "workspace:*",
     "@trailerforge/graphics": "workspace:*",
     "@trailerforge/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@trailerforge/media": "workspace:*"
   }
 }

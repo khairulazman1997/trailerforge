@@ -192,6 +192,10 @@ importers:
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema
+    devDependencies:
+      '@trailerforge/media':
+        specifier: workspace:*
+        version: link:../media
 
   packages/core:
     dependencies:
