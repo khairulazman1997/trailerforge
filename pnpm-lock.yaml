@@ -181,6 +181,18 @@ importers:
         specifier: workspace:*
         version: link:../pack-game-trailer
 
+  packages/compile:
+    dependencies:
+      '@trailerforge/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@trailerforge/graphics':
+        specifier: workspace:*
+        version: link:../graphics
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/core:
     dependencies:
       '@trailerforge/effects':
