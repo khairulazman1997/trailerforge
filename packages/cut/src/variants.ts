@@ -1,5 +1,6 @@
 import {
   Timeline,
+  Transform,
   flicksPerFrame,
   framesToFlicks,
   itemEnd,
@@ -10,6 +11,7 @@ import {
   type StoryboardVariant,
   type TimelineItem,
 } from '@trailerforge/schema';
+import { cropInsets, reframeClip, type ReframeResult } from './reframe.js';
 import { stableHash, type TakeSource } from './rough-cut.js';
 
 /**
@@ -28,7 +30,7 @@ import { stableHash, type TakeSource } from './rough-cut.js';
  */
 
 /** Bumped whenever the derivation changes its output for the same inputs. */
-export const VARIANT_DERIVATION_VERSION = 1;
+export const VARIANT_DERIVATION_VERSION = 2;
 
 export interface VariantInput {
   project: Pick<Project, 'storyboard' | 'formatTargets' | 'timelines'>;
@@ -37,9 +39,10 @@ export interface VariantInput {
   masterTimelineId?: string;
   /**
    * Recording lengths per asset id, so a clip can grow into footage the master left unused (and
-   * a swapped take is cut to its length). Without it a clip never grows past its master length.
+   * a swapped take is cut to its length), and with footage analysis the crop follows the
+   * subject. Without it a clip never grows past its master length and crops are centred.
    */
-  sources?: ReadonlyMap<string, Pick<TakeSource, 'duration'>>;
+  sources?: ReadonlyMap<string, TakeSource>;
 }
 
 export type SlotFate = 'kept' | 'shortened' | 'lengthened' | 'dropped';
@@ -51,6 +54,8 @@ export interface VariantSlotReport {
   masterDuration: number;
   duration: number;
   reason: string;
+  /** How the slot's first clip fits the version's shape. */
+  reframe?: { mode: ReframeResult['mode']; reason: string };
 }
 
 export interface DerivedVariant {
@@ -122,9 +127,12 @@ export function variantInputHash(input: VariantInput): string {
       if (slot.kind === 'shot') for (const t of slot.takes) assets.add(t.assetId);
   for (const tr of master?.tracks ?? [])
     for (const it of tr.items) if ('assetId' in it) assets.add(it.assetId);
-  const sources = [...assets]
-    .sort()
-    .map((id) => [id, input.sources?.get(id)?.duration ?? null] as const);
+  const sources = [...assets].sort().map((id) => {
+    // Analysis is deterministic per recording and analyzer version: its shape stands for it.
+    const src = input.sources?.get(id);
+    const f = src?.footage;
+    return [id, src?.duration ?? null, f ? [f.frameCount, f.focus?.length ?? 0] : null] as const;
+  });
   return stableHash(
     JSON.stringify({
       v: VARIANT_DERIVATION_VERSION,
@@ -439,6 +447,58 @@ function derive(
     };
   });
 
+  // Fit every clip to the version's shape.
+  const reframes = new Map<string, ReframeResult>();
+  for (const tr of tracks) {
+    if (tr.kind !== 'video') continue;
+    tr.items = tr.items.map((it) => (it.kind === 'clip' ? reframeItem(it) : it));
+  }
+  function reframeItem(it: Extract<TimelineItem, { kind: 'clip' }>): TimelineItem {
+    const footage = input.sources?.get(it.assetId)?.footage;
+    const manual = it.slotId ? variant.overrides[it.slotId]?.cropCenter : undefined;
+    const r = reframeClip({
+      source: master.resolution,
+      target: format.resolution,
+      rate,
+      sourceIn: it.sourceIn,
+      duration: it.duration,
+      speed: it.speed,
+      mode: variant.reframe.mode,
+      ...(footage ? { footage } : {}),
+      ...(manual ? { manual } : {}),
+    });
+    if (it.slotId && !reframes.has(it.slotId)) reframes.set(it.slotId, r);
+    if (r.mode === 'none') return it;
+    const crop =
+      r.mode === 'fill'
+        ? undefined
+        : r.path.length === 1
+          ? cropInsets(r.path[0]!.rect)
+          : {
+              keyframes: r.path.map((k) => ({
+                at: k.at,
+                value: cropInsets(k.rect),
+                easing: 'linear' as const,
+              })),
+            };
+    const core = (it.extensions.core ?? {}) as Record<string, unknown>;
+    return {
+      ...it,
+      transform: Transform.parse({ ...(it.transform ?? {}), ...(crop ? { crop } : {}) }),
+      extensions: {
+        ...it.extensions,
+        core: {
+          ...core,
+          reframe: {
+            mode: r.mode,
+            reason: r.reason,
+            ...(r.mode === 'fill' ? { background: 'blur' } : {}),
+          },
+        },
+      } as TimelineItem['extensions'],
+    };
+  }
+
   const markers = master.markers
     .flatMap((m) => {
       const f = F(m.at);
@@ -489,7 +549,15 @@ function derive(
         reason: 'not in the master cut',
       });
   function report(s: Segment, fate: SlotFate, duration: number, reason: string): VariantSlotReport {
-    return { slotId: s.slot.id, fate, masterDuration: T(s.masterLen), duration, reason };
+    const r = reframes.get(s.slot.id);
+    return {
+      slotId: s.slot.id,
+      fate,
+      masterDuration: T(s.masterLen),
+      duration,
+      reason,
+      ...(r && fate !== 'dropped' ? { reframe: { mode: r.mode, reason: r.reason } } : {}),
+    };
   }
 
   if (

@@ -1,4 +1,5 @@
-"""Footage analysis: scene changes, brightness and motion per frame, black, flash and frozen frames.
+"""Footage analysis: scene changes, brightness, motion and where it is per frame; black, flash and
+frozen frames.
 
 Works on small frames at a constant rate (see `decode.iter_frames`), so frame i is exactly at
 i / rate seconds. Results are frame indices; the TypeScript side converts them to flicks.
@@ -20,6 +21,26 @@ BLACK_STD = 8.0
 FLASH_JUMP = 60.0
 FROZEN_MOTION = 0.5  # mean absolute luma difference between frames
 FROZEN_MIN_S = 0.5
+FOCUS_DIFF = 12  # luma change below this is noise, not movement
+FOCUS_MIN_SHARE = 0.002  # moving pixels needed (share of the frame) to place a focus point
+
+
+def _focus(diff: np.ndarray) -> list[int] | None:
+    """Where the movement is: weighted centre and spread (x, y, sx, sy), 0..1000 of the frame."""
+    h, w = diff.shape
+    weights = np.where(diff > FOCUS_DIFF, diff, 0).astype(np.float64)
+    total = weights.sum()
+    if np.count_nonzero(weights) < FOCUS_MIN_SHARE * w * h or total <= 0:
+        return None
+    xs = (np.arange(w) + 0.5) / w
+    ys = (np.arange(h) + 0.5) / h
+    px = weights.sum(axis=0) / total
+    py = weights.sum(axis=1) / total
+    cx = float((px * xs).sum())
+    cy = float((py * ys).sum())
+    sx = math.sqrt(max(0.0, float((px * (xs - cx) ** 2).sum())))
+    sy = math.sqrt(max(0.0, float((py * (ys - cy) ** 2).sum())))
+    return [round(v * 1000) for v in (cx, cy, sx, sy)]
 
 
 def _runs(mask: list[bool]) -> list[tuple[int, int]]:
@@ -71,6 +92,7 @@ def analyze_footage(params: dict[str, Any], progress: Progress) -> dict[str, Any
     bright: list[float] = []
     std: list[float] = []
     motion: list[float] = []
+    focus: list[list[int] | None] = []
     cuts: list[int] = []
     prev = None
     last_tc = None
@@ -81,7 +103,9 @@ def analyze_footage(params: dict[str, Any], progress: Progress) -> dict[str, Any
         bright.append(float(gray.mean()))
         std.append(float(gray.std()))
         g16 = gray.astype(np.int16)
-        motion.append(0.0 if prev is None else float(np.abs(g16 - prev).mean()))
+        diff = None if prev is None else np.abs(g16 - prev)
+        motion.append(0.0 if diff is None else float(diff.mean()))
+        focus.append(None if diff is None else _focus(diff))
         prev = g16
         last_tc = FrameTimecode(i, fps)
         cuts.extend(tc.frame_num for tc in detector.process_frame(last_tc, frame))
@@ -107,4 +131,5 @@ def analyze_footage(params: dict[str, Any], progress: Progress) -> dict[str, Any
         "frozen": [list(r) for r in frozen],
         "brightness": [round(b) for b in bright],
         "motion": [round(m * 10) for m in motion],
+        "focus": focus,
     }

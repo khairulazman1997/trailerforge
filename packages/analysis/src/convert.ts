@@ -2,7 +2,7 @@ import { FLICKS_PER_SECOND, framesToFlicks, secondsToFlicks } from '@trailerforg
 import type { FootageAnalysis, FootageRaw, MusicAnalysis, MusicRaw } from './schemas.js';
 
 export const MUSIC_ANALYZER = { name: 'music', version: '1' } as const;
-export const FOOTAGE_ANALYZER = { name: 'footage', version: '1' } as const;
+export const FOOTAGE_ANALYZER = { name: 'footage', version: '2' } as const;
 
 /** Sorted, unique, within [0, max]. */
 function times(xs: number[], max: number): number[] {
@@ -56,6 +56,7 @@ export function toFootageAnalysis(raw: FootageRaw): FootageAnalysis {
     frozen: ranges(raw.frozen),
     brightness: raw.brightness,
     motion: raw.motion,
+    focus: raw.focus ?? [],
   };
 }
 

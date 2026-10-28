@@ -31,6 +31,8 @@ export interface FootageFacts {
   flashes: readonly number[];
   frozen: readonly { start: number; end: number }[];
   motion: readonly number[];
+  /** Centre x, y and spread sx, sy of the movement per frame (0..1000), null where none. */
+  focus?: readonly (readonly number[] | null)[];
 }
 
 export interface TakeSource {

@@ -123,3 +123,19 @@ def moving(pattern: str, n: int, start: int = 0, w: int = 320, h: int = 180) -> 
 
 def solid(value: int, n: int, w: int = 320, h: int = 180) -> list[np.ndarray]:
     return [np.full((h, w, 3), value, dtype=np.uint8) for _ in range(n)]
+
+
+def moving_box(
+    n: int, w: int = 320, h: int = 180, size: int = 24, y: float = 0.4
+) -> list[np.ndarray]:
+    """A bright square crossing a dark textured background from left to right."""
+    out = []
+    yy, xx = np.mgrid[0:h, 0:w]
+    bg = ((xx // 16 + yy // 16) % 2) * 20 + 30
+    for i in range(n):
+        f = np.stack([bg, bg, bg], axis=-1).astype(np.uint8)
+        x0 = round((w - size) * (0.1 + 0.8 * i / max(1, n - 1)))
+        y0 = round((h - size) * y)
+        f[y0 : y0 + size, x0 : x0 + size] = 230
+        out.append(f)
+    return out

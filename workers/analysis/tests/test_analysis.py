@@ -3,7 +3,7 @@ import json
 
 import numpy as np
 import pytest
-from synth import click_track, moving, solid, write_audio, write_video
+from synth import click_track, moving, moving_box, solid, write_audio, write_video
 
 from tforge_analysis.footage import analyze_footage
 from tforge_analysis.music import analyze_music
@@ -124,6 +124,25 @@ def test_footage_ground_truth(footage):
 def test_footage_is_deterministic(footage):
     p = {"path": str(footage), "rate": {"num": 30, "den": 1}, "duration": 4.53}
     assert analyze_footage(p, no_progress) == analyze_footage(p, no_progress)
+
+
+def test_focus_follows_a_moving_subject(tmp_path):
+    path = write_video(moving_box(60), tmp_path / "box.mp4")
+    r = analyze_footage({"path": str(path), "rate": {"num": 30, "den": 1}}, no_progress)
+    focus = r["focus"]
+    assert len(focus) == r["frameCount"] and focus[0] is None
+    xs = [f[0] for f in focus[1:] if f is not None]
+    assert len(xs) >= 55
+    assert xs[0] < 250 and xs[-1] > 750
+    assert all(b >= a - 10 for a, b in zip(xs, xs[1:]))  # left to right
+    ys = [f[1] for f in focus[1:] if f is not None]
+    assert all(abs(y - 420) < 60 for y in ys)
+    assert all(f[2] < 80 for f in focus[1:] if f is not None)  # a small subject, not a pan
+    still = analyze_footage(
+        {"path": str(write_video(solid(80, 10), tmp_path / "s.mp4")), "rate": {"num": 30, "den": 1}},
+        no_progress,
+    )
+    assert still["focus"] == [None] * still["frameCount"]
 
 
 def test_audio_only_file_has_no_video(tmp_path):

@@ -17,6 +17,14 @@ export const MusicRaw = z.strictObject({
 });
 export type MusicRaw = z.infer<typeof MusicRaw>;
 
+/** Where the movement is in a frame: centre x, y and spread sx, sy, 0..1000 of the frame. */
+const FocusSample = z.tuple([
+  z.int().min(0).max(1000),
+  z.int().min(0).max(1000),
+  z.int().min(0).max(1000),
+  z.int().min(0).max(1000),
+]);
+
 const frameRange = z.tuple([z.int().nonnegative(), z.int().nonnegative()]);
 
 /** What the sidecar returns for `analyze.footage` (frame indices at a constant rate). */
@@ -29,6 +37,7 @@ export const FootageRaw = z.strictObject({
   frozen: z.array(frameRange),
   brightness: z.array(z.int().min(0).max(255)),
   motion: z.array(z.int().nonnegative()),
+  focus: z.array(FocusSample.nullable()).optional(),
 });
 export type FootageRaw = z.infer<typeof FootageRaw>;
 
@@ -77,5 +86,7 @@ export const FootageAnalysis = z.strictObject({
   brightness: z.array(z.int().min(0).max(255)),
   /** Mean absolute luma change from the previous frame, ×10, per frame. */
   motion: z.array(z.int().nonnegative()),
+  /** Centre and spread of the movement per frame (0..1000), null where nothing moves. */
+  focus: z.array(FocusSample.nullable()).default([]),
 });
 export type FootageAnalysis = z.infer<typeof FootageAnalysis>;
