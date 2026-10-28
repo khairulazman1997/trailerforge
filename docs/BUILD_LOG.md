@@ -162,10 +162,12 @@ M4 summary: 14 planned tasks (4.1–4.14) plus 4.5b (pinning the vision model) a
 
 Breakdown at 18:31 UTC: 13 tasks (5.1–5.13), six design defaults to confirm at the start of M5, about 200–300k output tokens (~65% Opus) over 4–6 session windows, roughly 15–25% of a week. Prompt for the first session: `docs/NEXT_SESSION.md`. Also this session: storyboard rows show each shot's on-screen text without opening it.
 
-| Task | Commit | Start | End | Duration | Model | Notes |
-| ---- | ------ | ----- | --- | -------- | ----- | ----- |
+| Task | Commit | Start  | End   | Duration | Model | Notes                                                                                                                                                                                                                                                                                                                    |
+| ---- | ------ | ------ | ----- | -------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 5.1  | (this) | ~08:00 | 08:25 | ~25 min  | Opus  | Defaults 1–4 confirmed, 5–6 open. `StoryboardVariant` gains name, targetDuration, reframe, override `takeId`; `deriveVariant` + `VariantCache` + `defaultVariants` in `@trailerforge/cut` (seeded property tests over 300 cases); `core/variants.*` commands; detaching a take forgets variant overrides that picked it. |
 
-| When (M5)        | Session | Week | Note           |
-| ---------------- | ------- | ---- | -------------- |
-| Before breakdown | 34%     | 72%  | last reading   |
-| Before 5.1       | —       | —    | user to report |
+| When (M5)        | Session | Week | Note                                      |
+| ---------------- | ------- | ---- | ----------------------------------------- |
+| Before breakdown | 34%     | 72%  | last reading                              |
+| Before 5.1       | 1%      | 90%  | new session window; 5.1 only this session |
+| After 5.1        | —       | —    | user to report                            |

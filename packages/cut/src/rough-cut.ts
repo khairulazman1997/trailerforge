@@ -79,7 +79,7 @@ const EDGE_FRAMES = 3;
 const BUSY_MOTION = 100;
 
 /** 53-bit hash, hex: deterministic ids without Node's crypto. */
-function hash(s: string): string {
+export function stableHash(s: string): string {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
   for (let i = 0; i < s.length; i++) {
@@ -228,9 +228,9 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
     reasons: Record<string, unknown>,
     summary: string,
   ) => {
-    const inputsHash = hash(JSON.stringify({ itemId, slotId, choice, reasons }));
+    const inputsHash = stableHash(JSON.stringify({ itemId, slotId, choice, reasons }));
     const rec = DecisionRecord.parse({
-      id: `dec_${hash(`${ROUGH_CUT_STEP}|${itemId}|${inputsHash}`)}`,
+      id: `dec_${stableHash(`${ROUGH_CUT_STEP}|${itemId}|${inputsHash}`)}`,
       at: input.now.toISOString(),
       step: ROUGH_CUT_STEP,
       subject: { kind: 'item', id: itemId },
@@ -534,4 +534,4 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
 }
 
 /** Stable hash of a timeline, for checking that the same inputs give the same cut. */
-export const timelineHash = (t: Timeline) => hash(JSON.stringify(t));
+export const timelineHash = (t: Timeline) => stableHash(JSON.stringify(t));

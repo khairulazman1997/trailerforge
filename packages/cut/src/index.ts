@@ -4,3 +4,4 @@ export * from './rough-cut.js';
 export * from './merge.js';
 export * from './captions.js';
 export * from './metrics.js';
+export * from './variants.js';

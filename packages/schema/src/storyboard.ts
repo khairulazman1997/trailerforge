@@ -203,10 +203,14 @@ export const MusicPlan = z.strictObject({
 });
 export type MusicPlan = z.infer<typeof MusicPlan>;
 
-/** Per-slot override in a format variant (sparse: only what differs from the master). */
+/** Per-slot override in a variant (sparse: only what differs from the master). */
 export const SlotOverride = z.strictObject({
+  /** true drops the slot from this variant; false keeps it even when a cutdown would drop it. */
   excluded: z.boolean().optional(),
+  /** Retime: the slot's length range in this variant; its ideal is the length to start from. */
   duration: DurationRange.optional(),
+  /** Use this take of the shot instead of the one the master cut uses. */
+  takeId: Id.optional(),
   /** Normalized crop center (0..1) for reframing, before keyframed crops in the timeline. */
   cropCenter: z
     .strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })
@@ -215,17 +219,32 @@ export const SlotOverride = z.strictObject({
 });
 export type SlotOverride = z.infer<typeof SlotOverride>;
 
+/** How a variant fits the master's picture into its aspect ratio. */
+export const ReframeSettings = z.strictObject({
+  /** `crop` follows each shot's focus point (blurred fill when it cannot fit); `fill` never crops. */
+  mode: z.enum(['crop', 'fill']).default('crop'),
+});
+export type ReframeSettings = z.infer<typeof ReframeSettings>;
+
 /**
- * A format variant derived from the master storyboard by a derivation ruleset (from the
- * platform profile) plus sparse overrides. Edits to the master flow into every variant.
+ * A version of the trailer (aspect ratio, length) derived from the master cut on demand. Only
+ * its rules and sparse per-slot overrides are stored, never a timeline, so edits to the master
+ * flow into every variant.
  */
 export const StoryboardVariant = z.strictObject({
   id: Id,
+  name: z.string().default(''),
   formatTargetId: Id,
-  rulesetId: PluginRef,
+  /** Length to cut down to, seconds; unset keeps the master's length. */
+  targetDuration: z.number().positive().optional(),
+  reframe: ReframeSettings.default({ mode: 'crop' }),
+  /** Derivation ruleset from a platform profile; reserved, not used yet. */
+  rulesetId: PluginRef.optional(),
   overrides: z.record(Id, SlotOverride).default({}),
 });
 export type StoryboardVariant = z.infer<typeof StoryboardVariant>;
+export const Variant = StoryboardVariant;
+export type Variant = StoryboardVariant;
 
 export const StoryboardMeta = z.strictObject({
   videoTypeId: PluginRef,

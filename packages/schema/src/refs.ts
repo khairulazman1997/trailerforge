@@ -46,6 +46,7 @@ export function validateProjectRefs(project: Project): RefIssue[] {
   const sectionIds = new Set<string>();
   const slotIds = new Set<string>();
   const variantIds = new Set<string>();
+  const takesBySlot = new Map<string, Set<string>>();
   const sb = project.storyboard;
   if (sb) {
     claim(sb.id, 'storyboard');
@@ -62,6 +63,7 @@ export function validateProjectRefs(project: Project): RefIssue[] {
         if (slot.kind === 'shot') {
           slot.overlays.forEach((o, oi) => claim(o.id, `${p}.overlays[${oi}]`));
           const takeIds = new Set<string>();
+          takesBySlot.set(slot.id, takeIds);
           slot.takes.forEach((t, ti) => {
             claim(t.id, `${p}.takes[${ti}]`);
             takeIds.add(t.id);
@@ -112,8 +114,11 @@ export function validateProjectRefs(project: Project): RefIssue[] {
       if (!formatIds.has(v.formatTargetId)) {
         issue(`storyboard.variants[${i}]`, `unknown format target "${v.formatTargetId}"`);
       }
-      Object.keys(v.overrides).forEach((id) => {
+      Object.entries(v.overrides).forEach(([id, o]) => {
         if (!slotIds.has(id)) issue(`storyboard.variants[${i}].overrides`, `unknown slot "${id}"`);
+        else if (o.takeId !== undefined && !takesBySlot.get(id)?.has(o.takeId)) {
+          issue(`storyboard.variants[${i}].overrides.${id}`, `unknown take "${o.takeId}"`);
+        }
       });
     });
   }

@@ -14,3 +14,4 @@ export * from './egress.js';
 export * from './take-commands.js';
 export * from './music-commands.js';
 export * from './timeline-commands.js';
+export * from './variant-commands.js';

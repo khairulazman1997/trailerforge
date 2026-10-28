@@ -11,6 +11,7 @@ import {
 } from '@trailerforge/schema';
 import { z } from 'zod';
 import { CommandError, defineCommand, type CommandDef } from './commands.js';
+import { forgetTakeOverrides } from './variant-commands.js';
 
 /**
  * Recordings attached to shots. These touch only a shot's takes, chosen take and (when a first
@@ -107,6 +108,7 @@ export const detachTake = defineCommand({
     if (i < 0) throw new CommandError('core/takes.detach', `no take "${takeId}" on "${slotId}"`);
     shot.takes.splice(i, 1);
     if (shot.chosenTakeId === takeId) delete shot.chosenTakeId;
+    forgetTakeOverrides(d, slotId, takeId);
   },
 });
 
