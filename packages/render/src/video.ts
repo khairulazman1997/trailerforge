@@ -377,3 +377,32 @@ export async function writePoster(
     await rm(t, { force: true });
   }
 }
+
+/**
+ * A card's or caption's PNG frames (straight alpha) as a ProRes 4444 clip with alpha, for NLE
+ * handoff. Written to a temp file and renamed; deterministic for the same frames.
+ */
+export async function encodeAlphaClip(
+  frames: { pattern: string; frames: number },
+  rate: Rate,
+  dest: string,
+  opts: { signal?: AbortSignal; tools?: FfmpegTools } = {},
+): Promise<void> {
+  const tools = opts.tools ?? resolveTools();
+  await mkdir(dirname(dest), { recursive: true });
+  const t = `${dest}.tmp-${process.pid}`;
+  try {
+    await runTool(
+      tools.ffmpeg,
+      ['-hide_banner', '-nostdin', '-y', '-loglevel', 'error',
+        '-framerate', `${rate.num}/${rate.den}`, '-start_number', '0', '-i', frames.pattern,
+        '-frames:v', String(frames.frames), '-c:v', 'prores_ks', '-profile:v', '4444',
+        '-pix_fmt', 'yuva444p10le', '-alpha_bits', '16', '-vendor', 'apl0',
+        '-fflags', '+bitexact', '-flags:v', '+bitexact', '-map_metadata', '-1', '-f', 'mov', t], // prettier-ignore
+      opts.signal ? { signal: opts.signal } : {},
+    );
+    await rename(t, dest);
+  } finally {
+    await rm(t, { force: true });
+  }
+}

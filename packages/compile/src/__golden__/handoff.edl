@@ -1,0 +1,13 @@
+TITLE: Parry: The Game - Trailer
+FCM: NON-DROP FRAME
+
+001  AX       V     C        00:00:12:12 00:00:14:12 00:00:00:00 00:00:02:00
+* FROM CLIP NAME: forest.mp4
+
+002  AX       V     C        00:00:01:00 00:00:02:12 00:00:02:00 00:00:03:12
+* FROM CLIP NAME: Boss Fight.mp4
+* TRANSITION: core/crossfade 12 FRAMES (CUT HERE; ADD IN THE EDITOR)
+* Effect: core/grain {"strength":20}
+
+003  BL       V     C        00:00:00:00 00:00:01:00 00:00:03:12 00:00:04:12
+* FROM CLIP NAME: Missing: Ending shot

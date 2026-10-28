@@ -16,7 +16,13 @@ import { MediaError } from '@trailerforge/media';
 import { Timeline, framesToFlicks, rate } from '@trailerforge/schema';
 import { EXPORT_PRESETS, posterTime, resolveExport } from '@trailerforge/compile';
 import { measureLoudness, runOutputGate } from '@trailerforge/media';
-import { planSegments, renderVideo, writePoster, type RenderSpec } from './video.js';
+import {
+  encodeAlphaClip,
+  planSegments,
+  renderVideo,
+  writePoster,
+  type RenderSpec,
+} from './video.js';
 
 /** Resumable renders on real FFmpeg: interrupted runs finish byte-identical to clean ones. */
 
@@ -206,5 +212,30 @@ describe('export presets, rendered', { timeout: 300_000 }, () => {
     const head = readFileSync(png).subarray(0, 8);
     expect([...head]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     expect(readdirSync(join(root, 'out')).filter((x) => x.includes('.tmp'))).toEqual([]);
+  });
+});
+
+describe('alpha clips for NLE handoff', { timeout: 60_000 }, () => {
+  it('encodes PNG frames with alpha as ProRes 4444, the same bytes twice', async () => {
+    const dir = join(root, 'card');
+    execFileSync('mkdir', ['-p', dir]);
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i',
+      'color=c=red:s=80x90:r=24,format=rgba,pad=160:90:0:0:color=black@0', '-frames:v', '12',
+      join(dir, 'frame_%06d.png')]); // prettier-ignore
+    const a = join(root, 'out', 'card-a.mov');
+    const b = join(root, 'out', 'card-b.mov');
+    for (const out of [a, b])
+      await encodeAlphaClip({ pattern: join(dir, 'frame_%06d.png'), frames: 12 }, R, out);
+    expect(readFileSync(a).equals(readFileSync(b))).toBe(true);
+    const s = JSON.parse(
+      execFileSync('ffprobe', ['-v', 'error', '-count_packets', '-show_entries',
+        'stream=codec_name,pix_fmt,nb_read_packets,width', '-of', 'json', a]).toString(),
+    ).streams[0]; // prettier-ignore
+    expect(s).toMatchObject({
+      codec_name: 'prores',
+      pix_fmt: 'yuva444p12le',
+      nb_read_packets: '12',
+      width: 160,
+    });
   });
 });

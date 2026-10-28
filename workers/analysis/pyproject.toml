@@ -17,6 +17,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "onnx>=1.17",
+    "opentimelineio>=0.17",
     "pytest>=8",
     "ruff>=0.6",
 ]

@@ -7,3 +7,4 @@ test-results
 playwright-report
 packages/pack-game-trailer/src/__golden__
 packages/graphics/src/__golden__
+packages/compile/src/__golden__
