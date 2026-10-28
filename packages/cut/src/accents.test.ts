@@ -221,6 +221,46 @@ describe("the storyboard's accents on the rough cut", () => {
   });
 });
 
+describe('hand-set transitions on a rebuild', () => {
+  it("stay, while the storyboard's own transition into the same clip wins", () => {
+    const plain = (p: Project) => {
+      delete slot(p, 'shot_parry').transitionOut; // the sample flashes out of the parry shot
+    };
+    const first = buildRoughCut(input(plain));
+    const [a, b, c] = first.timeline.tracks.find((k) => k.id === 'trk_picture')!.items;
+    const mine = {
+      id: 'tr_mine',
+      transitionId: 'core/dip',
+      fromItemId: a!.id,
+      toItemId: b!.id,
+      duration: 3 * FPF,
+      params: {},
+    };
+    const edited: Timeline = {
+      ...first.timeline,
+      tracks: first.timeline.tracks.map((t) =>
+        t.id === 'trk_picture' ? { ...t, transitions: [mine] } : t,
+      ),
+    };
+    const again = input(plain);
+    const merged = mergeRoughCut(edited, buildRoughCut(again).timeline, again.sources);
+    expect(picture(merged.timeline).transitions.map((t) => t.id)).toContain('tr_mine');
+    // The storyboard asks for a whip into that same clip: its transition replaces the hand-set one.
+    const withWhip = input((p) => {
+      plain(p);
+      const slotId = b!.slotId!;
+      slot(p, slotId).transitionIn = { transitionId: 'core/whip', duration: 0.25, params: {} };
+    });
+    const m2 = mergeRoughCut(edited, buildRoughCut(withWhip).timeline, withWhip.sources);
+    expect(
+      picture(m2.timeline)
+        .transitions.filter((t) => t.toItemId === b!.id)
+        .map((t) => t.transitionId),
+    ).toEqual(['core/whip']);
+    void c;
+  });
+});
+
 describe('withDucks', () => {
   it('dips the music under each duck and keeps the fade at the end', () => {
     const fade = {

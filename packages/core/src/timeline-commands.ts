@@ -1,7 +1,9 @@
 import type { Draft } from 'immer';
 import {
   EffectInstance,
+  FLICKS_PER_SECOND,
   Id,
+  PluginRef,
   Flicks,
   PlaceholderItem,
   Timeline,
@@ -9,6 +11,13 @@ import {
   type TimelineItem,
   type Track,
 } from '@trailerforge/schema';
+import {
+  FlashRiskError,
+  assertFlashSafe,
+  builtinFilters,
+  flashEvents,
+  type FlashEvent,
+} from '@trailerforge/effects';
 import { z } from 'zod';
 import { CommandError, defineCommand, type CommandDef } from './commands.js';
 
@@ -177,6 +186,81 @@ export const toPlaceholder = defineCommand({
   },
 });
 
+/**
+ * Set (or, with null, remove) the transition into a picture item from the item before it on the
+ * same track. The two must meet exactly, and the overlap is at most the shorter of the two. A
+ * transition set by hand has no decision behind it, so a rebuild of the cut keeps it.
+ */
+export const setTransition = defineCommand({
+  type: 'core/timeline.set-transition',
+  payload: z.strictObject({
+    timelineId: Id,
+    /** The item the transition leads into. */
+    toItemId: Id,
+    transition: z
+      .strictObject({
+        transitionId: PluginRef,
+        duration: Flicks.refine((d) => d > 0, { message: 'duration must be > 0' }),
+        params: z.record(z.string(), z.json()).default({}),
+      })
+      .nullable(),
+  }),
+  label: ({ transition }) => (transition ? 'Set transition' : 'Remove transition'),
+  apply: (d, { timelineId, toItemId, transition }) => {
+    const type = 'core/timeline.set-transition';
+    const { track, item, index } = find(d, timelineId, toItemId, type);
+    track.transitions = track.transitions.filter((t) => t.toItemId !== toItemId);
+    if (!transition) return;
+    const from = track.items[index - 1];
+    if (!from || from.start + from.duration !== item.start)
+      throw new CommandError(
+        type,
+        'a transition needs the clip before it on the same track, touching it',
+      );
+    const duration = Math.min(transition.duration, from.duration, item.duration);
+    // The photosensitivity guard, as when the cut is built: refuse a transition that would take
+    // the cut over three flashes in a second (installed ones this package does not know pass).
+    const filters = builtinFilters();
+    const flashes: FlashEvent[] = [];
+    const tl = d.timelines.find((t) => t.id === timelineId)!;
+    const rate = tl.frameRate;
+    const add = (id: string, params: unknown, dur: number, cutAt: number, key: string) => {
+      const def = filters.get(id);
+      if (!def) return;
+      const ctx = {
+        width: tl.resolution.width,
+        height: tl.resolution.height,
+        rate,
+        duration: dur / FLICKS_PER_SECOND,
+      };
+      for (const e of flashEvents(def, params, ctx, (cutAt - dur / 2) / FLICKS_PER_SECOND))
+        flashes.push({ ...e, source: `${e.source} (${key})` });
+    };
+    for (const t of tl.tracks
+      .flatMap((k) => k.transitions.map((x) => ({ k, x })))
+      .filter(({ x }) => x.toItemId !== toItemId)) {
+      const to = t.k.items.find((i) => i.id === t.x.toItemId);
+      if (to) add(t.x.transitionId, t.x.params, t.x.duration, to.start, t.x.id);
+    }
+    add(transition.transitionId, transition.params, duration, item.start, 'new');
+    try {
+      assertFlashSafe(flashes);
+    } catch (err) {
+      if (err instanceof FlashRiskError)
+        throw new CommandError(type, `${err.message}. Choose a calmer transition or move it.`);
+      throw err;
+    }
+    track.transitions.push({
+      id: `tr_${toItemId}`.slice(0, 64),
+      transitionId: transition.transitionId,
+      fromItemId: from.id,
+      toItemId,
+      duration,
+      params: transition.params,
+    });
+  },
+});
+
 /** Set the effects on a picture item by hand; a rebuild of the cut keeps them. */
 export const setItemEffects = defineCommand({
   type: 'core/timeline.set-effects',
@@ -224,6 +308,7 @@ export const timelineCommands = [
   swapTake,
   toPlaceholder,
   setItemEffects,
+  setTransition,
   deleteItem,
   setTrackLocked,
 ] as unknown as readonly CommandDef<unknown>[];

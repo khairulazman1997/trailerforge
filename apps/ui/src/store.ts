@@ -43,9 +43,16 @@ export interface BrandSnapshot {
   version: number;
 }
 
+export interface Catalog {
+  templates: Awaited<ReturnType<ServiceClient['graphicTemplates']>>;
+  effects: Awaited<ReturnType<ServiceClient['effects']>>;
+}
+
 export type ClientLike = Pick<
   ServiceClient,
   | 'info'
+  | 'graphicTemplates'
+  | 'effects'
   | 'variants'
   | 'createDefaultVariants'
   | 'brand'
@@ -140,6 +147,8 @@ export interface AppState {
   footage: Record<string, FootageSnapshot>;
   /** The versions (derived from the master cut) and the brand kit, per project. */
   versions: Record<string, VersionsSnapshot>;
+  /** What is installed: graphics templates, transitions, effects and sounds (read once). */
+  catalog: Catalog | null;
   brands: Record<string, BrandSnapshot>;
   /** The beat grid the cut lands on, per project (null: music not chosen or analysed yet). */
   cutGrid: Record<string, { version: number; grid: Awaited<ReturnType<ServiceClient['cutGrid']>> }>;
@@ -176,6 +185,7 @@ const initial: AppState = {
   captureTips: {},
   footage: {},
   versions: {},
+  catalog: null,
   brands: {},
   cutGrid: {},
   notices: {},
@@ -752,6 +762,20 @@ export class AppStore {
   }
 
   // ---- versions and brand ----
+
+  /** Reads what is installed once; a quiet failure leaves it unset (the screens say so). */
+  async loadCatalog(): Promise<void> {
+    if (this.state.catalog || !this.client) return;
+    try {
+      const [templates, effects] = await Promise.all([
+        this.client.graphicTemplates(),
+        this.client.effects(),
+      ]);
+      this.set({ catalog: { templates, effects } });
+    } catch {
+      // Try again the next time a screen asks.
+    }
+  }
 
   /** Reads the versions derived from the master cut; a quiet failure keeps the old snapshot. */
   async refreshVersions(projectId: string): Promise<void> {

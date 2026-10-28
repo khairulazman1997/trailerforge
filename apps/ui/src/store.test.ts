@@ -124,6 +124,12 @@ class Fake {
     }),
     footage: async () => ({ footage: [], music: [], jobs: { queued: 0, running: 0, failed: [] } }),
     footageMatches: async () => ({ matches: [], recordings: [], usedVision: false }),
+    graphicTemplates: async () => [],
+    effects: async () => ({
+      transitions: [],
+      effects: [],
+      sounds: { folder: null, generated: [], files: [], warnings: [] },
+    }),
     variants: async () => ({ hasMaster: false, variants: [], missing: [] }),
     createDefaultVariants: async () => ({ added: [] }),
     brand: async () => ({

@@ -9,7 +9,8 @@ export type ProjectTab =
   | 'footage'
   | 'cut'
   | 'variants'
-  | 'brand';
+  | 'brand'
+  | 'graphics';
 
 export type Route =
   | { name: 'home' }
@@ -26,6 +27,7 @@ const TABS: ProjectTab[] = [
   'cut',
   'variants',
   'brand',
+  'graphics',
 ];
 
 export function matchRoute(path: string): Route {

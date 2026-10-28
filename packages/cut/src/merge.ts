@@ -99,8 +99,14 @@ export function mergeRoughCut(
     return {
       ...t,
       items,
-      // A transition needs its two items to still meet exactly.
-      transitions: t.transitions.filter((x) => {
+      // A transition needs its two items to still meet exactly. Ones set by hand (no decision
+      // behind them) stay, unless the new cut already puts a transition into the same item.
+      transitions: [
+        ...t.transitions,
+        ...(prevTracks.get(t.id)?.transitions ?? []).filter(
+          (x) => !x.decisionId && !t.transitions.some((g) => g.toItemId === x.toItemId),
+        ),
+      ].filter((x) => {
         const a = items.find((i) => i.id === x.fromItemId);
         const b = items.find((i) => i.id === x.toItemId);
         return !!a && !!b && a.start + a.duration === b.start;

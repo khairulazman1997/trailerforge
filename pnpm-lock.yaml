@@ -88,6 +88,12 @@ importers:
       '@trailerforge/cut':
         specifier: workspace:*
         version: link:../../packages/cut
+      '@trailerforge/effects':
+        specifier: workspace:*
+        version: link:../../packages/effects
+      '@trailerforge/graphics':
+        specifier: workspace:*
+        version: link:../../packages/graphics
       '@trailerforge/pack-game-trailer':
         specifier: workspace:*
         version: link:../../packages/pack-game-trailer
@@ -177,6 +183,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@trailerforge/effects':
+        specifier: workspace:*
+        version: link:../effects
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema

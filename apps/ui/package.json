@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@trailerforge/cut": "workspace:*",
+    "@trailerforge/effects": "workspace:*",
+    "@trailerforge/graphics": "workspace:*",
     "@trailerforge/pack-game-trailer": "workspace:*",
     "@trailerforge/schema": "workspace:*",
     "@trailerforge/service": "workspace:*",

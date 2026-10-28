@@ -102,6 +102,66 @@ describe('core/timeline commands', () => {
     expect(tl().tracks[0]!.transitions).toHaveLength(1);
   });
 
+  it('sets and removes the transition into an item, only where the clips touch', () => {
+    const [a, b] = tl().tracks[0]!.items;
+    store.dispatch('core/timeline.set-transition', {
+      timelineId: 'tl_rough',
+      toItemId: b!.id,
+      transition: { transitionId: 'core/crossfade', duration: FLICKS_PER_SECOND * 10 },
+    });
+    const t = tl().tracks[0]!.transitions;
+    expect(t).toEqual([
+      expect.objectContaining({
+        transitionId: 'core/crossfade',
+        fromItemId: a!.id,
+        toItemId: b!.id,
+      }),
+    ]);
+    expect(t[0]!.duration).toBeLessThanOrEqual(Math.min(a!.duration, b!.duration)); // never longer than the clips
+    expect(t[0]!.decisionId).toBeUndefined(); // by hand
+    store.dispatch('core/timeline.set-transition', {
+      timelineId: 'tl_rough',
+      toItemId: b!.id,
+      transition: { transitionId: 'core/dip', duration: 1000 },
+    });
+    expect(tl().tracks[0]!.transitions.map((x) => x.transitionId)).toEqual(['core/dip']); // replaced, not added
+    store.dispatch('core/timeline.set-transition', {
+      timelineId: 'tl_rough',
+      toItemId: b!.id,
+      transition: null,
+    });
+    expect(tl().tracks[0]!.transitions).toEqual([]);
+    expect(() =>
+      store.dispatch('core/timeline.set-transition', {
+        timelineId: 'tl_rough',
+        toItemId: a!.id,
+        transition: { transitionId: 'core/dip', duration: 1000 },
+      }),
+    ).toThrow(/needs the clip before it/);
+  });
+
+  it('refuses a hand-set transition that would flash more than three times a second', () => {
+    const [, b] = tl().tracks[0]!.items;
+    const glitch = {
+      transitionId: 'core/glitch',
+      duration: FLICKS_PER_SECOND,
+      params: { rate: 8 },
+    };
+    expect(() =>
+      store.dispatch('core/timeline.set-transition', {
+        timelineId: 'tl_rough',
+        toItemId: b!.id,
+        transition: glitch,
+      }),
+    ).toThrow(/flashes within one second/);
+    store.dispatch('core/timeline.set-transition', {
+      timelineId: 'tl_rough',
+      toItemId: b!.id,
+      transition: { ...glitch, params: { rate: 2 } },
+    });
+    expect(tl().tracks[0]!.transitions).toHaveLength(1);
+  });
+
   it('sets effects on an item by hand, marks it edited so a rebuild keeps them, and undoes', () => {
     const effects = [
       { id: 'fx_1', effectId: 'core/grain', enabled: true, params: { strength: 20 } },

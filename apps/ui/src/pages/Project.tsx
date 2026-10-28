@@ -9,6 +9,7 @@ import { CutPage } from './Cut.js';
 import { FootagePage } from './Footage.js';
 import { KnowledgePage } from './Knowledge.js';
 import { BrandPage } from './Brand.js';
+import { GraphicsPage } from './Graphics.js';
 import { StoryboardPage } from './Storyboard.js';
 import { VersionsPage } from './Versions.js';
 import { busyTask } from '../store.js';
@@ -23,6 +24,7 @@ const TAB_LABEL: Record<ProjectTab, string> = {
   cut: 'Cut',
   variants: 'Versions',
   brand: 'Brand',
+  graphics: 'Graphics',
 };
 
 export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
@@ -70,6 +72,8 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
         <VersionsPage id={id} />
       ) : tab === 'brand' ? (
         <BrandPage id={id} />
+      ) : tab === 'graphics' ? (
+        <GraphicsPage id={id} />
       ) : (
         <Placeholder tab={tab} />
       )}

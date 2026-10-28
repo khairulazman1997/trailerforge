@@ -7,6 +7,7 @@ import {
   type TimelineItem,
 } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
+import { AccentsPanel } from '../components/AccentsPanel.js';
 import { ConfirmDialog } from '../components/Dialog.js';
 import {
   F,
@@ -269,7 +270,7 @@ function Timeline({
             </div>
           </div>
         ))}
-        <div className="cut-markers" aria-label="Markers">
+        <div className="cut-markers" role="group" aria-label="Markers">
           {tl.markers
             .filter((m) => m.kind === 'section' || m.kind === 'hit')
             .map((m) => (
@@ -422,6 +423,8 @@ function Inspector({
           </select>
         </label>
       )}
+
+      {!item.id.startsWith('rc_music') && <AccentsPanel id={id} item={item} locked={locked} />}
 
       <div className="row">
         {item.kind === 'clip' &&

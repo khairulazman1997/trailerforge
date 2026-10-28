@@ -1438,3 +1438,77 @@ table.brand-contrast caption {
   display: grid;
   gap: 0.4rem;
 }
+
+/* ---- graphics ---- */
+@font-face {
+  font-family: 'Inter';
+  font-weight: 400;
+  font-display: swap;
+  src: url('../../../assets/fonts/inter/Inter-Regular.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Inter';
+  font-weight: 700;
+  font-display: swap;
+  src: url('../../../assets/fonts/inter/Inter-Bold.otf') format('opentype');
+}
+.gfx-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 18rem) 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 52rem) {
+  .gfx-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.gfx-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.gfx-list button {
+  width: 100%;
+  text-align: left;
+}
+.gfx-list button[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+}
+.gfx-frame {
+  background: linear-gradient(135deg, #3d6a58, #2b4668);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  line-height: 0;
+}
+.gfx-frame svg {
+  width: 100%;
+  height: auto;
+}
+.gfx-fields {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+.gfx-fields label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+.gfx-scrub {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+.gfx-scrub input[type='range'] {
+  flex: 1;
+}
+.accents {
+  border-top: 1px solid var(--border);
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+}
