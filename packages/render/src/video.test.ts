@@ -1,4 +1,5 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import {
   existsSync,
   mkdtempSync,
@@ -9,7 +10,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DRAFT_ENCODE, type SourceMedia } from '@trailerforge/compile';
 import { MediaError } from '@trailerforge/media';
@@ -113,6 +115,35 @@ describe('renderVideo', { timeout: 120_000 }, () => {
     const again = await renderVideo(spec(out), { workRoot });
     expect([again.reused, again.rendered]).toEqual([2, 1]);
     expect(again.sha256).toBe(clean.sha256);
+  });
+
+  it('a render killed mid-way (SIGKILL) resumes to the same bytes as a clean one', async () => {
+    const s = (out: string) => ({ ...spec(out), segmentSeconds: 0.25 });
+    const clean = await renderVideo(s(join(root, 'out', 'clean-k.mp4')), {
+      workRoot: join(root, 'work-k1'),
+    });
+    const out = join(root, 'out', 'killed.mp4');
+    const workRoot = join(root, 'work-k2');
+    const specFile = join(root, 'kill-spec.json');
+    writeFileSync(specFile, JSON.stringify(s(out)));
+    const here = dirname(fileURLToPath(import.meta.url));
+    const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+    const child = spawn(process.execPath, ['--import', tsx, join(here, 'crash-video-child.ts'), specFile, workRoot], { stdio: ['ignore', 'pipe', 'pipe'] }); // prettier-ignore
+    const killed = await new Promise<boolean>((resolve) => {
+      let text = '';
+      child.stdout.on('data', (d: Buffer) => {
+        text += d.toString();
+        if (/segments [1-9]/.test(text)) child.kill('SIGKILL');
+      });
+      child.on('exit', (_code, signal) => resolve(signal === 'SIGKILL'));
+    });
+    expect(killed).toBe(true);
+    expect(existsSync(out)).toBe(false);
+    const resumed = await renderVideo(s(out), { workRoot });
+    expect(resumed.reused).toBeGreaterThanOrEqual(1);
+    expect(resumed.rendered).toBeGreaterThanOrEqual(1);
+    expect(resumed.sha256).toBe(clean.sha256);
+    expect(readFileSync(out).equals(readFileSync(clean.output))).toBe(true);
   });
 
   it('a clean render passes the output Quality Gate', async () => {
