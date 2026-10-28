@@ -124,6 +124,17 @@ class Fake {
     }),
     footage: async () => ({ footage: [], music: [], jobs: { queued: 0, running: 0, failed: [] } }),
     footageMatches: async () => ({ matches: [], recordings: [], usedVision: false }),
+    variants: async () => ({ hasMaster: false, variants: [], missing: [] }),
+    createDefaultVariants: async () => ({ added: [] }),
+    brand: async () => ({
+      brand: null,
+      warnings: [],
+      contrast: [],
+      fonts: { heading: 'Inter Bold (shipped)', body: 'Inter (shipped)' },
+    }),
+    importBrandFile: async () => ({
+      file: { hash: 'a'.repeat(64), ext: 'svg' as const, name: 'logo.svg' },
+    }),
     cutGrid: async () => null,
     media: async () => new Blob([]),
     generateCut: async () => ({

@@ -8,7 +8,9 @@ import { CapturePage } from './Capture.js';
 import { CutPage } from './Cut.js';
 import { FootagePage } from './Footage.js';
 import { KnowledgePage } from './Knowledge.js';
+import { BrandPage } from './Brand.js';
 import { StoryboardPage } from './Storyboard.js';
+import { VersionsPage } from './Versions.js';
 import { busyTask } from '../store.js';
 
 const TAB_LABEL: Record<ProjectTab, string> = {
@@ -19,6 +21,8 @@ const TAB_LABEL: Record<ProjectTab, string> = {
   capture: 'Capture',
   footage: 'Footage',
   cut: 'Cut',
+  variants: 'Versions',
+  brand: 'Brand',
 };
 
 export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
@@ -62,6 +66,10 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
         <FootagePage id={id} />
       ) : tab === 'cut' ? (
         <CutPage id={id} />
+      ) : tab === 'variants' ? (
+        <VersionsPage id={id} />
+      ) : tab === 'brand' ? (
+        <BrandPage id={id} />
       ) : (
         <Placeholder tab={tab} />
       )}

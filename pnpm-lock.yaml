@@ -85,6 +85,9 @@ importers:
 
   apps/ui:
     dependencies:
+      '@trailerforge/cut':
+        specifier: workspace:*
+        version: link:../../packages/cut
       '@trailerforge/pack-game-trailer':
         specifier: workspace:*
         version: link:../../packages/pack-game-trailer

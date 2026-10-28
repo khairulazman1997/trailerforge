@@ -1314,3 +1314,127 @@ progress {
 .captions .caption-row {
   align-items: flex-end;
 }
+
+/* ---- versions and brand ---- */
+.ver-form,
+.ver-settings,
+.brand-colors,
+.brand-scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+}
+.ver-form label,
+.ver-settings label,
+.brand-colors label,
+.brand-scale label,
+.brand-import label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+.ver-chips {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+.ver-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+.ver-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+}
+.ver-head h3 {
+  margin: 0;
+}
+.ver-head button {
+  margin-left: auto;
+}
+table.ver-shots,
+table.brand-contrast {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.ver-shots th,
+table.ver-shots td,
+table.brand-contrast th,
+table.brand-contrast td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+table.brand-contrast caption {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.5rem 0;
+}
+.brand-color {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+.brand-color input[type='color'] {
+  width: 3.5rem;
+  height: 2.2rem;
+  padding: 0;
+}
+.brand-import {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin: 0.5rem 0;
+}
+.brand-font {
+  margin-bottom: 1rem;
+}
+.brand-warnings {
+  padding-left: 1.2rem;
+}
+.focus-editor {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  max-width: 28rem;
+}
+.focus-frame {
+  position: relative;
+  width: 100%;
+  background: var(--border);
+  cursor: crosshair;
+  overflow: hidden;
+  border-radius: 4px;
+}
+.focus-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.focus-crop {
+  position: absolute;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+.focus-dot {
+  position: absolute;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin: -0.4rem 0 0 -0.4rem;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  pointer-events: none;
+}
+.focus-controls {
+  display: grid;
+  gap: 0.4rem;
+}

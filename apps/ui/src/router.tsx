@@ -1,7 +1,15 @@
 import { useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from 'react';
 
 export type ProjectTab =
-  'overview' | 'brief' | 'knowledge' | 'storyboard' | 'capture' | 'footage' | 'cut';
+  | 'overview'
+  | 'brief'
+  | 'knowledge'
+  | 'storyboard'
+  | 'capture'
+  | 'footage'
+  | 'cut'
+  | 'variants'
+  | 'brand';
 
 export type Route =
   | { name: 'home' }
@@ -9,7 +17,16 @@ export type Route =
   | { name: 'project'; id: string; tab: ProjectTab }
   | { name: 'not-found' };
 
-const TABS: ProjectTab[] = ['brief', 'knowledge', 'storyboard', 'capture', 'footage', 'cut'];
+const TABS: ProjectTab[] = [
+  'brief',
+  'knowledge',
+  'storyboard',
+  'capture',
+  'footage',
+  'cut',
+  'variants',
+  'brand',
+];
 
 export function matchRoute(path: string): Route {
   const parts = path.split('/').filter(Boolean);

@@ -11,6 +11,7 @@
     "test:e2e": "vite build && playwright test"
   },
   "dependencies": {
+    "@trailerforge/cut": "workspace:*",
     "@trailerforge/pack-game-trailer": "workspace:*",
     "@trailerforge/schema": "workspace:*",
     "@trailerforge/service": "workspace:*",

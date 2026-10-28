@@ -33,9 +33,23 @@ export interface FootageSnapshot {
   version: number;
 }
 
+export interface VersionsSnapshot {
+  view: Awaited<ReturnType<ServiceClient['variants']>>;
+  version: number;
+}
+
+export interface BrandSnapshot {
+  view: Awaited<ReturnType<ServiceClient['brand']>>;
+  version: number;
+}
+
 export type ClientLike = Pick<
   ServiceClient,
   | 'info'
+  | 'variants'
+  | 'createDefaultVariants'
+  | 'brand'
+  | 'importBrandFile'
   | 'footage'
   | 'cutGrid'
   | 'media'
@@ -124,6 +138,9 @@ export interface AppState {
   captureTips: Record<string, { version: number; groups: CaptureView['tips']['groups'] }>;
   /** Recordings, import progress and match suggestions per project (read from the engine). */
   footage: Record<string, FootageSnapshot>;
+  /** The versions (derived from the master cut) and the brand kit, per project. */
+  versions: Record<string, VersionsSnapshot>;
+  brands: Record<string, BrandSnapshot>;
   /** The beat grid the cut lands on, per project (null: music not chosen or analysed yet). */
   cutGrid: Record<string, { version: number; grid: Awaited<ReturnType<ServiceClient['cutGrid']>> }>;
   /** Latest progress message of a running task, per project (cleared when the task ends). */
@@ -158,6 +175,8 @@ const initial: AppState = {
   briefs: {},
   captureTips: {},
   footage: {},
+  versions: {},
+  brands: {},
   cutGrid: {},
   notices: {},
   decisions: {},
@@ -412,7 +431,11 @@ export class AppStore {
       const { [id]: _tips, ...captureTips } = s.captureTips;
       const { [id]: _notice, ...notices } = s.notices;
       const { [id]: _why, ...decisions } = s.decisions;
+      const { [id]: _versions, ...versions } = s.versions;
+      const { [id]: _brand, ...brands } = s.brands;
       return {
+        versions,
+        brands,
         projects,
         briefs,
         captureTips,
@@ -726,6 +749,59 @@ export class AppStore {
       void url.then((u) => u === null && this.mediaUrls.delete(key));
     }
     return url;
+  }
+
+  // ---- versions and brand ----
+
+  /** Reads the versions derived from the master cut; a quiet failure keeps the old snapshot. */
+  async refreshVersions(projectId: string): Promise<void> {
+    const version = this.state.projects[projectId]?.version;
+    if (version === undefined || !this.client) return;
+    try {
+      const view = await this.client.variants(projectId);
+      this.set((s) => ({ versions: { ...s.versions, [projectId]: { view, version } } }));
+    } catch {
+      // Busy or closed: keep what is shown.
+    }
+  }
+
+  async createDefaultVersions(projectId: string): Promise<number> {
+    const r = await this.run((c) => c.createDefaultVariants(projectId));
+    if (!r) return 0;
+    this.toast(
+      'info',
+      r.added.length
+        ? `Added ${r.added.length} version${r.added.length === 1 ? '' : 's'}. Undo goes back.`
+        : 'Every format already has a version.',
+    );
+    return r.added.length;
+  }
+
+  async refreshBrand(projectId: string): Promise<void> {
+    const version = this.state.projects[projectId]?.version;
+    if (version === undefined || !this.client) return;
+    try {
+      const view = await this.client.brand(projectId);
+      this.set((s) => ({ brands: { ...s.brands, [projectId]: { view, version } } }));
+    } catch {
+      // Busy or closed: keep what is shown.
+    }
+  }
+
+  /** Copies a logo or font (a path on the computer running the engine) into the project. */
+  async importBrandFile(
+    projectId: string,
+    o: { kind: 'logo' | 'font'; path: string; role?: 'heading' | 'body'; bold?: boolean },
+  ): Promise<boolean> {
+    const r = await this.run((c) => c.importBrandFile(projectId, o));
+    if (!r) return false;
+    this.toast(
+      'info',
+      `${o.kind === 'logo' ? 'Logo' : 'Font'} set from ${r.file.name}. Undo goes back.`,
+    );
+    await this.waitForVersion(projectId, (this.state.projects[projectId]?.version ?? 0) + 1);
+    await this.refreshBrand(projectId);
+    return true;
   }
 
   // ---- footage ----
