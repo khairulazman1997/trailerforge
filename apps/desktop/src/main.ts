@@ -49,7 +49,9 @@ const host: DesktopHost = {
   openExternal: (url) => void shell.openExternal(url),
   pickFolder: () => pick(['openDirectory', 'createDirectory']),
   pickFile: () => pick(['openFile']),
-  handle: (channel, fn) => ipcMain.handle(channel, (event) => fn(event.senderFrame?.url ?? '')),
+  showItem: (path) => shell.showItemInFolder(path),
+  handle: (channel, fn) =>
+    ipcMain.handle(channel, (event, arg: unknown) => fn(event.senderFrame?.url ?? '', arg)),
 };
 
 if (!app.requestSingleInstanceLock()) {

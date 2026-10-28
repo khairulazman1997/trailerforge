@@ -55,6 +55,13 @@ export interface QualitySnapshot {
   overrides: string;
 }
 
+/** Which version a render task was started for (this session). */
+export interface RenderRun {
+  projectId: string;
+  kind: 'render-draft' | 'export' | 'handoff';
+  variantId: string | null;
+}
+
 export interface RenderProgressView {
   kind: string;
   phase: string;
@@ -84,6 +91,7 @@ export type ClientLike = Pick<
   | 'effects'
   | 'variants'
   | 'review'
+  | 'exportPresets'
   | 'approveVersion'
   | 'quality'
   | 'draft'
@@ -192,6 +200,10 @@ export interface AppState {
   quality: Record<string, QualitySnapshot>;
   /** Overrides the user has chosen for the next export, by `<project>|<version>` → check id → reason. */
   gateOverrides: Record<string, Record<string, string>>;
+  /** The renders this page started, by task id. */
+  renderRuns: Record<string, RenderRun>;
+  /** The export presets (read once). */
+  presets: Awaited<ReturnType<ServiceClient['exportPresets']>> | null;
   /** Progress of the render running in a project (events from the engine). */
   renderProgress: Record<string, RenderProgressView>;
   /** The beat grid the cut lands on, per project (null: music not chosen or analysed yet). */
@@ -235,6 +247,8 @@ const initial: AppState = {
   review: {},
   quality: {},
   gateOverrides: {},
+  renderRuns: {},
+  presets: null,
   renderProgress: {},
   cutGrid: {},
   notices: {},
@@ -506,6 +520,9 @@ export class AppStore {
       const { [id]: _brand, ...brands } = s.brands;
       const { [id]: _review, ...review } = s.review;
       const { [id]: _assets, ...brandAssets } = s.brandAssets;
+      const renderRuns = Object.fromEntries(
+        Object.entries(s.renderRuns).filter(([, r]) => r.projectId !== id),
+      );
       const { [id]: _progress, ...renderProgress } = s.renderProgress;
       const mine = (k: string) => !k.startsWith(`${id}|`);
       const quality = Object.fromEntries(Object.entries(s.quality).filter(([k]) => mine(k)));
@@ -514,6 +531,7 @@ export class AppStore {
       );
       return {
         review,
+        renderRuns,
         brandAssets,
         renderProgress,
         quality,
@@ -924,9 +942,60 @@ export class AppStore {
     });
   }
 
+  private async startRender(
+    projectId: string,
+    run: Omit<RenderRun, 'projectId'>,
+    req: TaskRequest,
+  ): Promise<TaskView | null> {
+    const t = await this.startTask(projectId, req);
+    if (t) this.set((s) => ({ renderRuns: { ...s.renderRuns, [t.id]: { projectId, ...run } } }));
+    return t;
+  }
+
   async startDraft(projectId: string, variantId: string | null): Promise<boolean> {
-    const t = await this.startTask(projectId, { kind: 'render-draft', options: { variantId } });
+    const t = await this.startRender(
+      projectId,
+      { kind: 'render-draft', variantId },
+      { kind: 'render-draft', options: { variantId } },
+    );
     return t !== null;
+  }
+
+  /** Export a version with the overrides (check id → reason) chosen on the Review tab. */
+  async startExport(projectId: string, variantId: string | null): Promise<boolean> {
+    const chosen = this.state.gateOverrides[`${projectId}|${variantId ?? 'master'}`] ?? {};
+    const overrides = Object.entries(chosen)
+      .filter(([, reason]) => reason.trim())
+      .map(([checkId, reason]) => ({ checkId, reason }));
+    const t = await this.startRender(
+      projectId,
+      { kind: 'export', variantId },
+      { kind: 'export', options: { variantId, ...(overrides.length ? { overrides } : {}) } },
+    );
+    return t !== null;
+  }
+
+  async startHandoff(
+    projectId: string,
+    variantId: string | null,
+    formats: ('fcpxml' | 'otio' | 'edl')[],
+  ): Promise<boolean> {
+    const t = await this.startRender(
+      projectId,
+      { kind: 'handoff', variantId },
+      { kind: 'handoff', options: { variantId, formats } },
+    );
+    return t !== null;
+  }
+
+  /** Reads the export presets once; a quiet failure leaves them unset. */
+  async loadPresets(): Promise<void> {
+    if (this.state.presets || !this.client) return;
+    try {
+      this.set({ presets: await this.client.exportPresets() });
+    } catch {
+      // Try again the next time a screen asks.
+    }
   }
 
   /** Approve a version as it is now. */

@@ -11,7 +11,8 @@ export type ProjectTab =
   | 'variants'
   | 'brand'
   | 'graphics'
-  | 'review';
+  | 'review'
+  | 'export';
 
 export type Route =
   | { name: 'home' }
@@ -30,6 +31,7 @@ const TABS: ProjectTab[] = [
   'brand',
   'graphics',
   'review',
+  'export',
 ];
 
 export function matchRoute(path: string): Route {

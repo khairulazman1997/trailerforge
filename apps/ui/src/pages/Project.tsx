@@ -10,6 +10,7 @@ import { FootagePage } from './Footage.js';
 import { KnowledgePage } from './Knowledge.js';
 import { BrandPage } from './Brand.js';
 import { GraphicsPage } from './Graphics.js';
+import { ExportPage } from './Export.js';
 import { ReviewPage } from './Review.js';
 import { StoryboardPage } from './Storyboard.js';
 import { VersionsPage } from './Versions.js';
@@ -27,6 +28,7 @@ const TAB_LABEL: Record<ProjectTab, string> = {
   brand: 'Brand',
   graphics: 'Graphics',
   review: 'Review',
+  export: 'Export',
 };
 
 export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
@@ -78,6 +80,8 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
         <GraphicsPage id={id} />
       ) : tab === 'review' ? (
         <ReviewPage id={id} />
+      ) : tab === 'export' ? (
+        <ExportPage id={id} />
       ) : (
         <Placeholder tab={tab} />
       )}

@@ -1,4 +1,5 @@
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 import { Engine } from '@trailerforge/engine';
 import { DEFAULT_APP_PORT, startService } from '@trailerforge/service';
 import { openSafeSecretStore, type SafeStorageLike } from './safe-secrets.js';
@@ -28,8 +29,10 @@ export interface DesktopHost {
   openExternal(url: string): void;
   pickFolder(): Promise<string | undefined>;
   pickFile(): Promise<string | undefined>;
+  /** Show a file in the system file manager (never opens or runs it). */
+  showItem(path: string): void;
   /** Register an IPC handler; `senderUrl` is the URL of the frame that called. */
-  handle(channel: string, fn: (senderUrl: string) => Promise<unknown>): void;
+  handle(channel: string, fn: (senderUrl: string, arg?: unknown) => Promise<unknown>): void;
 }
 
 export interface Desktop {
@@ -76,6 +79,14 @@ export async function startDesktop(host: DesktopHost): Promise<Desktop> {
     'tforge:pick-file',
     fromService(() => host.pickFile()),
   );
+  // Reveals an existing file or folder in the file manager; the page only ever passes paths the
+  // service reported (an export, a handoff folder). Nothing is opened or run.
+  host.handle('tforge:show-item', async (senderUrl, arg) => {
+    if (!isServiceUrl(senderUrl, origin)) throw new Error('refused: not the TrailerForge window');
+    if (typeof arg !== 'string' || !isAbsolute(arg) || !existsSync(arg)) return false;
+    host.showItem(arg);
+    return true;
+  });
 
   const win = host.createWindow();
   win.onWillNavigate((url) => {

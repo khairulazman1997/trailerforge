@@ -3,6 +3,8 @@ export interface Desktop {
   pickFolder?: () => Promise<string | null>;
   pickFile?: () => Promise<string | null>;
   pathForFile?: (file: File) => string;
+  /** Show a file or folder in the file manager; false when it is not there. */
+  showItem?: (path: string) => Promise<boolean>;
 }
 
 export const desktop = (): Desktop | undefined =>

@@ -142,6 +142,7 @@ class Fake {
     }),
     draft: async () => new Blob([]),
     brandFile: async () => new Blob([]),
+    exportPresets: async () => ({ presets: [], hardwareDraftEncoder: null }),
     createDefaultVariants: async () => ({ added: [] }),
     brand: async () => ({
       brand: null,
