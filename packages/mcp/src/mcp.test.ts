@@ -134,6 +134,15 @@ describe('tool surface', () => {
         'capture_tips',
         'capture_export',
         'game-trailer_capture_set-status',
+        'variants_status',
+        'variants_create_defaults',
+        'brand_status',
+        'effects_list',
+        'template_preview',
+        'core_variants_override',
+        'core_brand_set-colors',
+        'core_timeline_set-effects',
+        'core_storyboard_add-sfx-cue',
       ]),
     );
     // Bulk-result commands are reachable only through the action tools.
@@ -141,8 +150,11 @@ describe('tool surface', () => {
     expect(names).not.toContain('core_storyboard_set');
     expect(names).not.toContain('core_storyboard_replace-section');
     expect(names).not.toContain('core_knowledge_apply-scan');
+    // Which logo and font files a project uses is the user's choice, like importing footage.
+    expect(names).not.toContain('core_brand_set-logo');
+    expect(names).not.toContain('core_brand_set-font');
     // Every registered command is exposed except those, and each schema is an object.
-    expect(engine.commands.types().length - 3).toBe(
+    expect(engine.commands.types().length - 5).toBe(
       names.filter((n) => n.startsWith('core_') || n.startsWith('game-trailer_')).length,
     );
     for (const t of tools) {

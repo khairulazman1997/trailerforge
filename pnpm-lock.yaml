@@ -243,6 +243,9 @@ importers:
       '@trailerforge/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@trailerforge/render':
+        specifier: workspace:*
+        version: link:../render
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema

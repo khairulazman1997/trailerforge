@@ -5,6 +5,7 @@ import { createMcpServer, serveStdio } from '@trailerforge/mcp';
 import { MediaError, probe } from '@trailerforge/media';
 import { DEFAULT_APP_PORT, startService } from '@trailerforge/service';
 import { captureCommand } from './capture.js';
+import { brandCommand, effectsCommand, sfxCommand, variantsCommand } from './graphics.js';
 import {
   analyzeCommand,
   cutCommand,
@@ -43,6 +44,19 @@ Usage:
                                                           Suggest which shot each recording is; --accept attaches the confident ones (one undo step)
   tforge rank-takes <dir> [--overwrite-chosen]            Ask the AI which take to use (text only, never footage)
   tforge cut <dir> [--lead 0|1|2]                         Build the rough cut on the music (keeps locked tracks and hand edits)
+  tforge variants list|defaults <dir>                     The versions (aspect ratio, length) derived from the master cut, and what each dropped
+  tforge variants add <dir> --target <formatId> [--length <s>] [--name <text>] [--reframe crop|fill]
+  tforge variants set <dir> <id> [--target <formatId>] [--length <s|none>] [--name <text>] [--reframe crop|fill]
+  tforge variants override <dir> <id> --slot <slotId> [--drop|--keep] [--take <takeId>] [--focus x,y] [--length <s>] | --clear
+  tforge variants remove <dir> <id>
+  tforge brand show <dir>                                 The brand kit and its warnings (contrast, missing files)
+  tforge brand set <dir> --set primary=#ff8800 --set title=0.12
+                                                          Colours (background, text, primary, accent) and text sizes (title, heading, body, caption)
+  tforge brand logo|font <dir> <file> [--role heading|body] [--family <name>] [--bold]
+                                                          Copy a logo (SVG/PNG) or font (TTF/OTF) into the project
+  tforge brand reset <dir>                                Forget the brand kit
+  tforge effects                                          Installed transitions, effects, graphics templates and sounds
+  tforge sfx show | tforge sfx folder <path|none>         Your folder of licensed or CC0 sound effects (nothing is uploaded)
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
   tforge serve [--ui <dist>] [--port <n>] [--allow-origin <url>]...
                                                           Run the local engine service (and serve the built UI)
@@ -112,6 +126,18 @@ export async function main(
         min: { type: 'string' },
         lead: { type: 'string' },
         'overwrite-chosen': { type: 'boolean', default: false },
+        target: { type: 'string' },
+        length: { type: 'string' },
+        reframe: { type: 'string' },
+        slot: { type: 'string' },
+        drop: { type: 'boolean', default: false },
+        keep: { type: 'boolean', default: false },
+        take: { type: 'string' },
+        focus: { type: 'string' },
+        clear: { type: 'boolean', default: false },
+        role: { type: 'string' },
+        family: { type: 'string' },
+        bold: { type: 'boolean', default: false },
         todo: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
@@ -122,7 +148,15 @@ export async function main(
   }
   const { values: o, positionals } = parsed;
   // `brief check`, `knowledge scan`, `storyboard generate` and `capture <sub>` are two-word commands.
-  const twoWord = ['brief', 'knowledge', 'storyboard', 'capture'].includes(positionals[0] ?? '');
+  const twoWord = [
+    'brief',
+    'knowledge',
+    'storyboard',
+    'capture',
+    'variants',
+    'brand',
+    'sfx',
+  ].includes(positionals[0] ?? '');
   const cmd = twoWord ? `${positionals[0]} ${positionals[1] ?? ''}`.trim() : positionals[0];
   const arg = positionals[twoWord ? 2 : 1];
   if (o.help || !cmd) {
@@ -202,6 +236,19 @@ export async function main(
       min: o.min,
       lead: o.lead,
       overwriteChosen: o['overwrite-chosen'],
+      target: o.target,
+      length: o.length,
+      name: o.name,
+      reframe: o.reframe === 'crop' || o.reframe === 'fill' ? o.reframe : undefined,
+      slot: o.slot,
+      drop: o.drop,
+      keep: o.keep,
+      take: o.take,
+      focus: o.focus,
+      clear: o.clear,
+      role: o.role === 'heading' || o.role === 'body' ? o.role : undefined,
+      family: o.family,
+      bold: o.bold,
     },
   };
   try {
@@ -270,6 +317,28 @@ export async function main(
         return need(arg, '<dir>') && need(positionals[2], '<file or folder>')
           ? await ingestCommand(ctx, arg, positionals.slice(2))
           : 2;
+      case 'variants list':
+      case 'variants defaults':
+      case 'variants add':
+      case 'variants set':
+      case 'variants override':
+      case 'variants remove':
+        return need(arg, '<dir>')
+          ? await variantsCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
+          : 2;
+      case 'brand show':
+      case 'brand set':
+      case 'brand logo':
+      case 'brand font':
+      case 'brand reset':
+        return need(arg, '<dir>')
+          ? await brandCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
+          : 2;
+      case 'effects':
+        return await effectsCommand(ctx);
+      case 'sfx show':
+      case 'sfx folder':
+        return await sfxCommand(ctx, cmd.split(' ')[1]!, arg);
       case 'footage':
         return need(arg, '<dir>') ? await footageCommand(ctx, arg) : 2;
       case 'analyze':

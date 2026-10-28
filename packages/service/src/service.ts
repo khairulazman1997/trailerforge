@@ -18,6 +18,15 @@ import {
   briefForm,
   briefStatus,
   analyzeOp,
+  brandImportOp,
+  brandViewOp,
+  createDefaultVariantsOp,
+  effectsViewOp,
+  setSfxFolderOp,
+  sfxViewOp,
+  templatePreviewOp,
+  templatesViewOp,
+  variantsViewOp,
   captureExportOp,
   captureRenderOp,
   captureStatusOp,
@@ -711,6 +720,73 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         });
         await pipeline(createReadStream(f.path), res);
         return STREAMING;
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/variants$/,
+      async ({ params }) => variantsViewOp(engine, storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/variants\/defaults$/,
+      async ({ params }) => {
+        const store = storeById(params.id!);
+        notBusy(store);
+        return createDefaultVariantsOp(store);
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/brand$/,
+      async ({ params }) => brandViewOp(storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/brand\/import$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        const o = z
+          .strictObject({
+            kind: z.enum(['logo', 'font']),
+            path: z.string().min(1),
+            role: z.enum(['heading', 'body']).optional(),
+            family: z.string().min(1).max(100).optional(),
+            bold: z.boolean().optional(),
+          })
+          .parse(await body());
+        notBusy(store);
+        return brandImportOp(store, o);
+      },
+    ],
+    ['GET', /^\/v1\/templates$/, async () => templatesViewOp(engine)],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/templates\/preview$/,
+      async ({ params, body }) => {
+        const o = z
+          .strictObject({
+            templateId: z.string().min(1),
+            params: z.record(z.string(), z.unknown()).optional(),
+            at: z.number().min(0).max(120).optional(),
+            seconds: z.number().positive().max(120).optional(),
+            size: z
+              .strictObject({ width: z.int().min(16).max(7680), height: z.int().min(16).max(7680) })
+              .optional(),
+            png: z.boolean().optional(),
+          })
+          .parse(await body());
+        return templatePreviewOp(engine, storeById(params.id!), o);
+      },
+    ],
+    ['GET', /^\/v1\/effects$/, async () => effectsViewOp(engine)],
+    ['GET', /^\/v1\/sfx$/, async () => sfxViewOp(engine)],
+    [
+      'POST',
+      /^\/v1\/sfx\/folder$/,
+      async ({ body }) => {
+        const o = z.strictObject({ folder: z.string().min(1).nullable() }).parse(await body());
+        return setSfxFolderOp(engine, o.folder);
       },
     ],
     [

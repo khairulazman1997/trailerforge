@@ -3,6 +3,25 @@
  * not the intent). Commands not listed here still get a generic description.
  */
 export const COMMAND_DESCRIPTIONS: Record<string, string> = {
+  'core/variants.add':
+    'Add a version of the trailer for a format target (aspect ratio, frame rate), optionally cut down to targetDuration seconds. It is derived from the master cut on demand; nothing is copied.',
+  'core/variants.remove': 'Remove a version.',
+  'core/variants.set':
+    "Change a version's name, format target, length (null = the master's) or reframing (crop follows the subject, fill shows every shot whole).",
+  'core/variants.override':
+    'In one version: drop (excluded true) or keep (false) a shot, retime it (duration), use another take (takeId) or set where the crop looks (cropCenter). null clears one setting. Overrides survive a rebuild of the master cut.',
+  'core/variants.clear-override':
+    "Forget one shot's overrides in a version, or all of them when no slot is given.",
+  'core/brand.set-colors':
+    'Set brand colours (background, text, primary, accent as #rrggbb) for trailer graphics.',
+  'core/brand.set-scale':
+    "Set text sizes as a share of the frame's shorter side (title, heading, body, caption).",
+  'core/brand.reset': 'Forget the whole brand kit.',
+  'core/timeline.set-effects':
+    'Set the finishing effects on a picture item by hand (effect ids from effects_list). A rebuild of the cut keeps them.',
+  'core/storyboard.add-sfx-cue':
+    'Put a sound effect (whoosh, riser, impact, sub-drop) on a shot or card: before it, at its start or at its end.',
+  'core/storyboard.remove-sfx-cue': 'Take a sound effect off its slot.',
   'game-trailer/capture.apply-tips':
     'Store generated capture tips for groups. Groups the user edited are kept unless overwriteEdited is true.',
   'game-trailer/capture.edit-tips':
@@ -74,6 +93,9 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
  * results that the action tools produce (scan results, a whole generated storyboard).
  */
 export const HIDDEN_COMMANDS = new Set([
+  // Which logo or font files go into a project is the user's choice (screens, `tforge brand`).
+  'core/brand.set-logo',
+  'core/brand.set-font',
   'core/knowledge.apply-scan',
   'core/storyboard.set',
   'core/storyboard.replace-section',

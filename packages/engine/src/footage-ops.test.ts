@@ -146,6 +146,14 @@ describe('footage ops, end to end', () => {
     });
     expect(items().find((i) => i.slotId === 'shot_boss')).toMatchObject({ kind: 'placeholder' });
     expect(cut.placeholders).toBe(1);
+    // The storyboard's whoosh cue is placed: the generated sound joined the library and the
+    // project (as an sfx asset) and sits on its own audio track, with the music dipped under it.
+    const sfx = tl().tracks.find((t) => t.id === 'trk_sfx')!;
+    expect(sfx.items.map((i) => i.id)).toEqual(['sfx_sfx_whoosh']);
+    const whoosh = engine.library.list().find((a) => a.originalName.startsWith('sfx-whoosh'))!;
+    expect(sfx.items[0]).toMatchObject({ kind: 'clip', assetId: whoosh.id });
+    expect(store.state.assets.find((a) => a.assetId === whoosh.id)?.role).toBe('sfx');
+    expect(cut.warnings.some((w) => w.includes('not placed'))).toBe(false);
 
     // a hand trim survives a rebuild; one undo takes the rebuild away again
     store.dispatch('core/timeline.trim', {

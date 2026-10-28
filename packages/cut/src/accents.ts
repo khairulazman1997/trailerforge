@@ -68,7 +68,7 @@ export function applyAccents(
   sb: Pick<Storyboard, 'sections' | 'music'>,
   decide: Decide,
   opts: { filters?: FilterRegistry; sound?: SoundSetup } = {},
-): { timeline: Timeline; warnings: string[] } {
+): { timeline: Timeline; warnings: string[]; soundOptions: string[] } {
   const filters = opts.filters ?? builtinFilters();
   const warnings: string[] = [];
   const rate = timeline.frameRate;
@@ -173,6 +173,7 @@ export function applyAccents(
   // Sound cues.
   const cues = sb.music.sfxCues.filter((c) => c.kind !== 'custom').length;
   let next: Timeline = { ...timeline, tracks };
+  let soundOptions: string[] = [];
   if (opts.sound) {
     const plan = planSfx({
       storyboard: sb,
@@ -181,6 +182,7 @@ export function applyAccents(
       ...(opts.sound.musicPeakDb !== undefined ? { musicPeakDb: opts.sound.musicPeakDb } : {}),
     });
     warnings.push(...plan.warnings);
+    soundOptions = [...new Set(plan.placements.map((p) => p.option.id))].sort();
     const { tracks: sfx, missing } = sfxTracks(plan, opts.sound.assetIds);
     for (const m of missing) warnings.push(`sound ${m} is not in the library yet; left out`);
     for (const p of plan.placements)
@@ -199,7 +201,7 @@ export function applyAccents(
       `${cues} sound cue${cues === 1 ? ' is' : 's are'} not placed: no sound effects are set up yet`,
     );
   }
-  return { timeline: next, warnings };
+  return { timeline: next, warnings, soundOptions };
 }
 
 /** Lower the music under the sounds (two-frame ramps), keeping its fade-out at the end. */

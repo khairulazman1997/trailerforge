@@ -9,3 +9,4 @@ export * from './footage-ops.js';
 export * from './claude-code-ops.js';
 export * from './vision-ops.js';
 export * from './watched-folders.js';
+export * from './graphics-ops.js';

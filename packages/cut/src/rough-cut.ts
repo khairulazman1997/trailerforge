@@ -70,6 +70,8 @@ export interface RoughCut {
   timeline: Timeline;
   decisions: DecisionRecord[];
   warnings: string[];
+  /** Sound option ids the cut's sound plan used (when a sound setup was given). */
+  soundOptions: string[];
 }
 
 export const ROUGH_CUT_STEP = 'core/rough-cut';
@@ -536,6 +538,7 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
     timeline: Timeline.parse(accented.timeline),
     decisions,
     warnings: [...warnings, ...captioned.warnings, ...accented.warnings],
+    soundOptions: accented.soundOptions,
   };
 }
 

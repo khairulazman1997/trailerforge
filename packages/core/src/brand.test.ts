@@ -92,6 +92,8 @@ describe('brand files', () => {
     expect(svgProblems('<svg><image href="https://x.test/a.png"/></svg>')).toEqual([
       'refers to a file on the internet',
     ]);
+    expect(svgProblems('<svg><script/></svg>')).toEqual(['contains a script']); // self-closing too
+    expect(svgProblems('<svg><script href="x.js"/></svg>')).toEqual(['contains a script']);
     expect(svgProblems(SVG)).toEqual([]);
   });
 

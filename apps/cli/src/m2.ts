@@ -37,6 +37,20 @@ export interface Flags {
   min?: string | undefined;
   lead?: string | undefined;
   overwriteChosen: boolean;
+  /** Versions and brand commands. */
+  target?: string | undefined;
+  length?: string | undefined;
+  name?: string | undefined;
+  reframe?: 'crop' | 'fill' | undefined;
+  slot?: string | undefined;
+  drop: boolean;
+  keep: boolean;
+  take?: string | undefined;
+  focus?: string | undefined;
+  clear: boolean;
+  role?: 'heading' | 'body' | undefined;
+  family?: string | undefined;
+  bold: boolean;
 }
 
 export interface CmdCtx {

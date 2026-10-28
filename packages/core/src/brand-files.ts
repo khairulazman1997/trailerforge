@@ -45,9 +45,9 @@ export function sniffBrandFile(bytes: Uint8Array): BrandFile['ext'] | null {
 /** Reasons an SVG cannot be a logo: it could run code or fetch from the network. */
 export function svgProblems(text: string): string[] {
   const out: string[] = [];
-  if (/<script[\s>]/i.test(text)) out.push('contains a script');
+  if (/<script[\s>/]/i.test(text)) out.push('contains a script');
   if (/\son[a-z]+\s*=/i.test(text)) out.push('contains an event handler');
-  if (/<foreignObject[\s>]/i.test(text)) out.push('contains foreign content');
+  if (/<foreignObject[\s>/]/i.test(text)) out.push('contains foreign content');
   if (
     /(?:href|src)\s*=\s*["']\s*(?:https?:)?\/\//i.test(text) ||
     /url\(\s*["']?\s*(?:https?:)?\/\//i.test(text)

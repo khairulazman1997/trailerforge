@@ -1210,3 +1210,84 @@ describe('footage', () => {
     await expect(client.importFootage(ID, [])).rejects.toMatchObject({ status: 400 });
   }, 60_000);
 });
+
+describe('versions, brand, templates, effects and sounds', () => {
+  const ID = 'proj_gfx';
+  beforeAll(async () => {
+    await engine.createProject(join(root, 'Gfx.tforge'), { ...sampleProject(), id: ID } as never);
+  });
+
+  it('needs the token like everything else', async () => {
+    for (const path of [
+      `/v1/projects/${ID}/variants`,
+      `/v1/projects/${ID}/brand`,
+      '/v1/templates',
+      '/v1/effects',
+      '/v1/sfx',
+    ])
+      expect((await raw({ path })).status).toBe(401);
+    for (const path of [
+      `/v1/projects/${ID}/variants/defaults`,
+      `/v1/projects/${ID}/brand/import`,
+      `/v1/projects/${ID}/templates/preview`,
+      '/v1/sfx/folder',
+    ])
+      expect((await raw({ path, method: 'POST', body: '{}' })).status).toBe(401);
+  });
+
+  it('lists and creates versions, and reads the brand kit', async () => {
+    const v = await client.variants(ID);
+    expect(v.variants.map((x) => x.id)).toEqual(['var_tt']);
+    expect(v.missing).toHaveLength(1);
+    expect((await client.createDefaultVariants(ID)).added).toHaveLength(1);
+    expect((await client.variants(ID)).missing).toEqual([]);
+    expect(await client.brand(ID)).toMatchObject({ brand: null, warnings: [] });
+  });
+
+  it('imports a brand logo by path and refuses a bad one', async () => {
+    const logo = join(root, 'gfx-logo.svg');
+    await writeFile(
+      logo,
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><rect width="2" height="2"/></svg>',
+    );
+    const r = await client.importBrandFile(ID, { kind: 'logo', path: logo });
+    expect(r.file.ext).toBe('svg');
+    expect((await client.brand(ID)).brand?.logo?.name).toBe('gfx-logo.svg');
+    const bad = join(root, 'gfx-bad.svg');
+    await writeFile(bad, '<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>');
+    await expect(client.importBrandFile(ID, { kind: 'logo', path: bad })).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(client.importBrandFile(ID, { kind: 'logo', path: '' })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it('lists templates, previews one, and lists effects and sounds', async () => {
+    const t = await client.graphicTemplates();
+    expect(t.map((x) => x.id)).toContain('core/end-slate');
+    const p = await client.previewTemplate(ID, {
+      templateId: 'core/cta-card',
+      params: { text: 'Wishlist now', detail: 'on Steam' },
+    });
+    expect(p.svg).toContain('>Wishlist now</tspan>');
+    await expect(client.previewTemplate(ID, { templateId: 'core/nope' })).rejects.toMatchObject({
+      status: 404,
+    });
+    const e = await client.effects();
+    expect(e.transitions.length).toBeGreaterThan(5);
+    expect(e.sounds.generated).toContain('impact');
+  });
+
+  it('sets and clears the sound effects folder', async () => {
+    const dir = join(root, 'gfx-sfx');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'boom-impact.wav'), 'x');
+    expect((await client.setSfxFolder(dir)).files).toEqual([
+      { name: 'boom-impact.wav', kind: 'impact' },
+    ]);
+    expect((await client.sfx()).folder).toBe(dir);
+    await expect(client.setSfxFolder(join(root, 'nope'))).rejects.toMatchObject({ status: 400 });
+    expect((await client.setSfxFolder(null)).folder).toBeNull();
+  });
+});

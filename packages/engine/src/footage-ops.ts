@@ -16,6 +16,7 @@ import {
   mergeRoughCut,
   placeCaptions,
   resolveMusicGrid,
+  type SoundSetup,
   type TakeSource,
 } from '@trailerforge/cut';
 import { assetCachePaths, mediaWarnings, type MediaWarning } from '@trailerforge/ingest';
@@ -35,6 +36,7 @@ import {
 } from '@trailerforge/schema';
 import type { Engine } from './engine.js';
 import { OpError } from './ops.js';
+import { attachSounds, soundCatalog } from './graphics-ops.js';
 import { readyVisionModel, visionScoresFor } from './vision-ops.js';
 
 /**
@@ -316,7 +318,10 @@ export async function matchAcceptOp(
 
 // ---- rough cut -------------------------------------------------------------------------------
 
-async function takeSources(engine: Engine, store: ProjectStore): Promise<Map<string, TakeSource>> {
+export async function takeSources(
+  engine: Engine,
+  store: ProjectStore,
+): Promise<Map<string, TakeSource>> {
   const out = new Map<string, TakeSource>();
   for (const [assetId] of attachedAssets(store.state)) {
     const a = engine.library.get(assetId);
@@ -366,18 +371,29 @@ export async function generateCutOp(
   const grid = resolveMusicGrid(music, sb.music.grid ?? {});
   const sources = await takeSources(engine, store);
   const target = store.state.formatTargets[0];
-  const built = buildRoughCut({
-    storyboard: sb,
-    grid,
-    sources,
-    timeline: {
-      id: ROUGH_CUT_TIMELINE_ID,
-      frameRate: target?.frameRate ?? { num: 30, den: 1 },
-      resolution: target?.resolution ?? { width: 1920, height: 1080 },
-    },
-    now: new Date(),
-    ...(opts.leadFrames ? { options: { leadFrames: opts.leadFrames } } : {}),
-  });
+  const run = (sound?: SoundSetup) =>
+    buildRoughCut({
+      storyboard: sb,
+      grid,
+      sources,
+      timeline: {
+        id: ROUGH_CUT_TIMELINE_ID,
+        frameRate: target?.frameRate ?? { num: 30, den: 1 },
+        resolution: target?.resolution ?? { width: 1920, height: 1080 },
+      },
+      now: new Date(),
+      options: {
+        ...(opts.leadFrames ? { leadFrames: opts.leadFrames } : {}),
+        ...(sound ? { sound } : {}),
+      },
+    });
+  // Sounds: the first pass says which sound files the cut uses; those join the library and the
+  // project, then the second pass places them. Cuts without sounds skip the second pass.
+  const catalog = await soundCatalog(engine);
+  const first = run({ catalog: catalog.catalog, assetIds: new Map() });
+  const assetIds = await attachSounds(engine, store, catalog.files, first.soundOptions);
+  const built = first.soundOptions.length ? run({ catalog: catalog.catalog, assetIds }) : first;
+  built.warnings.push(...catalog.warnings);
   const previous = store.state.timelines.find((t) => t.id === ROUGH_CUT_TIMELINE_ID);
   const merged = mergeRoughCut(previous, built.timeline, sources);
   // Captions follow their shot to wherever the merge put it.

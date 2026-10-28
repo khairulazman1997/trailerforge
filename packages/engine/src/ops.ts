@@ -361,12 +361,16 @@ export async function generateStoryboardOp(
 
   let generated;
   try {
-    generated = await generateStoryboard({ llm: engine.llm }, store.state, {
-      template,
-      targetDuration: duration,
-      ...(opts.signal ? { signal: opts.signal } : {}),
-      ...(opts.discardTakes ? { discardTakes: true } : {}),
-    });
+    generated = await generateStoryboard(
+      { llm: engine.llm, filters: engine.filters() },
+      store.state,
+      {
+        template,
+        targetDuration: duration,
+        ...(opts.signal ? { signal: opts.signal } : {}),
+        ...(opts.discardTakes ? { discardTakes: true } : {}),
+      },
+    );
   } catch (err) {
     if (err instanceof TakesWouldBeLostError) {
       throw new OpError('takes-attached', err.message, { shots: err.shots });
@@ -420,12 +424,16 @@ export async function regenerateSectionOp(
   if (!store.state.storyboard) {
     throw new OpError('not-found', 'this project has no storyboard yet; generate one first');
   }
-  const { payload, decisions } = await regenerateSection({ llm: engine.llm }, store.state, {
-    sectionId: opts.sectionId,
-    ...(opts.instruction ? { instruction: opts.instruction } : {}),
-    ...(opts.keepEdited !== undefined ? { keepEdited: opts.keepEdited } : {}),
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  });
+  const { payload, decisions } = await regenerateSection(
+    { llm: engine.llm, filters: engine.filters() },
+    store.state,
+    {
+      sectionId: opts.sectionId,
+      ...(opts.instruction ? { instruction: opts.instruction } : {}),
+      ...(opts.keepEdited !== undefined ? { keepEdited: opts.keepEdited } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    },
+  );
   opts.signal?.throwIfAborted();
   store.dispatch('core/storyboard.replace-section', payload);
   await appendDecisions(store.paths.decisions, decisions);

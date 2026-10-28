@@ -31,7 +31,16 @@ import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
 import type { CaptureStatus, CaptureView, ExportOutcome, RenderedPack } from '@trailerforge/engine';
 import type {
   analyzeOp,
+  brandImportOp,
+  brandViewOp,
+  createDefaultVariantsOp,
   cutGridOp,
+  effectsViewOp,
+  setSfxFolderOp,
+  sfxViewOp,
+  templatePreviewOp,
+  templatesViewOp,
+  variantsViewOp,
   footageStatusOp,
   generateCutOp,
   importFootageOp,
@@ -281,6 +290,72 @@ export class ServiceClient {
       'GET',
       `/v1/projects/${encodeURIComponent(id)}/capture?include=${include}`,
     );
+  }
+  variants(id: string) {
+    return this.request<Result<typeof variantsViewOp>>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/variants`,
+    );
+  }
+  /** One version per format target that has none, at the master's length. */
+  createDefaultVariants(id: string) {
+    return this.request<Result<typeof createDefaultVariantsOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/variants/defaults`,
+      {},
+    );
+  }
+  brand(id: string) {
+    return this.request<Result<typeof brandViewOp>>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/brand`,
+    );
+  }
+  /** The path is on the machine running the service (the desktop app's file picker gives it). */
+  importBrandFile(
+    id: string,
+    o: {
+      kind: 'logo' | 'font';
+      path: string;
+      role?: 'heading' | 'body';
+      family?: string;
+      bold?: boolean;
+    },
+  ) {
+    return this.request<Result<typeof brandImportOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/brand/import`,
+      o,
+    );
+  }
+  graphicTemplates() {
+    return this.request<Result<typeof templatesViewOp>>('GET', '/v1/templates');
+  }
+  previewTemplate(
+    id: string,
+    o: {
+      templateId: string;
+      params?: Record<string, unknown>;
+      at?: number;
+      seconds?: number;
+      size?: { width: number; height: number };
+      png?: boolean;
+    },
+  ) {
+    return this.request<Result<typeof templatePreviewOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/templates/preview`,
+      o,
+    );
+  }
+  effects() {
+    return this.request<Result<typeof effectsViewOp>>('GET', '/v1/effects');
+  }
+  sfx() {
+    return this.request<Result<typeof sfxViewOp>>('GET', '/v1/sfx');
+  }
+  setSfxFolder(folder: string | null) {
+    return this.request<Result<typeof setSfxFolderOp>>('POST', '/v1/sfx/folder', { folder });
   }
   footage(id: string) {
     return this.request<Result<typeof footageStatusOp>>(

@@ -31,6 +31,7 @@ import {
 import { PluginHost, type Plugin, type PluginStatus } from '@trailerforge/plugin-api';
 import { PROJECT_SCHEMA_VERSION, type ProjectInput } from '@trailerforge/schema';
 import { gameTrailerPack } from '@trailerforge/pack-game-trailer';
+import { FilterRegistry } from '@trailerforge/effects';
 import { corePlugin } from './core-plugin.js';
 import { HandoffHub } from './handoff.js';
 import { openFileSecretStore, type SecretStore } from './secrets.js';
@@ -209,6 +210,14 @@ export class Engine {
         ...cfg.fallbacks,
       ]),
     ];
+  }
+
+  /** The installed transitions and effects (built in and from plugins), for generation and pickers. */
+  filters(): FilterRegistry {
+    const reg = new FilterRegistry();
+    for (const d of this.plugins.registries.transitions.list()) reg.register(d as never);
+    for (const d of this.plugins.registries.effects.list()) reg.register(d as never);
+    return reg;
   }
 
   async createProject(

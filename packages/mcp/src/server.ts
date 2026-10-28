@@ -16,6 +16,12 @@ import {
   captureTipsOp,
   captureViewOp,
   footageStatusOp,
+  brandViewOp,
+  createDefaultVariantsOp,
+  effectsViewOp,
+  templatePreviewOp,
+  templatesViewOp,
+  variantsViewOp,
   generateCutOp,
   matchAcceptOp,
   matchSuggestOp,
@@ -486,6 +492,97 @@ export function createMcpServer(opts: McpServerOptions): Server {
     async run(args) {
       const lead = typeof args.leadFrames === 'number' ? args.leadFrames : undefined;
       return generateCutOp(engine, await project(args), lead ? { leadFrames: lead } : {});
+    },
+  });
+
+  // ---------------------------------------------------------------- versions, brand, effects
+  add({
+    mutates: false,
+    tool: {
+      name: 'variants_status',
+      description:
+        "The versions of the trailer (aspect ratio, length) derived from the master cut: for each, its length against its target, which shots were kept, shortened or dropped and why, how each shot is reframed, and any warnings. Formats without a version are listed under 'missing'. Edit with the core_variants_* tools.",
+      inputSchema: object({}),
+    },
+    async run(args) {
+      return variantsViewOp(engine, await project(args));
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'variants_create_defaults',
+      description:
+        "Add one version per format target that has none, at the master's length. One undo step per version.",
+      inputSchema: object({}),
+    },
+    async run(args) {
+      return createDefaultVariantsOp(await project(args));
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'brand_status',
+      description:
+        'The brand kit (colours, logo, fonts, text sizes) with its warnings: low contrast, missing files, fallbacks in use. Set colours and sizes with core_brand_*; importing logo and font files is not offered here (the user does it in the app or with `tforge brand`).',
+      inputSchema: object({}),
+    },
+    async run(args) {
+      return brandViewOp(await project(args));
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'effects_list',
+      description:
+        'Everything installed that a storyboard or cut may use: transitions and finishing effects (id, name, parameters as JSON Schema, whether it flashes), graphics templates for cards and captions, and the sound effects (generated kinds plus the files in the user folder). Use only these ids.',
+      inputSchema: object({}),
+    },
+    async run() {
+      return {
+        ...(await effectsViewOp(engine)),
+        templates: templatesViewOp(engine),
+      };
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'template_preview',
+      description:
+        "One frame of a graphics template with this project's brand kit, as SVG, with warnings (text outside the safe area, shrunk to fit, too short to read, missing brand files).",
+      inputSchema: object(
+        {
+          templateId: { type: 'string', description: 'For example core/title-card.' },
+          params: {
+            type: 'object',
+            description: 'The template parameters; text is the main words.',
+          },
+          at: { type: 'number', description: 'Seconds into the item (default: the middle).' },
+          seconds: {
+            type: 'number',
+            description: 'How long the item is on screen (default: the template length).',
+          },
+        },
+        ['templateId'],
+      ),
+    },
+    async run(args) {
+      const r = await templatePreviewOp(engine, await project(args), {
+        templateId: String(args.templateId),
+        ...(args.params && typeof args.params === 'object'
+          ? { params: args.params as Record<string, unknown> }
+          : {}),
+        ...(typeof args.at === 'number' ? { at: args.at } : {}),
+        ...(typeof args.seconds === 'number' ? { seconds: args.seconds } : {}),
+      });
+      return r;
     },
   });
 
