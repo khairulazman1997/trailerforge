@@ -3,6 +3,7 @@ export * from './time.js';
 export * from './format.js';
 export * from './media.js';
 export * from './brief.js';
+export * from './brand.js';
 export * from './storyboard.js';
 export * from './timeline.js';
 export * from './decision.js';

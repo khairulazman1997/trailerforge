@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Brand } from './brand.js';
 import { Brief } from './brief.js';
 import { Extensions, Id, IsoDate, IsoDateTime, PluginRef } from './common.js';
 import { FormatTarget } from './format.js';
@@ -40,6 +41,8 @@ export const Project = z.strictObject({
   status: ProjectStatus.default('idea'),
 
   brief: Brief,
+  /** Colours, logo, fonts and type scale for trailer graphics; null until set. */
+  brand: Brand.nullable().default(null),
   formatTargets: z.array(FormatTarget).default([]),
   storyboard: Storyboard.nullable().default(null),
   timelines: z.array(Timeline).default([]),

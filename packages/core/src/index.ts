@@ -1,4 +1,6 @@
 export * from './asset-commands.js';
+export * from './brand-commands.js';
+export * from './brand-files.js';
 export * from './commands.js';
 export * from './events.js';
 export * from './project-commands.js';
