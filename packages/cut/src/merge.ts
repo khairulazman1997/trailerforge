@@ -1,4 +1,4 @@
-import { Timeline, type TimelineItem } from '@trailerforge/schema';
+import { Timeline, type TimelineItem, type Transition } from '@trailerforge/schema';
 import type { TakeSource } from './rough-cut.js';
 
 /**
@@ -127,5 +127,21 @@ export function mergeRoughCut(
   // Locked tracks the new cut does not produce are kept too.
   for (const id of locked) if (!tracks.some((t) => t.id === id)) tracks.push(prevTracks.get(id)!);
 
-  return { timeline: Timeline.parse({ ...generated, tracks }), kept, warnings };
+  // Cross-track transitions (a shot into or out of a card) also need their items to still meet.
+  const all = new Map(tracks.flatMap((t) => t.items.map((i) => [i.id, i] as const)));
+  const core = (generated.extensions.core ?? {}) as { crossTransitions?: Transition[] };
+  const extensions = core.crossTransitions
+    ? {
+        ...generated.extensions,
+        core: {
+          ...core,
+          crossTransitions: core.crossTransitions.filter((x) => {
+            const a = all.get(x.fromItemId);
+            const b = all.get(x.toItemId);
+            return !!a && !!b && a.start + a.duration === b.start;
+          }),
+        },
+      }
+    : generated.extensions;
+  return { timeline: Timeline.parse({ ...generated, tracks, extensions }), kept, warnings };
 }

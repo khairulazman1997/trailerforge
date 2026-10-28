@@ -60,7 +60,7 @@ describe('compileRender', () => {
   it('gives a stable plan; the hash ignores paths and item order, not content', () => {
     const plan = compileRender({ timeline: timeline(items), sources });
     expect(plan.filtergraph).toMatchSnapshot();
-    expect(plan.inputs.map((i) => [i.seek, i.duration])).toEqual([
+    expect(plan.inputs.map((i) => (i.kind === 'media' ? [i.seek, i.duration] : []))).toEqual([
       ['0.483333', '1.133334'],
       ['0', '2.133334'],
     ]);
@@ -84,9 +84,9 @@ describe('compileRender', () => {
       sources,
       range: { start: 42, frames: 12 },
     });
-    expect(plan.inputs.map((i) => i.assetId)).toEqual(['a2']);
+    expect(plan.inputs.map((i) => (i.kind === 'media' ? i.assetId : i.itemId))).toEqual(['a2']);
     // 6 frames into i2 at 2x speed: 0.5 s into the recording, half a source frame early.
-    expect(plan.inputs[0]!.seek).toBe('0.483333');
+    expect(plan.inputs[0]).toMatchObject({ seek: '0.483333' });
     expect(plan.filtergraph).toContain('trim=end_frame=12');
   });
 

@@ -107,7 +107,9 @@ export function applyAccents(
       if (slot.transitionIn) wanted.push({ slot, ref: slot.transitionIn, track: t, to: own[0]! });
       if (slot.transitionOut) {
         const last = own.at(-1)!;
-        const next = t.items.find((i) => i.start === itemEnd(last) && i.slotId !== slot.id);
+        const next = [t, ...pictureTracks.filter((o) => o !== t)]
+          .map((o) => o.items.find((i) => i.start === itemEnd(last) && i.slotId !== slot.id))
+          .find((i) => i !== undefined);
         if (next && !(next.slotId && ins.has(next.slotId)))
           wanted.push({ slot, ref: slot.transitionOut, track: t, to: next, from: last });
       }
@@ -115,6 +117,7 @@ export function applyAccents(
     }
   }
   wanted.sort((a, b) => a.to.start - b.to.start);
+  const cross: Transition[] = [];
   for (const { slot, ref, track, to, from: known } of wanted) {
     const name = slot.title || slot.id;
     const out = known !== undefined;
@@ -125,11 +128,28 @@ export function applyAccents(
       );
       continue;
     }
-    if (track.transitions.some((x) => x.toItemId === to.id)) continue;
-    const from = known ?? track.items.find((i) => itemEnd(i) === to.start && i.id !== to.id);
+    if ([...track.transitions, ...cross].some((x) => x.toItemId === to.id)) continue;
+    const before = (o: (typeof tracks)[number]) =>
+      o.items.find((i) => itemEnd(i) === to.start && i.id !== to.id);
+    const from =
+      known ??
+      before(track) ??
+      pictureTracks
+        .filter((o) => o !== track)
+        .map(before)
+        .find((i) => i !== undefined);
     if (!from) {
       warnings.push(
-        `"${name}": the ${ref.transitionId.replace(/^core\//, '')} transition needs the item before it on the same track (a card next to a shot is not supported yet); a hard cut instead`,
+        `"${name}": the ${ref.transitionId.replace(/^core\//, '')} transition needs an item that ends where it starts; a hard cut instead`,
+      );
+      continue;
+    }
+    // A shot into or out of a card on another track: the render draws the card on the
+    // picture track for it (see `@trailerforge/compile`), so only that pairing is kept.
+    const sameTrack = track.items.includes(from) && track.items.includes(to);
+    if (!sameTrack && ![from, to].some((i) => i.kind === 'graphic')) {
+      warnings.push(
+        `"${name}": the ${ref.transitionId.replace(/^core\//, '')} transition joins two items on different tracks; a hard cut instead`,
       );
       continue;
     }
@@ -167,12 +187,23 @@ export function applyAccents(
       params: ref.params,
       decisionId,
     };
-    track.transitions.push(tr);
+    if (sameTrack) track.transitions.push(tr);
+    else cross.push(tr);
   }
 
   // Sound cues.
   const cues = sb.music.sfxCues.filter((c) => c.kind !== 'custom').length;
   let next: Timeline = { ...timeline, tracks };
+  if (cross.length) {
+    const core = (timeline.extensions.core ?? {}) as Record<string, unknown>;
+    next = {
+      ...next,
+      extensions: {
+        ...timeline.extensions,
+        core: { ...core, crossTransitions: cross },
+      } as Timeline['extensions'],
+    };
+  }
   let soundOptions: string[] = [];
   if (opts.sound) {
     const plan = planSfx({

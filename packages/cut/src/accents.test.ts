@@ -8,6 +8,7 @@ import {
   type ShotSlot,
 } from '@trailerforge/schema';
 import { sampleProject } from '@trailerforge/schema/fixtures';
+import type { Transition } from '@trailerforge/schema';
 import { describe, expect, it } from 'vitest';
 import { withDucks } from './accents.js';
 import { resolveMusicGrid } from './grid.js';
@@ -121,7 +122,7 @@ describe("the storyboard's accents on the rough cut", () => {
     );
   });
 
-  it('says when a transition cannot be placed (a card on its own track) or is not installed', () => {
+  it('puts a transition into a card on its own track across tracks; says when one is not installed', () => {
     const cut = buildRoughCut(
       input((p) => {
         slot(p, 'card_end').transitionIn = { transitionId: 'core/dip', duration: 0.5, params: {} };
@@ -132,9 +133,16 @@ describe("the storyboard's accents on the rough cut", () => {
         };
       }),
     );
-    expect(cut.warnings).toContainEqual(
-      expect.stringMatching(/dip transition needs the item before it on the same track/),
-    );
+    const cross = (cut.timeline.extensions.core as { crossTransitions?: Transition[] })
+      .crossTransitions!;
+    expect(cross).toHaveLength(1);
+    const all = cut.timeline.tracks.flatMap((t) => t.items);
+    const to = all.find((i) => i.id === cross[0]!.toItemId)!;
+    const from = all.find((i) => i.id === cross[0]!.fromItemId)!;
+    expect(to).toMatchObject({ kind: 'graphic', slotId: 'card_end' });
+    expect(from.start + from.duration).toBe(to.start);
+    expect(cross[0]).toMatchObject({ transitionId: 'core/dip' });
+    expect(cut.decisions.some((d) => d.id === cross[0]!.decisionId)).toBe(true);
     expect(cut.warnings).toContainEqual(
       expect.stringMatching(/acme\/star-wipe is not installed; a hard cut instead/),
     );

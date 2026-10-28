@@ -1,15 +1,18 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { builtinFilters } from '@trailerforge/effects';
 import { Timeline, framesToFlicks, rate } from '@trailerforge/schema';
 import {
   DRAFT_ENCODE,
   compileRender,
   ffmpegArgs,
+  CompileError,
   type EncodeSettings,
+  type GraphicFrames,
   type SourceMedia,
 } from './compile.js';
 
@@ -33,6 +36,8 @@ const RAW: EncodeSettings = {
   threads: 1,
   video: { codec: 'rawvideo', pixFmt: 'yuv444p', args: [] },
 };
+
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 let ramp: SourceMedia;
 let bars: SourceMedia;
@@ -68,13 +73,19 @@ function tl(items: object[], res: { width: number; height: number }, r = R30): T
 function render(
   timeline: Timeline,
   sources: Map<string, SourceMedia>,
-  opt: { encode?: EncodeSettings; range?: { start: number; frames: number }; pix?: string } = {},
+  opt: {
+    encode?: EncodeSettings;
+    range?: { start: number; frames: number };
+    pix?: string;
+    graphics?: Map<string, GraphicFrames>;
+  } = {},
 ) {
   const plan = compileRender({
     timeline,
     sources,
     encode: opt.encode ?? RAW,
     ...(opt.range ? { range: opt.range } : {}),
+    ...(opt.graphics ? { graphics: opt.graphics } : {}),
   });
   const out = join(dir, `${plan.planHash}.${plan.encode.container}`);
   ff(ffmpegArgs(plan, out));
@@ -86,7 +97,7 @@ function render(
 
 const f30 = (frames: number) => framesToFlicks(frames, R30);
 
-describe('rendered plans', () => {
+describe('rendered plans', { timeout: 60_000 }, () => {
   it('starts each clip on its exact source frame, at any speed, and in a range', () => {
     const items = [
       { id: 'c1', kind: 'clip', start: 0, duration: f30(10), assetId: 'r', sourceIn: f30(15) },
@@ -170,5 +181,144 @@ describe('rendered plans', () => {
     const top = frame(12).subarray(5 * 90 * 3, 6 * 90 * 3);
     expect(Math.max(...top)).toBeGreaterThan(40);
     expect(spawnSync(bin('ffmpeg'), ['-version']).status).toBe(0);
+  });
+});
+
+describe('transitions, effects and graphics', { timeout: 120_000 }, () => {
+  const RES = { width: 160, height: 90 };
+  const FB = 160 * 90 * 3; // yuv444p frame
+  const frames = (raw: Buffer) =>
+    Array.from({ length: raw.length / FB }, (_, i) => raw.subarray(i * FB, (i + 1) * FB));
+  const luma = (fr: Buffer) => fr[45 * 160 + 80]!;
+  const cuts = [
+    { id: 'c1', kind: 'clip', start: 0, duration: f30(12), assetId: 'r', sourceIn: f30(20) },
+    { id: 'c2', kind: 'clip', start: f30(12), duration: f30(12), assetId: 'r', sourceIn: f30(60) },
+    { id: 'c3', kind: 'clip', start: f30(24), duration: f30(12), assetId: 'r', sourceIn: f30(5) },
+  ]; // prettier-ignore
+  const withTransition = (transitionId: string, frames = 6, params = {}) =>
+    Timeline.parse({
+      ...tl(cuts, RES),
+      tracks: [{ id: 'trk_v', kind: 'video', items: cuts, transitions: [
+        { id: 'tr1', transitionId, fromItemId: 'c1', toItemId: 'c2', duration: f30(frames), params },
+      ] }],
+    }); // prettier-ignore
+
+  it('a crossfade overlaps both sides of the cut with handles and keeps the length', () => {
+    const sources = new Map([['r', ramp]]);
+    const hard = frames(render(tl(cuts, RES), sources).raw);
+    const soft = frames(render(withTransition('core/crossfade'), sources).raw);
+    expect(soft).toHaveLength(36);
+    // Overlap of 6 frames centred on the cut at 12: frames 9..14 blend, the rest is untouched.
+    for (let i = 0; i < 36; i++) {
+      if (i >= 9 && i < 15) continue;
+      expect(soft[i]!.equals(hard[i]!), `frame ${i}`).toBe(true);
+    }
+    // Handles: at the cut both sides are mid-blend (c1 runs on to its frame 32, c2 starts at 57).
+    const mid = luma(soft[12]!);
+    expect(mid).toBeGreaterThan(2 * 33);
+    expect(mid).toBeLessThan(2 * 60);
+    // A range starting inside the overlap gives the same frames as the full render.
+    const part = frames(
+      render(withTransition('core/crossfade'), sources, { range: { start: 11, frames: 8 } }).raw,
+    );
+    part.forEach((fr, i) => expect(fr.equals(soft[11 + i]!), `range frame ${i}`).toBe(true));
+  });
+
+  it('renders every built-in transition and effect inside a timeline', () => {
+    const sources = new Map([['b', bars]]);
+    const reg = builtinFilters();
+    for (const id of reg.ids('transition')) {
+      const t = Timeline.parse({
+        ...tl([], RES),
+        tracks: [{ id: 'trk_v', kind: 'video', items: [
+          { id: 'c1', kind: 'clip', start: 0, duration: f30(15), assetId: 'b', sourceIn: 0 },
+          { id: 'c2', kind: 'clip', start: f30(15), duration: f30(15), assetId: 'b', sourceIn: f30(45) },
+        ], transitions: [{ id: 'tr1', transitionId: id, fromItemId: 'c1', toItemId: 'c2', duration: f30(8) }] }],
+      }); // prettier-ignore
+      const { raw, plan } = render(t, sources);
+      expect(raw.length, id).toBe(30 * FB);
+      expect(plan.warnings, id).toEqual([]);
+    }
+    for (const id of reg.ids('effect')) {
+      const items = [{ id: 'c1', kind: 'clip', start: 0, duration: f30(20), assetId: 'b', sourceIn: 0,
+        effects: [{ id: 'e1', effectId: id }] }]; // prettier-ignore
+      const plain = render(tl([{ ...items[0], effects: [] }], RES), sources).raw;
+      const { raw, plan } = render(tl(items, RES), sources);
+      expect(raw.length, id).toBe(20 * FB);
+      if (id === 'core/speed-ramp') expect(plan.warnings.join(), id).toContain('not rendered yet');
+      else expect(raw.equals(plain), `${id} changes the picture`).toBe(false);
+    }
+  });
+
+  function cardFrames(name: string, count: number): GraphicFrames {
+    const out = join(dir, name);
+    mkdirSync(out, { recursive: true });
+    if (!existsSync(join(out, 'frame_000000.png')))
+      ff(['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i',
+        'color=c=red:s=80x90:r=30,format=rgba,pad=160:90:0:0:color=black@0',
+        '-frames:v', String(count), join(out, 'frame_%06d.png')]); // prettier-ignore
+    return { pattern: join(out, 'frame_%06d.png'), contentHash: 'c'.repeat(64), frames: count };
+  }
+
+  it('overlays a card with alpha on exactly its frames', () => {
+    const t = Timeline.parse({
+      ...tl([], RES),
+      tracks: [
+        { id: 'trk_v', kind: 'video', items: [{ id: 'c1', kind: 'clip', start: 0, duration: f30(30), assetId: 'r', sourceIn: 0 }] },
+        { id: 'trk_g', kind: 'graphics', items: [{ id: 'g1', kind: 'graphic', start: f30(10), duration: f30(10), templateId: 'core/title-card' }] },
+      ],
+    }); // prettier-ignore
+    const { raw } = render(t, new Map([['r', ramp]]), {
+      pix: 'rgb24',
+      graphics: new Map([['g1', cardFrames('half-red', 10)]]),
+    });
+    const px = (f: number, x: number) =>
+      raw.subarray(f * FB + (45 * 160 + x) * 3, f * FB + (45 * 160 + x) * 3 + 3);
+    const red = (b: Buffer) => b[0]! > 200 && b[1]! < 40 && b[2]! < 40;
+    expect(red(px(9, 20))).toBe(false);
+    expect(red(px(10, 20))).toBe(true);
+    expect(red(px(19, 20))).toBe(true);
+    expect(red(px(20, 20))).toBe(false);
+    // The right half of the card is transparent: the picture shows through.
+    expect(red(px(15, 140))).toBe(false);
+  });
+
+  it('a shot can cross into a card on another track', () => {
+    const t = Timeline.parse({
+      ...tl([], RES),
+      tracks: [
+        { id: 'trk_v', kind: 'video', items: [{ id: 'c1', kind: 'clip', start: 0, duration: f30(12), assetId: 'b', sourceIn: 0 }] },
+        { id: 'trk_g', kind: 'graphics', items: [{ id: 'g1', kind: 'graphic', start: f30(12), duration: f30(12), templateId: 'core/title-card' }] },
+      ],
+      extensions: { core: { crossTransitions: [{ id: 'x1', transitionId: 'core/crossfade', fromItemId: 'c1', toItemId: 'g1', duration: f30(6) }] } },
+    }); // prettier-ignore
+    const { raw, plan } = render(t, new Map([['b', bars]]), {
+      pix: 'rgb24',
+      graphics: new Map([['g1', cardFrames('half-red-12', 12)]]),
+    });
+    expect(plan.warnings).toEqual([]);
+    expect(raw.length).toBe(24 * FB);
+    expect(plan.filtergraph).toContain('xfade');
+    // Mid-overlap the card's red half is partly there; after it, fully; the other half is black.
+    const at = (f: number, x: number) => raw[f * FB + (45 * 160 + x) * 3]!;
+    expect(at(12, 20)).toBeGreaterThan(60);
+    expect(at(12, 20)).toBeLessThan(at(18, 20));
+    expect(at(18, 140)).toBeLessThan(20);
+  });
+
+  it('refuses a plan that would flash more than three times a second', () => {
+    const items = Array.from({ length: 6 }, (_, i) => ({
+      id: `c${i}`, kind: 'clip', start: f30(i * 5), duration: f30(5), assetId: 'b', sourceIn: 0,
+    })); // prettier-ignore
+    const transitions = items.slice(1).map((it, i) => ({
+      id: `t${i}`, transitionId: 'core/flash', fromItemId: items[i]!.id, toItemId: it.id, duration: f30(2),
+    })); // prettier-ignore
+    const t = Timeline.parse({
+      ...tl([], RES),
+      tracks: [{ id: 'trk_v', kind: 'video', items, transitions }],
+    });
+    expect(() => compileRender({ timeline: t, sources: new Map([['b', bars]]) })).toThrow(
+      CompileError,
+    );
   });
 });
