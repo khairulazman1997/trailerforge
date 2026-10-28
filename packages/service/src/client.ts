@@ -46,6 +46,10 @@ import type {
   importFootageOp,
   matchAcceptOp,
   matchSuggestOp,
+  approveVersionOp,
+  presetsViewOp,
+  qualityOp,
+  reviewViewOp,
 } from '@trailerforge/engine';
 
 type Result<F extends (...args: never[]) => unknown> = Awaited<ReturnType<F>>;
@@ -104,6 +108,19 @@ export type TaskRequest =
       options: { sectionId: string; instruction?: string; keepEdited?: boolean };
     }
   | { kind: 'rank-takes'; options?: { overwriteChosen?: boolean } }
+  /** Render a 720p review draft of a version (`variantId` null = the master cut). */
+  | { kind: 'render-draft'; options: { variantId: string | null } }
+  | {
+      kind: 'export';
+      options: {
+        variantId: string | null;
+        overrides?: { checkId: string; reason: string }[];
+      };
+    }
+  | {
+      kind: 'handoff';
+      options: { variantId: string | null; formats?: ('fcpxml' | 'otio' | 'edl')[] };
+    }
   | {
       kind: 'capture-tips';
       options?: { groupKeys?: string[]; force?: boolean; overwriteEdited?: boolean };
@@ -410,6 +427,51 @@ export class ServiceClient {
       {
         headers: { Authorization: `Bearer ${this.opts.token}` },
       },
+    );
+    if (!res.ok) {
+      const e = (
+        (await res.json().catch(() => null)) as { error?: { code: string; message: string } } | null
+      )?.error;
+      throw new ServiceError(res.status, e?.code ?? 'http', e?.message ?? res.statusText);
+    }
+    return res.blob();
+  }
+  /** The export presets, and the hardware encoder used for drafts if one works. */
+  exportPresets() {
+    return this.request<Result<typeof presetsViewOp>>('GET', '/v1/export/presets');
+  }
+  /** Every version with its approval state, comments, draft and Quality Gate summary. */
+  review(id: string) {
+    return this.request<Result<typeof reviewViewOp>>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/review`,
+    );
+  }
+  /** Approve a version as it is now (`variantId` null = the master cut). */
+  approveVersion(id: string, variantId: string | null, note?: string) {
+    return this.request<Result<typeof approveVersionOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/review/approve`,
+      { variantId, ...(note ? { note } : {}) },
+    );
+  }
+  /** The Quality Gate on a version's plan, with the overrides given. */
+  quality(
+    id: string,
+    variantId: string | null,
+    overrides: { checkId: string; reason: string }[] = [],
+  ) {
+    return this.request<Result<typeof qualityOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/versions/${encodeURIComponent(variantId ?? 'master')}/quality`,
+      { overrides },
+    );
+  }
+  /** The review draft of a version as a Blob (404 until one has been rendered for its content). */
+  async draft(id: string, variantId: string | null): Promise<Blob> {
+    const res = await this.fetchFn(
+      `${this.opts.baseUrl}/v1/projects/${encodeURIComponent(id)}/versions/${encodeURIComponent(variantId ?? 'master')}/draft`,
+      { headers: { Authorization: `Bearer ${this.opts.token}` } },
     );
     if (!res.ok) {
       const e = (

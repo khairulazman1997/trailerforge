@@ -17,6 +17,18 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
   'core/brand.set-scale':
     "Set text sizes as a share of the frame's shorter side (title, heading, body, caption).",
   'core/brand.reset': 'Forget the whole brand kit.',
+  'core/export.set':
+    'Choose how a version is exported: the preset (core/youtube, core/steam, core/vertical, core/x, core/master), the file name pattern ({project}, {version}, {format}, {preset}), a loudness target override in LUFS, and where the poster frame is taken (seconds). null clears an override.',
+  'core/export.reset': "Back to the default export for the version's shape.",
+  'core/review.comment':
+    'Leave a comment on a version (variantId null = the master cut) at a time (flicks), optionally on the timeline item under it. Comments never change the render, so they never make an approval stale.',
+  'core/review.edit': 'Change the text of a comment.',
+  'core/review.resolve': 'Mark a comment as dealt with.',
+  'core/review.reopen': 'Reopen a resolved comment.',
+  'core/review.delete': 'Delete a comment.',
+  'core/review.revoke': "Withdraw a version's approval.",
+  'core/timeline.set-clip-audio':
+    "Turn a clip's own sound on or off (off by default; music and effects carry a trailer), with a gain and optional J-cut lead and L-cut lag (flicks, at most one second).",
   'core/timeline.set-effects':
     'Set the finishing effects on a picture item by hand (effect ids from effects_list). A rebuild of the cut keeps them.',
   'core/storyboard.add-sfx-cue':
@@ -96,6 +108,9 @@ export const HIDDEN_COMMANDS = new Set([
   // Which logo or font files go into a project is the user's choice (screens, `tforge brand`).
   'core/brand.set-logo',
   'core/brand.set-font',
+  // Approving is the user's sign-off, and the plan hash must come from the real content: the
+  // app and `tforge review approve` compute it. Claude can read approvals in render_status.
+  'core/review.approve',
   'core/knowledge.apply-scan',
   'core/storyboard.set',
   'core/storyboard.replace-section',

@@ -143,6 +143,15 @@ describe('tool surface', () => {
         'core_brand_set-colors',
         'core_timeline_set-effects',
         'core_storyboard_add-sfx-cue',
+        'render_status',
+        'qc_report',
+        'draft_start',
+        'export_start',
+        'handoff_start',
+        'render_cancel',
+        'core_review_comment',
+        'core_export_set',
+        'core_timeline_set-clip-audio',
       ]),
     );
     // Bulk-result commands are reachable only through the action tools.
@@ -153,8 +162,13 @@ describe('tool surface', () => {
     // Which logo and font files a project uses is the user's choice, like importing footage.
     expect(names).not.toContain('core_brand_set-logo');
     expect(names).not.toContain('core_brand_set-font');
+    // Approving is the user's sign-off, and overriding a gate finding is theirs too.
+    expect(names).not.toContain('core_review_approve');
+    expect(JSON.stringify(tools.find((t) => t.name === 'export_start')!.inputSchema)).not.toContain(
+      'override',
+    );
     // Every registered command is exposed except those, and each schema is an object.
-    expect(engine.commands.types().length - 5).toBe(
+    expect(engine.commands.types().length - 6).toBe(
       names.filter((n) => n.startsWith('core_') || n.startsWith('game-trailer_')).length,
     );
     for (const t of tools) {
@@ -388,4 +402,51 @@ describe('stdio transport', () => {
     expect(msgs.find((m) => m.id === 2).result.tools.length).toBeGreaterThan(30);
     await server.close();
   });
+});
+
+describe('review, quality and render tools', () => {
+  it('reports versions and the gate, comments through the command tools, and renders in the background', async () => {
+    const status = await call(client, 'render_status');
+    expect(status.data.versions.map((v: { variantId: string | null }) => v.variantId)).toEqual([
+      null,
+      'var_tt',
+    ]);
+    expect(status.data.render).toBeNull();
+
+    const qc = await call(client, 'qc_report', { version: 'var_tt' });
+    expect(qc.data.verdict.allowed).toBe(false);
+    expect(qc.data.verdict.blocking.length).toBeGreaterThan(0);
+    expect((await call(client, 'qc_report', { version: 'var_gone' })).isError).toBe(true);
+
+    const c = await call(client, 'core_review_comment', {
+      variantId: 'var_tt',
+      at: 705600000,
+      text: 'Slow start',
+    });
+    expect(c.isError).toBe(false);
+    expect((await call(client, 'render_status')).data.comments).toHaveLength(1);
+
+    const started = await call(client, 'draft_start', { version: 'var_tt' });
+    expect(started.data).toMatchObject({ started: 'draft', version: 'var_tt' });
+    expect((await call(client, 'draft_start', { version: 'var_tt' })).isError).toBe(true); // one at a time
+    let done;
+    for (let i = 0; i < 200; i++) {
+      done = (await call(client, 'render_status')).data.render;
+      if (done.status !== 'running') break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(done.status).toBe('succeeded');
+    expect(done.result.file).toMatch(/drafts/);
+
+    // An export the gate blocks reports why, and there is no way to override it from here.
+    await call(client, 'export_start', { version: 'var_tt' });
+    for (let i = 0; i < 100; i++) {
+      done = (await call(client, 'render_status')).data.render;
+      if (done.status !== 'running') break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(done.status).toBe('failed');
+    expect(done.error.message).toMatch(/Quality Gate stopped the export/);
+    expect((await call(client, 'render_cancel')).data).toEqual({ cancelled: false });
+  }, 60_000);
 });

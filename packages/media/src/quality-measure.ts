@@ -34,6 +34,8 @@ export interface OutputExpectations {
   frames: number;
   /** Loudness target; null skips the loudness checks (no audio expected). */
   loudness: { lufs: number; truePeakDb: number; toleranceLu?: number } | null;
+  /** Seconds of flashes the plan declares (a flash transition): a bright frame there is intended. */
+  declaredFlashes?: readonly number[];
 }
 
 export interface PictureAnalysis {
@@ -362,7 +364,10 @@ export function checkOutput(facts: OutputFacts, exp: OutputExpectations): Qualit
         suggestion: 'Fill the gap, or override if the black is intended (a dip)',
       }),
     );
-  for (const t of facts.picture.flashFrames)
+  const planned = exp.declaredFlashes ?? [];
+  for (const t of facts.picture.flashFrames.filter(
+    (x) => !planned.some((p) => Math.abs(p - x) <= 0.25),
+  ))
     out.push(
       f('core/flash-frames', 'override', `a single flash frame at ${t} s`, {
         at: { start: t, end: round(t + 1 / fps) },

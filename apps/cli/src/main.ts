@@ -14,6 +14,14 @@ import {
   matchCommand,
   rankTakesCommand,
 } from './footage.js';
+import {
+  draftCommand,
+  exportCommand,
+  handoffCommand,
+  presetsCommand,
+  qcCommand,
+  reviewCommand,
+} from './render.js';
 import { briefCheck, knowledgeScan, storyboardGenerate, type CmdCtx } from './m2.js';
 
 export interface Io {
@@ -57,6 +65,16 @@ Usage:
   tforge brand reset <dir>                                Forget the brand kit
   tforge effects                                          Installed transitions, effects, graphics templates and sounds
   tforge sfx show | tforge sfx folder <path|none>         Your folder of licensed or CC0 sound effects (nothing is uploaded)
+  tforge presets                                          The export presets (YouTube, Steam, Vertical social, X, ProRes master)
+  tforge qc <dir> [--version <id|master>] [--override <check>=<reason>]...
+                                                          The Quality Gate on a version's plan; exit 1 when it blocks an export
+  tforge draft <dir> [--version <id|master>]              Render a 720p review draft (cached by content)
+  tforge export <dir> [--version <id|master>] [--preset <id>] [--override <check>=<reason>]...
+                                                          Render with the preset, check the file, deliver to exports/render (--preset saves the choice)
+  tforge handoff <dir> [--version <id|master>] [--format fcpxml,otio,edl]
+                                                          Files for an editor: FCPXML, OpenTimelineIO, EDL, with alpha clips for cards and captions
+  tforge review list|comment|resolve|reopen|approve|revoke <dir> [<commentId>] [--version <id|master>] [--at <s>] [--text <t>] [--note <t>]
+                                                          Comments on a version and approval (goes stale when the version changes)
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
   tforge serve [--ui <dist>] [--port <n>] [--allow-origin <url>]...
                                                           Run the local engine service (and serve the built UI)
@@ -138,6 +156,11 @@ export async function main(
         role: { type: 'string' },
         family: { type: 'string' },
         bold: { type: 'boolean', default: false },
+        version: { type: 'string' },
+        preset: { type: 'string' },
+        override: { type: 'string', multiple: true },
+        at: { type: 'string' },
+        text: { type: 'string' },
         todo: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
@@ -156,6 +179,7 @@ export async function main(
     'variants',
     'brand',
     'sfx',
+    'review',
   ].includes(positionals[0] ?? '');
   const cmd = twoWord ? `${positionals[0]} ${positionals[1] ?? ''}`.trim() : positionals[0];
   const arg = positionals[twoWord ? 2 : 1];
@@ -249,6 +273,11 @@ export async function main(
       role: o.role === 'heading' || o.role === 'body' ? o.role : undefined,
       family: o.family,
       bold: o.bold,
+      version: o.version,
+      preset: o.preset,
+      override: o.override ?? [],
+      at: o.at,
+      text: o.text,
     },
   };
   try {
@@ -349,6 +378,25 @@ export async function main(
         return need(arg, '<dir>') ? await rankTakesCommand(ctx, arg) : 2;
       case 'cut':
         return need(arg, '<dir>') ? await cutCommand(ctx, arg) : 2;
+      case 'presets':
+        return await presetsCommand(ctx);
+      case 'qc':
+        return need(arg, '<dir>') ? await qcCommand(ctx, arg) : 2;
+      case 'draft':
+        return need(arg, '<dir>') ? await draftCommand(ctx, arg) : 2;
+      case 'export':
+        return need(arg, '<dir>') ? await exportCommand(ctx, arg) : 2;
+      case 'handoff':
+        return need(arg, '<dir>') ? await handoffCommand(ctx, arg) : 2;
+      case 'review list':
+      case 'review comment':
+      case 'review resolve':
+      case 'review reopen':
+      case 'review approve':
+      case 'review revoke':
+        return need(arg, '<dir>')
+          ? await reviewCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
+          : 2;
       case 'storyboard generate':
         return need(arg, '<dir>') ? await storyboardGenerate(ctx, arg) : 2;
       case 'new': {

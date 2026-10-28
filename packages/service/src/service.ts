@@ -47,6 +47,14 @@ import {
   matchAcceptOp,
   matchSuggestOp,
   rankTakesOp,
+  approveVersionOp,
+  draftFileOp,
+  exportVersionOp,
+  handoffOp,
+  presetsViewOp,
+  qualityOp,
+  renderDraftOp,
+  reviewViewOp,
   clearAnthropicKey,
   generateStoryboardOp,
   HandoffCancelled,
@@ -142,6 +150,9 @@ export class HttpError extends Error {
   }
 }
 
+/** `master` in a URL is the master cut; anything else is a version id. */
+const versionParam = (v: string): string | null => (v === 'master' ? null : decodeURIComponent(v));
+
 export function describeError(err: unknown): HttpError {
   if (err instanceof HttpError) return err;
   if (err instanceof OpError) {
@@ -151,6 +162,7 @@ export function describeError(err: unknown): HttpError {
       'no-video-type': 422,
       'brief-incomplete': 422,
       'takes-attached': 409,
+      'gate-blocked': 422,
       failed: 502,
     }[err.code];
     return new HttpError(status, err.code, err.message, err.details);
@@ -229,6 +241,9 @@ type Handler = (ctx: {
   res: ServerResponse;
 }) => Promise<unknown>;
 
+/** The version to render: a version id, or null for the master cut. */
+const VersionOptions = z.strictObject({ variantId: z.string().min(1).nullable() });
+
 const TaskRequest = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('generate'),
@@ -251,6 +266,21 @@ const TaskRequest = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('rank-takes'),
     options: z.strictObject({ overwriteChosen: z.boolean().optional() }).default({}),
+  }),
+  z.strictObject({ kind: z.literal('render-draft'), options: VersionOptions }),
+  z.strictObject({
+    kind: z.literal('export'),
+    options: VersionOptions.extend({
+      overrides: z
+        .array(z.strictObject({ checkId: z.string().min(1), reason: z.string() }))
+        .optional(),
+    }),
+  }),
+  z.strictObject({
+    kind: z.literal('handoff'),
+    options: VersionOptions.extend({
+      formats: z.array(z.enum(['fcpxml', 'otio', 'edl'])).optional(),
+    }),
   }),
   z.strictObject({
     kind: z.literal('capture-tips'),
@@ -722,6 +752,67 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         return STREAMING;
       },
     ],
+    ['GET', /^\/v1\/export\/presets$/, async () => presetsViewOp(engine)],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/review$/,
+      async ({ params }) => reviewViewOp(engine, storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/review\/approve$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        const o = z
+          .strictObject({
+            variantId: z.string().min(1).nullable(),
+            note: z.string().max(500).optional(),
+          })
+          .parse(await body());
+        notBusy(store);
+        return approveVersionOp(engine, store, {
+          variantId: o.variantId,
+          ...(o.note ? { note: o.note } : {}),
+        });
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/versions\/(?<version>[^/]+)\/quality$/,
+      async ({ params, body }) => {
+        const o = z
+          .strictObject({
+            overrides: z
+              .array(z.strictObject({ checkId: z.string().min(1), reason: z.string() }))
+              .optional(),
+          })
+          .default({})
+          .parse(await body().catch(() => ({})));
+        return qualityOp(engine, storeById(params.id!), versionParam(params.version!), o.overrides);
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/versions\/(?<version>[^/]+)\/draft$/,
+      async ({ params, res }) => {
+        const file = await draftFileOp(
+          engine,
+          storeById(params.id!),
+          versionParam(params.version!),
+        );
+        if (!file)
+          throw new HttpError(404, 'not-found', 'no review draft for the current content yet');
+        const size = (await stat(file)).size;
+        res.writeHead(200, {
+          ...SECURITY_HEADERS,
+          'Content-Type': 'video/mp4',
+          'Content-Length': size,
+          'Cache-Control': 'no-store',
+        });
+        await pipeline(createReadStream(file), res);
+        return STREAMING;
+      },
+    ],
     [
       'GET',
       /^\/v1\/projects\/(?<id>[^/]+)\/variants$/,
@@ -897,9 +988,40 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       async ({ params, body, res }) => {
         const store = storeById(params.id!);
         const t = TaskRequest.parse(await body());
-        notBusy(store);
+        const isRender = t.kind === 'render-draft' || t.kind === 'export' || t.kind === 'handoff';
+        if (isRender) {
+          // Renders read the project when they start, so editing may go on; one at a time.
+          const other = tasks
+            .running(store.state.id)
+            .find((x) => x.kind === 'render-draft' || x.kind === 'export' || x.kind === 'handoff');
+          if (other)
+            throw new HttpError(409, 'busy', `a ${other.kind} is already running for this project`);
+        } else notBusy(store);
+        const progress = (p: unknown) =>
+          events.emit('render.progress', {
+            projectId: store.state.id,
+            kind: t.kind,
+            ...(p as object),
+          });
         const run = async (signal: AbortSignal) => {
           let out: unknown;
+          if (t.kind === 'render-draft')
+            return renderDraftOp(engine, store, t.options.variantId, {
+              signal,
+              onProgress: progress,
+            });
+          if (t.kind === 'export')
+            return exportVersionOp(engine, store, t.options.variantId, {
+              signal,
+              onProgress: progress,
+              ...(t.options.overrides ? { overrides: t.options.overrides } : {}),
+            });
+          if (t.kind === 'handoff')
+            return handoffOp(engine, store, t.options.variantId, {
+              signal,
+              onProgress: progress,
+              ...(t.options.formats ? { formats: t.options.formats } : {}),
+            });
           if (t.kind === 'generate')
             out = await generateStoryboardOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'regenerate-section')
@@ -921,7 +1043,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           return out;
         };
         res.statusCode = 202;
-        return tasks.start(t.kind, store.state.id, run);
+        return tasks.start(t.kind, store.state.id, run, { blocking: !isRender });
       },
     ],
     [

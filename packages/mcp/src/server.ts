@@ -26,6 +26,12 @@ import {
   matchAcceptOp,
   matchSuggestOp,
   rankTakesOp,
+  exportVersionOp,
+  handoffOp,
+  qualityOp,
+  renderDraftOp,
+  reviewViewOp,
+  type Progress,
   generateStoryboardOp,
   OpError,
   regenerateSectionOp,
@@ -681,6 +687,194 @@ export function createMcpServer(opts: McpServerOptions): Server {
           : undefined,
         omitExcluded: args.omitExcluded === true,
       });
+    },
+  });
+
+  // ---------------------------------------------------------------- review, quality, render
+  /**
+   * Renders run in the background (a trailer takes minutes): `draft_start`, `export_start` and
+   * `handoff_start` return at once, `render_status` shows progress and the last result, and
+   * `render_cancel` stops one. One at a time per project.
+   */
+  interface Run {
+    kind: 'draft' | 'export' | 'handoff';
+    version: string;
+    status: 'running' | 'succeeded' | 'failed' | 'cancelled';
+    progress?: Progress;
+    result?: unknown;
+    error?: { message: string; details?: unknown };
+    controller: AbortController;
+  }
+  const runs = new Map<string, Run>();
+  const versionArg = (args: Args): string | null =>
+    typeof args.version === 'string' && args.version !== 'master' ? args.version : null;
+  const VERSION_PROP = {
+    type: 'string',
+    description:
+      'A version id from render_status or variants_status; omit (or "master") for the master cut.',
+  };
+  const startRun = async (
+    kind: Run['kind'],
+    args: Args,
+    work: (
+      store: ProjectStore,
+      v: string | null,
+      signal: AbortSignal,
+      onProgress: (p: Progress) => void,
+    ) => Promise<unknown>,
+  ) => {
+    const store = await project(args);
+    const key = store.paths.dir;
+    if (runs.get(key)?.status === 'running')
+      throw new OpError(
+        'usage',
+        `a ${runs.get(key)!.kind} is already running for this project; see render_status`,
+      );
+    const v = versionArg(args);
+    const run: Run = {
+      kind,
+      version: v ?? 'master',
+      status: 'running',
+      controller: new AbortController(),
+    };
+    runs.set(key, run);
+    void work(store, v, run.controller.signal, (p) => (run.progress = p)).then(
+      (result) => {
+        run.status = run.controller.signal.aborted ? 'cancelled' : 'succeeded';
+        run.result = result;
+      },
+      (err: unknown) => {
+        run.status = run.controller.signal.aborted ? 'cancelled' : 'failed';
+        run.error = {
+          message: err instanceof Error ? err.message : String(err),
+          ...(err instanceof OpError && err.details !== undefined ? { details: err.details } : {}),
+        };
+      },
+    );
+    return {
+      started: kind,
+      version: run.version,
+      note: 'Poll render_status for progress and the result.',
+    };
+  };
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'render_status',
+      description:
+        "Every version of the trailer (the master cut and each version) with: its approval (none, approved, or stale after the picture or sound changed), comments (open/total), whether a current review draft exists, the export preset and file name, and the Quality Gate summary (blocking, needing an override, warnings). Also the state of the render running or last run in this project. Edit comments with core_review_*; approving is the user's decision (the app or `tforge review approve`).",
+      inputSchema: object({}),
+      annotations: ReadOnly,
+    },
+    async run(args) {
+      const store = await project(args);
+      const r = runs.get(store.paths.dir);
+      return {
+        versions: await reviewViewOp(engine, store),
+        comments: store.state.review.comments,
+        render: r
+          ? {
+              kind: r.kind,
+              version: r.version,
+              status: r.status,
+              progress: r.progress ?? null,
+              result: r.result ?? null,
+              error: r.error ?? null,
+            }
+          : null,
+      };
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'qc_report',
+      description:
+        "The Quality Gate on one version's plan: placeholders and missing media, flash risk, jump cuts, screen direction, pacing, off-beat cuts, text outside the safe area or too short to read, brand contrast, and whether the export preset fits. Each finding says where (seconds), what, and what to do. 'blocking' findings always stop an export; 'needsOverride' ones stop it until the user overrides them with a reason (the app or `tforge export --override`); warnings never do. The file itself is checked again after rendering.",
+      inputSchema: object({ version: VERSION_PROP }),
+      annotations: ReadOnly,
+    },
+    async run(args) {
+      return qualityOp(engine, await project(args), versionArg(args));
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'draft_start',
+      description:
+        'Start rendering a 720p review draft of a version in the background (cached by content: a version that did not change is not rendered again). Poll render_status.',
+      inputSchema: object({ version: VERSION_PROP }),
+    },
+    async run(args) {
+      return startRun('draft', args, (store, v, signal, onProgress) =>
+        renderDraftOp(engine, store, v, { signal, onProgress }),
+      );
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'export_start',
+      description:
+        "Start exporting a version in the background with its preset (set it with core_export_set): renders, checks the file (flash risk, loudness, true peak, clipping, size), and delivers it to the project's exports/render folder with a poster frame. Stops with the findings if the Quality Gate blocks it. Overriding a finding is the user's decision, so this tool takes no overrides. Poll render_status.",
+      inputSchema: object({ version: VERSION_PROP }),
+    },
+    async run(args) {
+      return startRun('export', args, (store, v, signal, onProgress) =>
+        exportVersionOp(engine, store, v, { signal, onProgress }),
+      );
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'handoff_start',
+      description:
+        'Start writing a version for an editor in the background: FCPXML, OpenTimelineIO and an EDL, with ProRes 4444 clips (alpha) for its cards and captions. Recordings are referenced where they are, never copied. Poll render_status.',
+      inputSchema: object({
+        version: VERSION_PROP,
+        formats: {
+          type: 'array',
+          items: { type: 'string', enum: ['fcpxml', 'otio', 'edl'] },
+          description: 'Default: all three.',
+        },
+      }),
+    },
+    async run(args) {
+      const formats = Array.isArray(args.formats)
+        ? args.formats.filter(
+            (f): f is 'fcpxml' | 'otio' | 'edl' => f === 'fcpxml' || f === 'otio' || f === 'edl',
+          )
+        : undefined;
+      return startRun('handoff', args, (store, v, signal, onProgress) =>
+        handoffOp(engine, store, v, {
+          signal,
+          onProgress,
+          ...(formats?.length ? { formats } : {}),
+        }),
+      );
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'render_cancel',
+      description:
+        'Stop the render running in this project. Nothing partial is kept in the exports.',
+      inputSchema: object({}),
+    },
+    async run(args) {
+      const r = runs.get((await project(args)).paths.dir);
+      if (r?.status !== 'running') return { cancelled: false };
+      r.controller.abort(new Error('cancelled'));
+      return { cancelled: true };
     },
   });
 

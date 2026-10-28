@@ -1291,3 +1291,69 @@ describe('versions, brand, templates, effects and sounds', () => {
     expect((await client.setSfxFolder(null)).folder).toBeNull();
   });
 });
+
+describe('review, quality and render tasks', { timeout: 120_000 }, () => {
+  const id = 'proj_render';
+  beforeAll(async () => {
+    await engine.createProject(join(root, 'Render.tforge'), { ...sampleProject(), id } as never);
+  });
+
+  it('lists presets and the versions with their review state', async () => {
+    const presets = await client.exportPresets();
+    expect(presets.presets.map((p) => p.id)).toEqual([
+      'core/youtube',
+      'core/steam',
+      'core/vertical',
+      'core/x',
+      'core/master',
+    ]);
+    const versions = await client.review(id);
+    expect(versions.map((v) => v.variantId)).toEqual([null, 'var_tt']);
+    expect(versions[1]).toMatchObject({ approval: 'none', export: { presetId: 'core/vertical' } });
+  });
+
+  it('approves a version from its content, and the approval stays after a comment', async () => {
+    const { contentHash } = await client.approveVersion(id, 'var_tt', 'looks right');
+    await client.command(id, 'core/review.comment', { variantId: 'var_tt', at: 0, text: 'Nice' });
+    const v = (await client.review(id)).find((x) => x.variantId === 'var_tt')!;
+    expect(v).toMatchObject({ approval: 'approved', contentHash, comments: 1 });
+  });
+
+  it('reports the Quality Gate: the sample has missing media, which always blocks', async () => {
+    const q = await client.quality(id, 'var_tt');
+    expect(q.verdict.allowed).toBe(false);
+    expect(q.verdict.blocking.map((f) => f.checkId)).toEqual(
+      expect.arrayContaining(['core/missing-media', 'core/placeholders']),
+    );
+    const withOverrides = await client.quality(id, 'var_tt', [
+      { checkId: 'core/missing-media', reason: 'nope' },
+    ]);
+    expect(withOverrides.verdict.allowed).toBe(false);
+    await expect(client.quality(id, 'var_gone')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('refuses an export the gate blocks, with the verdict in the error', async () => {
+    const t = await client.startTask(id, { kind: 'export', options: { variantId: 'var_tt' } });
+    const done = await client.waitForTask(t.id);
+    expect(done.status).toBe('failed');
+    expect(done.error).toMatchObject({ code: 'gate-blocked' });
+    expect(JSON.stringify(done.error?.details)).toContain('core/placeholders');
+  });
+
+  it('renders a draft as a task that does not block editing; one render at a time', async () => {
+    const t = await client.startTask(id, {
+      kind: 'render-draft',
+      options: { variantId: 'var_tt' },
+    });
+    await client.command(id, 'core/project.rename', { name: 'Renamed while rendering' });
+    await expect(
+      client.startTask(id, { kind: 'render-draft', options: { variantId: null } }),
+    ).rejects.toMatchObject({ status: 409, code: 'busy' });
+    const done = await client.waitForTask(t.id);
+    expect(done.status).toBe('succeeded');
+    const draft = await client.draft(id, 'var_tt');
+    expect(draft.type).toBe('video/mp4');
+    expect(draft.size).toBeGreaterThan(1000);
+    expect((await client.review(id)).find((v) => v.variantId === 'var_tt')!.draftReady).toBe(true);
+  });
+});

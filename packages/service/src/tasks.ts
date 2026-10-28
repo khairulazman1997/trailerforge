@@ -12,6 +12,8 @@ export interface TaskRecord {
   finishedAt?: string;
   result?: unknown;
   error?: { code: string; message: string; details?: unknown };
+  /** Whether editing the project is refused while it runs (renders only read the project). */
+  blocking?: boolean;
 }
 
 /**
@@ -33,8 +35,16 @@ export class TaskManager {
 
   busy(projectId: string): TaskRecord | undefined {
     for (const t of this.tasks.values())
-      if (t.projectId === projectId && t.status === 'running') return this.view(t);
+      if (t.projectId === projectId && t.status === 'running' && t.blocking !== false)
+        return this.view(t);
     return undefined;
+  }
+
+  /** Running tasks of a project, blocking or not. */
+  running(projectId: string): TaskRecord[] {
+    return [...this.tasks.values()]
+      .filter((t) => t.projectId === projectId && t.status === 'running')
+      .map((t) => this.view(t));
   }
 
   get(id: string): TaskRecord | undefined {
@@ -46,6 +56,7 @@ export class TaskManager {
     kind: string,
     projectId: string,
     run: (signal: AbortSignal) => Promise<unknown>,
+    opts: { blocking?: boolean } = {},
   ): TaskRecord {
     const controller = new AbortController();
     const task = {
@@ -54,6 +65,7 @@ export class TaskManager {
       projectId,
       status: 'running' as TaskStatus,
       startedAt: new Date().toISOString(),
+      blocking: opts.blocking ?? true,
       controller,
     };
     this.tasks.set(task.id, task);

@@ -44,7 +44,13 @@ import type { Engine } from './engine.js';
 export class OpError extends Error {
   constructor(
     readonly code:
-      'usage' | 'no-video-type' | 'brief-incomplete' | 'not-found' | 'takes-attached' | 'failed',
+      | 'usage'
+      | 'no-video-type'
+      | 'brief-incomplete'
+      | 'not-found'
+      | 'takes-attached'
+      | 'gate-blocked'
+      | 'failed',
     message: string,
     readonly details?: unknown,
   ) {

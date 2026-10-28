@@ -101,6 +101,12 @@ describe('output checks', { timeout: 60_000 }, () => {
     expect(frame.map((x) => [x.checkId, x.at?.start])).toEqual([['core/flash-frames', 0.5]]);
   });
 
+  it('a single bright frame at a planned flash is intended, elsewhere it is not', async () => {
+    const facts = await measureOutput(files.frame!);
+    expect(ids(checkOutput(facts, exp({ declaredFlashes: [0.55] })))).toEqual([]);
+    expect(ids(checkOutput(facts, exp({ declaredFlashes: [1.5] })))).toEqual(['core/flash-frames']);
+  });
+
   it('clipping blocks hard; sound running past the picture needs an override', async () => {
     expect(ids(checkOutput(await measureOutput(files.clip!), exp()))).toEqual(['core/clipping']);
     expect(ids(checkOutput(await measureOutput(files.drift!), exp()))).toEqual(['core/av-sync']);

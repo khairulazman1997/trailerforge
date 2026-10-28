@@ -101,6 +101,44 @@ const sec = (fl: number) => Math.round((fl / FLICKS_PER_SECOND) * 1000) / 1000;
 const span = (it: TimelineItem) => ({ start: sec(it.start), end: sec(itemEnd(it)) });
 const label = (it: TimelineItem) => it.label ?? it.slotId ?? it.id;
 
+/** The flashes that transitions and effects declare, in seconds on the version (for the guards). */
+export function declaredFlashes(timeline: Timeline, installed?: FilterRegistry): FlashEvent[] {
+  const filters = installed ?? builtinFilters();
+  const events: FlashEvent[] = [];
+  const ctx = (duration: number) => ({
+    width: timeline.resolution.width,
+    height: timeline.resolution.height,
+    rate: timeline.frameRate,
+    duration: duration / FLICKS_PER_SECOND,
+  });
+  for (const tr of timeline.tracks) {
+    if (tr.kind === 'audio' || tr.muted) continue;
+    for (const t of tr.transitions) {
+      const def = filters.get(t.transitionId);
+      const to = tr.items.find((i) => i.id === t.toItemId);
+      if (def?.kind !== 'transition' || !to) continue;
+      try {
+        events.push(...flashEvents(def, t.params, ctx(t.duration), sec(to.start - t.duration / 2)));
+      } catch {
+        // bad params: the compiler reports them
+      }
+    }
+    for (const it of tr.items) {
+      if (!('effects' in it)) continue;
+      for (const e of it.effects) {
+        const def = filters.get(e.effectId);
+        if (!e.enabled || def?.kind !== 'effect') continue;
+        try {
+          events.push(...flashEvents(def, e.params, ctx(it.duration), sec(it.start)));
+        } catch {
+          // reported at compile
+        }
+      }
+    }
+  }
+  return events;
+}
+
 export function checkPlan(input: PlanCheckInput): GateFinding[] {
   const { timeline } = input;
   const out: GateFinding[] = [];
@@ -140,40 +178,7 @@ export function checkPlan(input: PlanCheckInput): GateFinding[] {
             }),
           );
 
-  // Declared flashes of transitions and effects.
-  const filters = input.filters ?? builtinFilters();
-  const events: FlashEvent[] = [];
-  const ctx = (duration: number) => ({
-    width: timeline.resolution.width,
-    height: timeline.resolution.height,
-    rate: timeline.frameRate,
-    duration: duration / FLICKS_PER_SECOND,
-  });
-  for (const tr of timeline.tracks) {
-    if (tr.kind === 'audio' || tr.muted) continue;
-    for (const t of tr.transitions) {
-      const def = filters.get(t.transitionId);
-      const to = tr.items.find((i) => i.id === t.toItemId);
-      if (def?.kind !== 'transition' || !to) continue;
-      try {
-        events.push(...flashEvents(def, t.params, ctx(t.duration), sec(to.start - t.duration / 2)));
-      } catch {
-        // bad params: the compiler reports them
-      }
-    }
-    for (const it of tr.items) {
-      if (!('effects' in it)) continue;
-      for (const e of it.effects) {
-        const def = filters.get(e.effectId);
-        if (!e.enabled || def?.kind !== 'effect') continue;
-        try {
-          events.push(...flashEvents(def, e.params, ctx(it.duration), sec(it.start)));
-        } catch {
-          // reported at compile
-        }
-      }
-    }
-  }
+  const events = declaredFlashes(timeline, input.filters);
   for (const v of flashViolations(events))
     out.push(
       finding(

@@ -51,6 +51,12 @@ export interface Flags {
   role?: 'heading' | 'body' | undefined;
   family?: string | undefined;
   bold: boolean;
+  /** Render and review commands. */
+  version?: string | undefined;
+  preset?: string | undefined;
+  override: string[];
+  at?: string | undefined;
+  text?: string | undefined;
 }
 
 export interface CmdCtx {
