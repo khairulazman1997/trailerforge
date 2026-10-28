@@ -108,7 +108,17 @@ exports[`buildRoughCut > builds the fixture cut: best take at its best moment, a
       "locked": false,
       "muted": false,
       "name": "Picture",
-      "transitions": [],
+      "transitions": [
+        {
+          "decisionId": "dec_1d8ba1a6d62b3f",
+          "duration": 70560000,
+          "fromItemId": "rc_shot_parry",
+          "id": "tr_shot_parry_out",
+          "params": {},
+          "toItemId": "rc_shot_boss",
+          "transitionId": "core/flash",
+        },
+      ],
     },
     {
       "id": "trk_cards",

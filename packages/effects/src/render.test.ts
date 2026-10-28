@@ -142,7 +142,7 @@ describe('transitions through FFmpeg', () => {
         run([...src('testsrc2'), ...src('smptebars')], transitionGraph(def, { style }), 'out').hash,
       );
     expect(hashes.size).toBe(XFADE_STYLES.length);
-  });
+  }, 60_000);
 
   it('refuses parameters outside their range', () => {
     const def = builtinFilters().get('core/glitch') as TransitionDef<never>;

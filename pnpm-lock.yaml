@@ -186,6 +186,9 @@ importers:
 
   packages/cut:
     dependencies:
+      '@trailerforge/effects':
+        specifier: workspace:*
+        version: link:../effects
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema
@@ -463,6 +466,9 @@ importers:
       '@trailerforge/core':
         specifier: workspace:*
         version: link:../core
+      '@trailerforge/effects':
+        specifier: workspace:*
+        version: link:../effects
       '@trailerforge/llm':
         specifier: workspace:*
         version: link:../llm

@@ -16,6 +16,8 @@ Rules:
 - Do not repeat shots that already appear in other sections.
 - "seconds" is the on-screen time of each slot.
 - On-screen text over a shot ("onScreenText") only where the viewer needs words: a short feature callout, or style "name" the first time a boss or character appears. Leave it out of every other shot.
+- Transitions, effects and sounds ("transitionIn", "effect", "sound") are rare accents, not decoration. Most slots get none: a hard cut on the beat is the default and almost always right. Add one only where it serves the edit, and say why in its "why": a whip or flash into a big reveal, a dip to black before the title or end slate, an impact sound on the boss reveal or the music's drop, a riser leading into the climax. At most one slot in three may carry any of them; a typical trailer uses three to six in total. Use only these ids:
+{{picks}}
 
 Brief (JSON):
 {{brief}}

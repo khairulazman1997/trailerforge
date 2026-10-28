@@ -22,6 +22,13 @@ export const TransitionRef = z.strictObject({
 });
 export type TransitionRef = z.infer<typeof TransitionRef>;
 
+/** A finishing effect on a slot's picture (an id from the installed effects, with its params). */
+export const SlotEffect = z.strictObject({
+  effectId: PluginRef,
+  params: z.record(z.string(), z.json()).default({}),
+});
+export type SlotEffect = z.infer<typeof SlotEffect>;
+
 /** Text or graphic placed over a shot (lower-third, caption-style callout, etc.). */
 export const Overlay = z.strictObject({
   id: Id,
@@ -43,6 +50,8 @@ const SlotBase = {
   priority: z.enum(['must', 'nice']).default('must'),
   transitionIn: TransitionRef.optional(),
   transitionOut: TransitionRef.optional(),
+  /** Finishing effects on this slot's picture; most slots have none. */
+  effects: z.array(SlotEffect).max(3).default([]),
   audioNotes: z.string().default(''),
   /** Knowledge entities (levels, bosses, abilities...) this slot features. */
   entityIds: z.array(Id).default([]),

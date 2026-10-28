@@ -10,6 +10,7 @@ import {
   type Storyboard,
   type TimelineItem,
 } from '@trailerforge/schema';
+import { applyAccents, slotEffects, type SoundSetup } from './accents.js';
 import { placeCaptions } from './captions.js';
 import type { MusicGrid } from './grid.js';
 import { layoutOnGrid } from './layout.js';
@@ -61,6 +62,8 @@ export interface RoughCutOptions {
   /** Fade the music out over this many bars at the end (default 1). */
   fadeBars?: number;
   omitSlotIds?: ReadonlySet<string>;
+  /** Sound effects to place on the storyboard's cues; without it cues are reported, not placed. */
+  sound?: SoundSetup;
 }
 
 export interface RoughCut {
@@ -277,7 +280,7 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
         label: card.title || card.cardKind,
         templateId: card.templateId,
         params: { ...card.params, text: card.text },
-        effects: [],
+        effects: slotEffects(slot, id, decide),
         extensions: {},
       });
       return;
@@ -324,7 +327,7 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
           assetId: short.t.assetId,
           sourceIn: 0,
           speed: 1,
-          effects: [],
+          effects: slotEffects(slot, id, decide),
           gainDb: 0,
           muted: false,
           extensions: {},
@@ -405,7 +408,7 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
       assetId: pick.t.assetId,
       sourceIn: w.sourceIn,
       speed: 1,
-      effects: [],
+      effects: slotEffects(slot, id, decide),
       gainDb: 0,
       muted: false,
       extensions: {},
@@ -528,10 +531,11 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
       `Caption "${c.text}" over its shot for ${secs(c.duration)} s`,
     ),
   );
+  const accented = applyAccents(captioned.timeline, sb, decide, o.sound ? { sound: o.sound } : {});
   return {
-    timeline: captioned.timeline,
+    timeline: Timeline.parse(accented.timeline),
     decisions,
-    warnings: [...warnings, ...captioned.warnings],
+    warnings: [...warnings, ...captioned.warnings, ...accented.warnings],
   };
 }
 

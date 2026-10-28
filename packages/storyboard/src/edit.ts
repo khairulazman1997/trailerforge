@@ -8,6 +8,7 @@ import {
   PluginRef,
   ShotSlot,
   Slot,
+  SlotEffect,
   TransitionRef,
   VoLine,
 } from '@trailerforge/schema';
@@ -35,6 +36,7 @@ const COMMON_FIELDS = [
   'priority',
   'transitionIn',
   'transitionOut',
+  'effects',
   'audioNotes',
   'entityIds',
   'tags',
@@ -58,6 +60,7 @@ export const SlotPatch = z.strictObject({
   priority: z.enum(['must', 'nice']).optional(),
   transitionIn: TransitionRef.nullable().optional(),
   transitionOut: TransitionRef.nullable().optional(),
+  effects: z.array(SlotEffect).max(3).optional(),
   audioNotes: z.string().optional(),
   entityIds: z.array(Id).optional(),
   tags: z.array(z.string()).optional(),
@@ -344,6 +347,43 @@ export const updateMusic = defineCommand({
   merge: { key: () => 'music', windowMs: 1500 },
 });
 
+/** Kinds of sound cue a slot can carry (the storyboard schema's list). */
+const SfxCueKind = z.enum(['whoosh', 'impact', 'riser', 'sub-drop', 'custom']);
+
+/** Put a sound on a slot: before it (leading in), at its start or at its end. */
+export const addSfxCue = defineCommand({
+  type: 'core/storyboard.add-sfx-cue',
+  payload: z.strictObject({
+    slotId: Id,
+    kind: SfxCueKind,
+    position: z.enum(['before', 'start', 'end']).default('start'),
+  }),
+  label: ({ kind }) => `Add ${kind} sound`,
+  apply: (d, { slotId, kind, position }) => {
+    const { sb, section } = findSlot(d, slotId);
+    if (section.locked) throw new SectionLockedError(section.id);
+    const taken = collectIds(d);
+    let id = `sfx_${slotId}`.slice(0, 60);
+    for (let n = 2; taken.has(id); n++) id = `sfx_${slotId}`.slice(0, 56) + `_${n}`;
+    sb.music.sfxCues.push({ id, kind, slotId, position });
+  },
+});
+
+/** Take a sound off its slot (a suggested one, or one added by hand). */
+export const removeSfxCue = defineCommand({
+  type: 'core/storyboard.remove-sfx-cue',
+  payload: z.strictObject({ cueId: Id }),
+  label: () => 'Remove sound',
+  apply: (d, { cueId }) => {
+    const sb = requireStoryboard(d);
+    const cue = sb.music.sfxCues.find((c) => c.id === cueId);
+    if (!cue) throw new Error(`no sound cue "${cueId}"`);
+    const { section } = findSlot(d, cue.slotId);
+    if (section.locked) throw new SectionLockedError(section.id);
+    sb.music.sfxCues = sb.music.sfxCues.filter((c) => c.id !== cueId);
+  },
+});
+
 export const storyboardEditCommands = [
   updateSlot,
   addSlot,
@@ -358,4 +398,6 @@ export const storyboardEditCommands = [
   updateVoLine,
   removeVoLine,
   updateMusic,
+  addSfxCue,
+  removeSfxCue,
 ] as unknown as readonly CommandDef<unknown>[];

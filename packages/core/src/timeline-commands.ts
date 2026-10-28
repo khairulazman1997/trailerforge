@@ -1,5 +1,6 @@
 import type { Draft } from 'immer';
 import {
+  EffectInstance,
   Id,
   Flicks,
   PlaceholderItem,
@@ -60,13 +61,25 @@ export const setTimeline = defineCommand({
 
 const Ref = { timelineId: Id, itemId: Id };
 
+/** Drop the track's transitions whose two items no longer meet exactly (after a trim or move). */
+function pruneTransitions(track: Draft<Track>): void {
+  const end = new Map(track.items.map((i) => [i.id, i.start + i.duration]));
+  const start = new Map(track.items.map((i) => [i.id, i.start]));
+  track.transitions = track.transitions.filter(
+    (t) =>
+      end.has(t.fromItemId) &&
+      start.has(t.toItemId) &&
+      end.get(t.fromItemId) === start.get(t.toItemId),
+  );
+}
+
 /** Move an edge: `in` (positive = later start, shorter) or `out` (positive = longer), in flicks. */
 export const trimItem = defineCommand({
   type: 'core/timeline.trim',
   payload: z.strictObject({ ...Ref, edge: z.enum(['in', 'out']), delta: z.int() }),
   label: ({ edge }) => `Trim ${edge === 'in' ? 'start' : 'end'}`,
   apply: (d, { timelineId, itemId, edge, delta }) => {
-    const { item } = find(d, timelineId, itemId, 'core/timeline.trim');
+    const { item, track } = find(d, timelineId, itemId, 'core/timeline.trim');
     if (edge === 'in') {
       item.start += delta;
       item.duration -= delta;
@@ -80,6 +93,7 @@ export const trimItem = defineCommand({
       );
     }
     markEdited(item);
+    pruneTransitions(track);
   },
   merge: {
     key: ({ timelineId, itemId, edge }) => `${timelineId}/${itemId}/${edge}`,
@@ -92,9 +106,10 @@ export const moveItem = defineCommand({
   payload: z.strictObject({ ...Ref, start: Flicks }),
   label: () => 'Move clip',
   apply: (d, { timelineId, itemId, start }) => {
-    const { item } = find(d, timelineId, itemId, 'core/timeline.move');
+    const { item, track } = find(d, timelineId, itemId, 'core/timeline.move');
     item.start = start;
     markEdited(item);
+    pruneTransitions(track);
   },
   merge: { key: ({ timelineId, itemId }) => `${timelineId}/${itemId}`, windowMs: 1000 },
 });
@@ -162,6 +177,20 @@ export const toPlaceholder = defineCommand({
   },
 });
 
+/** Set the effects on a picture item by hand; a rebuild of the cut keeps them. */
+export const setItemEffects = defineCommand({
+  type: 'core/timeline.set-effects',
+  payload: z.strictObject({ ...Ref, effects: z.array(EffectInstance).max(8) }),
+  label: ({ effects }) => (effects.length ? 'Change effects' : 'Remove effects'),
+  apply: (d, { timelineId, itemId, effects }) => {
+    const { item } = find(d, timelineId, itemId, 'core/timeline.set-effects');
+    if (item.kind === 'caption' || item.kind === 'placeholder')
+      throw new CommandError('core/timeline.set-effects', `a ${item.kind} cannot carry effects`);
+    item.effects = effects;
+    markEdited(item);
+  },
+});
+
 export const deleteItem = defineCommand({
   type: 'core/timeline.delete',
   payload: z.strictObject(Ref),
@@ -194,6 +223,7 @@ export const timelineCommands = [
   moveItem,
   swapTake,
   toPlaceholder,
+  setItemEffects,
   deleteItem,
   setTrackLocked,
 ] as unknown as readonly CommandDef<unknown>[];

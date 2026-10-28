@@ -78,6 +78,46 @@ const it_ = (id: string) =>
 const ref = (itemId: string) => ({ timelineId: 'tl_rough', itemId });
 
 describe('core/timeline commands', () => {
+  it('a trim or move that parts two items drops the transition between them', () => {
+    const t = structuredClone(tl());
+    const [a, b] = t.tracks[0]!.items;
+    t.tracks[0]!.transitions = [
+      {
+        id: 'tr_x',
+        transitionId: 'core/crossfade',
+        fromItemId: a!.id,
+        toItemId: b!.id,
+        duration: 1000,
+        params: {},
+      },
+    ];
+    store.dispatch('core/timeline.set', { timeline: t });
+    store.dispatch('core/timeline.trim', {
+      ...ref(a!.id),
+      edge: 'out',
+      delta: -FLICKS_PER_SECOND / 10,
+    });
+    expect(tl().tracks[0]!.transitions).toEqual([]);
+    store.undo();
+    expect(tl().tracks[0]!.transitions).toHaveLength(1);
+  });
+
+  it('sets effects on an item by hand, marks it edited so a rebuild keeps them, and undoes', () => {
+    const effects = [
+      { id: 'fx_1', effectId: 'core/grain', enabled: true, params: { strength: 20 } },
+    ];
+    store.dispatch('core/timeline.set-effects', { ...ref('rc_a'), effects });
+    const a = tl().tracks[0]!.items.find((i) => i.id === 'rc_a')!;
+    expect(a.kind === 'clip' && a.effects).toEqual(effects);
+    expect(isUserEdited(a)).toBe(true);
+    store.undo();
+    const back = tl().tracks[0]!.items.find((i) => i.id === 'rc_a')!;
+    expect(back.kind === 'clip' && back.effects).toEqual([]);
+    expect(() => store.dispatch('core/timeline.set-effects', { ...ref('rc_b'), effects })).toThrow(
+      /placeholder cannot carry effects/,
+    );
+  });
+
   it('set creates or replaces a whole timeline in one undo step', () => {
     expect(tl().name).toBe('Rough cut');
     store.dispatch('core/timeline.set', { timeline: { ...cut(), name: 'Rough cut 2' } });

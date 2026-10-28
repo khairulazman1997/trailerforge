@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@trailerforge/core": "workspace:*",
+    "@trailerforge/effects": "workspace:*",
     "@trailerforge/llm": "workspace:*",
     "@trailerforge/plugin-api": "workspace:*",
     "@trailerforge/schema": "workspace:*",

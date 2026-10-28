@@ -20,6 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@trailerforge/effects": "workspace:*",
     "@trailerforge/schema": "workspace:*"
   }
 }

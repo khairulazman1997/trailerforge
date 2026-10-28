@@ -1,5 +1,5 @@
 import { defineCommand, type CommandDef } from '@trailerforge/core';
-import { Id, Section, Storyboard, VoLine } from '@trailerforge/schema';
+import { Id, MusicPlan, Section, Storyboard, VoLine } from '@trailerforge/schema';
 import { z } from 'zod';
 import { storyboardEditCommands } from './edit.js';
 import {
@@ -46,15 +46,19 @@ export const setStoryboard = defineCommand({
  * Swap one unlocked section, keeping its id, and drop references to the slots it no longer has
  * (VO lines that only narrated them, hit points, SFX cues, variant overrides).
  */
+const SfxCue = MusicPlan.shape.sfxCues.unwrap().element;
+
 export const replaceSection = defineCommand({
   type: 'core/storyboard.replace-section',
   payload: z.strictObject({
     sectionId: Id,
     section: Section,
     voLines: z.array(VoLine).default([]),
+    /** Sounds suggested for the new section's slots. */
+    sfxCues: z.array(SfxCue).default([]),
   }),
   label: ({ section }) => `Regenerate ${section.name}`,
-  apply: (d, { sectionId, section, voLines }) => {
+  apply: (d, { sectionId, section, voLines, sfxCues }) => {
     const sb = d.storyboard;
     const idx = sb?.sections.findIndex((s) => s.id === sectionId) ?? -1;
     if (!sb || idx < 0) throw new Error(`no section "${sectionId}"`);
@@ -66,6 +70,7 @@ export const replaceSection = defineCommand({
     sb.sections[idx] = { ...section, id: sectionId, locked: false };
     cleanupRemovedSlots(d, gone);
     sb.voLines.push(...voLines);
+    sb.music.sfxCues.push(...sfxCues);
     sb.revision += 1;
   },
 });

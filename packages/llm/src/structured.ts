@@ -50,6 +50,7 @@ export function jsonSchemaFor(
     // reply is checked against the Zod schema afterwards, so nothing is lost.
     delete json.$schema;
     stripFormats(json);
+    splitTypeUnions(json);
   }
   return JSON.stringify(json);
 }
@@ -60,6 +61,21 @@ function stripFormats(node: unknown): void {
   const o = node as Record<string, unknown>;
   if (typeof o.format === 'string') delete o.format; // a keyword; a property named so is an object
   Object.values(o).forEach(stripFormats);
+}
+
+/**
+ * `type: ["number", "string"]` (how Zod writes a union of plain types) as `anyOf` of one type
+ * each: strict validators refuse type arrays (Ajv's strictTypes), `anyOf` means the same.
+ */
+function splitTypeUnions(node: unknown): void {
+  if (Array.isArray(node)) return node.forEach(splitTypeUnions);
+  if (!node || typeof node !== 'object') return;
+  const o = node as Record<string, unknown>;
+  if (Array.isArray(o.type) && o.type.every((t) => typeof t === 'string')) {
+    o.anyOf = o.type.map((t) => ({ type: t }));
+    delete o.type;
+  }
+  Object.values(o).forEach(splitTypeUnions);
 }
 
 /** Instructions appended to every structured request, for providers without native schemas. */

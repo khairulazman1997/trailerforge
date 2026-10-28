@@ -96,11 +96,15 @@ export function mergeRoughCut(
     if (locked.has(t.id)) return prevTracks.get(t.id)!;
     if (!PICTURE.has(t.kind)) return t;
     const items = out.filter((o) => o.trackId === t.id).map((o) => o.item);
-    const ids = new Set(items.map((i) => i.id));
     return {
       ...t,
       items,
-      transitions: t.transitions.filter((x) => ids.has(x.fromItemId) && ids.has(x.toItemId)),
+      // A transition needs its two items to still meet exactly.
+      transitions: t.transitions.filter((x) => {
+        const a = items.find((i) => i.id === x.fromItemId);
+        const b = items.find((i) => i.id === x.toItemId);
+        return !!a && !!b && a.start + a.duration === b.start;
+      }),
     };
   });
   // Edited items on a track the new cut does not have (e.g. the cards track went away).

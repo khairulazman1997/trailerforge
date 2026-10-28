@@ -16,8 +16,19 @@ import {
 } from '@trailerforge/schema';
 import { SectionLockedError } from './commands.js';
 import { userEditedFields } from './user-edits.js';
-import { convertSections, sectionSeconds, type ConvertContext } from './convert.js';
-import { GeneratedSection, GeneratedStoryboard } from './output.js';
+import {
+  convertSections,
+  sectionSeconds,
+  type ConvertContext,
+  type Suggestion,
+} from './convert.js';
+import { builtinFilters, SFX_KINDS, type FilterRegistry } from '@trailerforge/effects';
+import {
+  generationSchemas,
+  type GeneratedSection,
+  type GeneratedStoryboard,
+  type InstalledPicks,
+} from './output.js';
 
 export const STORYBOARD_PROMPTS_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -28,6 +39,42 @@ export const STORYBOARD_PROMPTS_DIR = resolve(
 export interface GenerateDeps {
   llm: LlmClient;
   now?: () => Date;
+  /** Installed transitions and effects the model may pick from (default: the built-in set). */
+  filters?: FilterRegistry;
+}
+
+/** What the model may pick: ids from the installed registry, and the sounds we can make. */
+function installed(deps: GenerateDeps) {
+  const filters = deps.filters ?? builtinFilters();
+  const picks: InstalledPicks = {
+    transitions: filters.ids('transition'),
+    effects: filters.ids('effect'),
+    sounds: [...SFX_KINDS],
+  };
+  return {
+    filters,
+    schemas: generationSchemas(picks),
+    // Shown to the model under "Transitions, effects and sounds".
+    guide: [
+      `Transitions (transitionIn.id): ${picks.transitions.join(', ') || '(none installed)'}`,
+      `Effects (effect.id): ${picks.effects.join(', ') || '(none installed)'}`,
+      `Sounds (sound.kind): ${picks.sounds.join(', ')}`,
+    ].join('\n'),
+  };
+}
+
+/** One decision record per suggested transition, effect or sound, with the model's reason. */
+function suggestionDecisions(at: Date, suggestions: readonly Suggestion[], inputsHash: string) {
+  return suggestions.map((x) =>
+    decision(at, {
+      step: 'core/storyboard-suggest',
+      subject: { kind: 'slot', id: x.slotId },
+      choice: { [x.what]: x.id },
+      reasons: { what: x.what },
+      summary: `Suggested ${x.what} ${x.id.replace(/^core\//, '')}: ${x.why}`,
+      inputsHash: sha256(`${inputsHash}|${x.slotId}|${x.what}|${x.id}`),
+    }),
+  );
 }
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -82,6 +129,8 @@ async function systemPrompt(project: Project) {
 export interface GenerateResult {
   storyboard: Storyboard;
   decisions: DecisionRecord[];
+  /** Suggestions that were dropped or simplified, for the user to see. */
+  warnings: string[];
 }
 
 /**
@@ -144,6 +193,7 @@ export async function generateStoryboard(
 
   const ctx = promptContext(project);
   const system = await systemPrompt(project);
+  const inst = installed(deps);
   const prompt = await loadPrompt(
     'storyboard.generate',
     {
@@ -155,15 +205,16 @@ export async function generateStoryboard(
       brief: ctx.brief,
       assumptions: ctx.assumptions,
       knowledge: ctx.knowledge,
+      picks: inst.guide,
     },
     [STORYBOARD_PROMPTS_DIR],
   );
   const r = await deps.llm.generate(
     'storyboard.generate',
-    { system, prompt, schema: GeneratedStoryboard },
+    { system, prompt, schema: inst.schemas.GeneratedStoryboard },
     opts.signal,
   );
-  const gen = r.value;
+  const gen = r.value as GeneratedStoryboard;
 
   // A generated section with the role of a locked one is a duplicate the model wrote anyway:
   // the locked section takes its place. Remaining locked sections go back to their old index.
@@ -184,6 +235,7 @@ export async function generateStoryboard(
     taken,
     entityIds: ctx.entityIds,
     cardTemplates: cardTemplatesOf(skeleton),
+    filters: inst.filters,
   });
   let next = 0;
   const sections = plan.map((x) => ('gen' in x ? converted.sections[next++]! : x.locked));
@@ -210,7 +262,7 @@ export async function generateStoryboard(
       ...(bpm && { bpm }),
       structure: [],
       hitPoints: keptHits,
-      sfxCues: keptSfx,
+      sfxCues: [...keptSfx, ...converted.sfxCues],
     },
     variants: keptVariants,
     extensions: existing?.extensions ?? {},
@@ -242,13 +294,20 @@ export async function generateStoryboard(
       summary: gen.rationale,
       inputsHash: sha256(`${system}\n${prompt}`),
     }),
+    ...suggestionDecisions(at, converted.suggestions, sha256(`${system}\n${prompt}`)),
   ];
-  return { storyboard, decisions };
+  return { storyboard, decisions, warnings: converted.warnings };
 }
 
 export interface RegenerateSectionResult {
-  payload: { sectionId: string; section: Section; voLines: VoLine[] };
+  payload: {
+    sectionId: string;
+    section: Section;
+    voLines: VoLine[];
+    sfxCues: Storyboard['music']['sfxCues'];
+  };
   decisions: DecisionRecord[];
+  warnings: string[];
 }
 
 /**
@@ -298,6 +357,7 @@ export async function regenerateSection(
 
   const ctx = promptContext(project);
   const system = await systemPrompt(project);
+  const inst = installed(deps);
   const prompt = await loadPrompt(
     'storyboard.regenerate-section',
     {
@@ -316,14 +376,16 @@ export async function regenerateSection(
       instruction: opts.instruction?.trim() || '(nothing specific; make it stronger)',
       brief: ctx.brief,
       knowledge: ctx.knowledge,
+      picks: inst.guide,
     },
     [STORYBOARD_PROMPTS_DIR],
   );
   const r = await deps.llm.generate(
     'storyboard.regenerate-section',
-    { system, prompt, schema: GeneratedSection },
+    { system, prompt, schema: inst.schemas.GeneratedSection },
     opts.signal,
   );
+  const value = r.value as GeneratedSection;
 
   // The old section's slot and VO ids are being replaced, so they are free to reuse.
   const oldSlotIds = new Set(target.slots.map((s) => s.id));
@@ -340,9 +402,9 @@ export async function regenerateSection(
   taken.add(target.id);
   for (const { slot } of pinned) taken.add(slot.id);
   const converted = convertSections(
-    [r.value.section],
+    [value.section],
     budget,
-    { taken, entityIds: ctx.entityIds, cardTemplates: cardTemplatesOf(sb) },
+    { taken, entityIds: ctx.entityIds, cardTemplates: cardTemplatesOf(sb), filters: inst.filters },
     target.id,
   );
   // The role is the template's hint for this position; keep it so critique still knows it.
@@ -373,9 +435,19 @@ export async function regenerateSection(
         instruction: opts.instruction ?? null,
         replacedSlotIds: [...oldSlotIds],
       },
-      summary: r.value.rationale,
+      summary: value.rationale,
       inputsHash: sha256(`${system}\n${prompt}`),
     }),
+    ...suggestionDecisions(at, converted.suggestions, sha256(`${system}\n${prompt}`)),
   ];
-  return { payload: { sectionId: target.id, section, voLines: converted.voLines }, decisions };
+  return {
+    payload: {
+      sectionId: target.id,
+      section,
+      voLines: converted.voLines,
+      sfxCues: converted.sfxCues,
+    },
+    decisions,
+    warnings: converted.warnings,
+  };
 }

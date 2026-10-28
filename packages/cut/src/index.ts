@@ -6,3 +6,4 @@ export * from './captions.js';
 export * from './metrics.js';
 export * from './variants.js';
 export * from './reframe.js';
+export * from './accents.js';

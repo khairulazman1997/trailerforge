@@ -120,9 +120,16 @@ describe('buildRoughCut', () => {
     ).toBe('graphic');
     const music = timeline.tracks.find((k) => k.id === 'trk_music')!.items[0]!;
     expect(music).toMatchObject({ kind: 'clip', assetId: 'asset_music', start: 0 });
-    expect(decisions.length).toBe(timeline.tracks.flatMap((k) => k.items).length);
+    // One decision per item and per transition (the storyboard's flash out of the parry).
+    const transitions = timeline.tracks.flatMap((k) => k.transitions);
+    expect(transitions.map((t) => [t.id, t.transitionId])).toEqual([
+      ['tr_shot_parry_out', 'core/flash'],
+    ]);
+    expect(decisions.length).toBe(
+      timeline.tracks.flatMap((k) => k.items).length + transitions.length,
+    );
     expect(decisions.every((d) => d.step === 'core/rough-cut' && d.summary.length > 0)).toBe(true);
-    expect(warnings).toEqual([]);
+    expect(warnings).toEqual(['1 sound cue is not placed: no sound effects are set up yet']);
     expect(timeline).toMatchSnapshot();
   });
 
