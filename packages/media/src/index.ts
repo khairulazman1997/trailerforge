@@ -7,3 +7,4 @@ export * from './operations.js';
 export * from './loudness.js';
 export * from './disk.js';
 export * from './quality-gate.js';
+export * from './sfx-folder.js';

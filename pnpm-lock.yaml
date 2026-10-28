@@ -353,6 +353,9 @@ importers:
 
   packages/media:
     dependencies:
+      '@trailerforge/effects':
+        specifier: workspace:*
+        version: link:../effects
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema
