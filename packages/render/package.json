@@ -21,9 +21,13 @@
   },
   "dependencies": {
     "@resvg/resvg-js": "2.6.2",
+    "@trailerforge/compile": "workspace:*",
     "@trailerforge/core": "workspace:*",
     "@trailerforge/graphics": "workspace:*",
-    "@trailerforge/schema": "workspace:*"
+    "@trailerforge/jobs": "workspace:*",
+    "@trailerforge/media": "workspace:*",
+    "@trailerforge/schema": "workspace:*",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "playwright-core": "1.64.1"
