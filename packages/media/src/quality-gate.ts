@@ -6,6 +6,8 @@ export type Severity = 'error' | 'warning' | 'info';
 export interface QualityFinding {
   checkId: string;
   severity: Severity;
+  /** For errors: `hard` blocks always, `override` until the user overrides it with a reason. */
+  tier?: 'hard' | 'override' | 'warning';
   message: string;
   /** Seconds into the output, when the finding is localized. */
   at?: { start: number; end?: number };

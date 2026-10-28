@@ -15,7 +15,7 @@ import { DRAFT_ENCODE, type SourceMedia } from '@trailerforge/compile';
 import { MediaError } from '@trailerforge/media';
 import { Timeline, framesToFlicks, rate } from '@trailerforge/schema';
 import { EXPORT_PRESETS, posterTime, resolveExport } from '@trailerforge/compile';
-import { measureLoudness } from '@trailerforge/media';
+import { measureLoudness, runOutputGate } from '@trailerforge/media';
 import { planSegments, renderVideo, writePoster, type RenderSpec } from './video.js';
 
 /** Resumable renders on real FFmpeg: interrupted runs finish byte-identical to clean ones. */
@@ -107,6 +107,20 @@ describe('renderVideo', { timeout: 120_000 }, () => {
     const again = await renderVideo(spec(out), { workRoot });
     expect([again.reused, again.rendered]).toEqual([2, 1]);
     expect(again.sha256).toBe(clean.sha256);
+  });
+
+  it('a clean render passes the output Quality Gate', async () => {
+    const out = join(root, 'out', 'gate.mp4');
+    await renderVideo(spec(out), { workRoot: join(root, 'work-a') });
+    const report = await runOutputGate(out, {
+      width: 160,
+      height: 90,
+      rate: R,
+      frames: 72,
+      loudness: { lufs: -14, truePeakDb: -1 },
+    });
+    // The placeholder slate is dark grey, not black; nothing should block.
+    expect(report.findings).toEqual([]);
   });
 
   it('writes a file with the picture and the mastered sound', async () => {
