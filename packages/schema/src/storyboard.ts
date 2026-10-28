@@ -240,6 +240,22 @@ export type ReframeSettings = z.infer<typeof ReframeSettings>;
  * its rules and sparse per-slot overrides are stored, never a timeline, so edits to the master
  * flow into every variant.
  */
+/**
+ * How a version is exported: a user choice, stored with the version. The preset says container,
+ * codec, loudness and bitrate (`presets.ts` in `@trailerforge/compile`); everything else here
+ * only overrides a detail. Unknown preset ids are reported when the export is built.
+ */
+export const ExportSettings = z.strictObject({
+  presetId: z.string().min(1).max(64),
+  /** File name template without extension; `{project}`, `{version}`, `{format}`, `{preset}`. */
+  fileName: z.string().min(1).max(120).optional(),
+  /** Loudness target override, LUFS. */
+  loudnessLufs: z.number().min(-30).max(-6).optional(),
+  /** Where the poster frame is taken, seconds into the version. */
+  posterSeconds: z.number().min(0).max(600).optional(),
+});
+export type ExportSettings = z.infer<typeof ExportSettings>;
+
 export const StoryboardVariant = z.strictObject({
   id: Id,
   name: z.string().default(''),
@@ -250,6 +266,8 @@ export const StoryboardVariant = z.strictObject({
   /** Derivation ruleset from a platform profile; reserved, not used yet. */
   rulesetId: PluginRef.optional(),
   overrides: z.record(Id, SlotOverride).default({}),
+  /** Export choices for this version; unset means the preset for its format target. */
+  export: ExportSettings.optional(),
 });
 export type StoryboardVariant = z.infer<typeof StoryboardVariant>;
 export const Variant = StoryboardVariant;

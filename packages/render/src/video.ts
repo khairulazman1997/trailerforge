@@ -300,6 +300,7 @@ export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promis
       '-i', audioFile,
       '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy',
       ...(spec.audioCodec ?? DEFAULT_AUDIO),
+      ...(container === 'mp4' || container === 'mov' ? ['-movflags', '+faststart'] : []),
       '-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-map_chapters', '-1',
       '-f', container, outTmp,
     ]); // prettier-ignore
@@ -349,4 +350,30 @@ export const renderVideoJob = (deps: { tools?: FfmpegTools }) =>
 
 export function registerRenderJobs(queue: JobQueue, deps: { tools?: FfmpegTools } = {}): void {
   queue.register(renderVideoJob(deps));
+}
+
+/**
+ * The poster frame of a finished file as a PNG (written to a temp file, then renamed). `seconds`
+ * is clamped by the caller (`posterTime` in `@trailerforge/compile`).
+ */
+export async function writePoster(
+  video: string,
+  seconds: number,
+  dest: string,
+  opts: { signal?: AbortSignal; tools?: FfmpegTools } = {},
+): Promise<void> {
+  const tools = opts.tools ?? resolveTools();
+  await mkdir(dirname(dest), { recursive: true });
+  const t = `${dest}.tmp-${process.pid}`;
+  try {
+    await runTool(
+      tools.ffmpeg,
+      ['-hide_banner', '-nostdin', '-y', '-loglevel', 'error', '-ss', String(seconds), '-i', video,
+        '-frames:v', '1', '-an', '-f', 'image2', '-c:v', 'png', t], // prettier-ignore
+      opts.signal ? { signal: opts.signal } : {},
+    );
+    await rename(t, dest);
+  } finally {
+    await rm(t, { force: true });
+  }
 }

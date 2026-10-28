@@ -1,12 +1,22 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  truncateSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DRAFT_ENCODE, type SourceMedia } from '@trailerforge/compile';
 import { MediaError } from '@trailerforge/media';
 import { Timeline, framesToFlicks, rate } from '@trailerforge/schema';
-import { planSegments, renderVideo, type RenderSpec } from './video.js';
+import { EXPORT_PRESETS, posterTime, resolveExport } from '@trailerforge/compile';
+import { measureLoudness } from '@trailerforge/media';
+import { planSegments, renderVideo, writePoster, type RenderSpec } from './video.js';
 
 /** Resumable renders on real FFmpeg: interrupted runs finish byte-identical to clean ones. */
 
@@ -110,5 +120,77 @@ describe('renderVideo', { timeout: 120_000 }, () => {
     const a = probe.streams.find((s) => s.codec_type === 'audio')!;
     expect(v).toMatchObject({ width: 160, height: 90, nb_read_packets: '72' });
     expect(a).toMatchObject({ sample_rate: '48000' });
+  });
+});
+
+describe('export presets, rendered', { timeout: 300_000 }, () => {
+  const sizes: Record<string, [number, number]> = {
+    'core/youtube': [640, 360],
+    'core/steam': [1920, 1080],
+    'core/vertical': [360, 640],
+    'core/x': [640, 360],
+    'core/master': [640, 360],
+  };
+
+  it.each(EXPORT_PRESETS.map((p) => p.id))(
+    '%s renders a 2 s file that probes as specified',
+    async (id) => {
+      const [width, height] = sizes[id]!;
+      const base = spec('');
+      const timeline = Timeline.parse({
+      ...base.timeline,
+      resolution: { width, height },
+      tracks: [
+        { id: 'trk_v', kind: 'video', items: [{ id: 'a', kind: 'clip', start: 0, duration: f(48), assetId: 'c', sourceIn: 0 }] },
+        { id: 'trk_m', kind: 'audio', items: [{ id: 'mu', kind: 'clip', start: 0, duration: f(48), assetId: 'm', sourceIn: 0 }] },
+      ],
+    }); // prettier-ignore
+      const r = resolveExport(id, { resolution: { width, height }, frameRate: R });
+      expect(r.issues).toEqual([]);
+      const out = join(root, 'presets', `${id.replace('/', '-')}.${r.extension}`);
+      await renderVideo(
+      { ...base, timeline, encode: r.encode, audioCodec: r.audioCodec, loudness: r.loudness, segmentSeconds: 1, output: out },
+      { workRoot: join(root, 'work-presets') },
+    ); // prettier-ignore
+      const probe = JSON.parse(
+      execFileSync('ffprobe', ['-v', 'error', '-count_packets', '-show_entries',
+        'stream=codec_type,codec_name,width,height,pix_fmt,sample_rate,bit_rate,nb_read_packets,duration:format=format_name,duration',
+        '-of', 'json', out]).toString(),
+    ) as { streams: Record<string, string>[]; format: { format_name: string; duration: string } }; // prettier-ignore
+      const v = probe.streams.find((s) => s.codec_type === 'video')!;
+      const a = probe.streams.find((s) => s.codec_type === 'audio')!;
+      const p = r.preset;
+      expect(v).toMatchObject({
+        codec_name: p.id === 'core/master' ? 'prores' : 'h264',
+        width,
+        height,
+        nb_read_packets: '48',
+        pix_fmt: p.video.pixFmt,
+      });
+      expect(a).toMatchObject({
+        codec_name: p.id === 'core/master' ? 'pcm_s24le' : 'aac',
+        sample_rate: '48000',
+      });
+      expect(probe.format.format_name).toContain(p.container === 'mov' ? 'mov' : 'mp4');
+      expect(Number(probe.format.duration)).toBeGreaterThan(1.95);
+      expect(Number(probe.format.duration)).toBeLessThan(2.1);
+      if (id === 'core/steam') expect(Number(v.bit_rate)).toBeLessThanOrEqual(14_000_000 * 1.1);
+      const loud = await measureLoudness(out);
+      expect(Math.abs(loud.integratedLufs - p.loudness.lufs)).toBeLessThanOrEqual(1);
+      expect(loud.truePeakDb).toBeLessThanOrEqual(-0.5);
+      // Web files start fast: the index (moov) comes before the media data.
+      if (p.container === 'mp4') {
+        const head = readFileSync(out).subarray(0, 4096).toString('latin1');
+        expect(head.indexOf('moov')).toBeGreaterThan(-1);
+      }
+    },
+  );
+
+  it('writes a poster frame', async () => {
+    const png = join(root, 'out', 'poster.png');
+    await writePoster(join(root, 'out', 'probe.mp4'), posterTime(3), png);
+    const head = readFileSync(png).subarray(0, 8);
+    expect([...head]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(readdirSync(join(root, 'out')).filter((x) => x.includes('.tmp'))).toEqual([]);
   });
 });
