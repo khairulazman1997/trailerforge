@@ -24,6 +24,8 @@ import {
 } from '@trailerforge/service/client';
 import type { DecisionRecord } from '@trailerforge/schema';
 import type { Connection } from './connection.js';
+import { nextStepFor, type NextStep } from './failure-view.js';
+import { matchRoute } from './router.js';
 
 enablePatches();
 
@@ -177,6 +179,8 @@ export interface Toast {
   id: number;
   kind: 'error' | 'info';
   message: string;
+  /** Where to go next, for an error that has an obvious fix. */
+  next?: NextStep | null;
 }
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'ready' | 'reconnecting' | 'failed';
@@ -458,7 +462,11 @@ export class AppStore {
           if (t.status === 'succeeded') await this.refreshReview(t.projectId);
         }
         if (t.status === 'failed') {
-          this.toast('error', `${t.kind} failed: ${t.error?.message ?? 'unknown error'}`);
+          this.toast(
+            'error',
+            `${t.kind} failed: ${t.error?.message ?? 'unknown error'}`,
+            nextStepFor(t.error?.code, t.projectId),
+          );
         } else if (t.status === 'succeeded' && t.kind === 'generate') {
           const r = t.result as { provider: string; slots: number; seconds: number } | undefined;
           if (r)
@@ -614,7 +622,7 @@ export class AppStore {
     try {
       return await fn(this.client);
     } catch (err) {
-      this.toast('error', describeFailure(err));
+      this.toast('error', describeFailure(err), this.nextStep(err));
       return undefined;
     }
   }
@@ -1311,9 +1319,17 @@ export class AppStore {
   }
 
   // ---- toasts ----
-  toast(kind: Toast['kind'], message: string): void {
-    const t: Toast = { id: ++this.toastId, kind, message };
+  toast(kind: Toast['kind'], message: string, next?: NextStep | null): void {
+    const t: Toast = { id: ++this.toastId, kind, message, ...(next ? { next } : {}) };
     this.set((s) => ({ toasts: [...s.toasts.slice(-4), t] }));
+  }
+  /** The next step for a failed request, using the project whose page is open. */
+  private nextStep(err: unknown): NextStep | null {
+    const r = typeof window === 'undefined' ? null : matchRoute(window.location.pathname);
+    return nextStepFor(
+      err instanceof ServiceError ? err.code : undefined,
+      r?.name === 'project' ? r.id : null,
+    );
   }
   dismissToast = (id: number): void =>
     this.set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));

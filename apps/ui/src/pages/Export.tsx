@@ -50,7 +50,8 @@ export function ExportPage({ id }: { id: string }) {
         <h1>Export</h1>
         <p>
           There is nothing to export yet. Build the rough cut in the Cut tab; each version you add
-          in the Versions tab then shows up here.
+          in the Versions tab then shows up here.{' '}
+          <Link to={projectPath(id, 'cut')}>Open the Cut tab</Link>
         </p>
       </>
     );

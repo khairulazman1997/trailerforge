@@ -2,6 +2,7 @@ import type { DragEvent } from 'react';
 import type { KnowledgeEntity, Section } from '@trailerforge/schema';
 import { stepTarget, type MoveTarget } from '../storyboard-view.js';
 import { EditableText } from './EditableText.js';
+import { Chunked } from './Chunked.js';
 import { SlotRow, type SlotPatch } from './SlotRow.js';
 
 export interface DropMark {
@@ -131,37 +132,39 @@ export function SectionCard(p: SectionCardProps) {
         onDragOver={(e) => p.onDragOverEnd(s.id, e)}
         onDrop={p.onDrop}
       >
-        {s.slots.map((slot, i) => {
-          const mark =
-            p.dropMark?.sectionId === s.id
-              ? p.dropMark.beforeSlotId === slot.id
-                ? 'before'
-                : p.dropMark.beforeSlotId === null && i === s.slots.length - 1
-                  ? 'after'
-                  : null
-              : null;
-          return (
-            <SlotRow
-              key={slot.id}
-              slot={slot}
-              entities={p.entities}
-              readOnly={readOnly}
-              canMoveUp={stepTarget(p.sections, slot.id, -1) !== null}
-              canMoveDown={stepTarget(p.sections, slot.id, 1) !== null}
-              dropMark={mark}
-              onPatch={(patch) => p.onPatchSlot(slot.id, patch)}
-              onRemove={() => p.onRemoveSlot(slot.id)}
-              onStep={(delta) => {
-                const t = stepTarget(p.sections, slot.id, delta);
-                if (t) p.onMoveSlot(slot.id, t);
-              }}
-              onDragStart={(e, row) => p.onDragStart(slot.id, e, row)}
-              onDragEnd={p.onDragEnd}
-              onDragOver={(e) => p.onDragOverRow(s.id, slot.id, e)}
-              onDrop={p.onDrop}
-            />
-          );
-        })}
+        <Chunked items={s.slots}>
+          {(slot, i) => {
+            const mark =
+              p.dropMark?.sectionId === s.id
+                ? p.dropMark.beforeSlotId === slot.id
+                  ? 'before'
+                  : p.dropMark.beforeSlotId === null && i === s.slots.length - 1
+                    ? 'after'
+                    : null
+                : null;
+            return (
+              <SlotRow
+                key={slot.id}
+                slot={slot}
+                entities={p.entities}
+                readOnly={readOnly}
+                canMoveUp={stepTarget(p.sections, slot.id, -1) !== null}
+                canMoveDown={stepTarget(p.sections, slot.id, 1) !== null}
+                dropMark={mark}
+                onPatch={(patch) => p.onPatchSlot(slot.id, patch)}
+                onRemove={() => p.onRemoveSlot(slot.id)}
+                onStep={(delta) => {
+                  const t = stepTarget(p.sections, slot.id, delta);
+                  if (t) p.onMoveSlot(slot.id, t);
+                }}
+                onDragStart={(e, row) => p.onDragStart(slot.id, e, row)}
+                onDragEnd={p.onDragEnd}
+                onDragOver={(e) => p.onDragOverRow(s.id, slot.id, e)}
+                onDrop={p.onDrop}
+              />
+            );
+          }}
+        </Chunked>
         {s.slots.length === 0 && (
           <li className="empty-slots muted">
             No slots yet.{!readOnly && ' Add one below, or drag one here.'}

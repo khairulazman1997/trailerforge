@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppState, useStore } from './app-context.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { desktop } from './desktop.js';
 import { HandoffHost } from './components/HandoffHost.js';
+import { ShortcutsDialog } from './components/ShortcutsDialog.js';
 import { Toasts } from './components/Toasts.js';
 import { clearConnection } from './connection.js';
 import { ConnectPage } from './pages/Connect.js';
@@ -11,6 +12,7 @@ import { ProjectPage } from './pages/Project.js';
 import { SetupPage } from './pages/Setup.js';
 import { SettingsPage } from './pages/Settings.js';
 import { Link, projectPath, useRoute } from './router.js';
+import { isTyping } from './shortcuts.js';
 import { busyTask, type AppStore, type ConnectionStatus } from './store.js';
 
 const STATUS_TEXT: Record<ConnectionStatus, string> = {
@@ -58,20 +60,19 @@ function Shell({ store }: { store: AppStore }) {
   const view = useAppState((s) => (current ? s.projects[current] : undefined));
   const busy = useAppState((s) => (current ? busyTask(s, current) : undefined));
 
-  // Ctrl/Cmd+Z and Shift+Ctrl/Cmd+Z (or Ctrl+Y) undo/redo the open project, except while typing,
-  // where the text field's own undo should win.
+  const [showKeys, setShowKeys] = useState(false);
+
+  // Shortcuts (listed in shortcuts.ts): Ctrl/Cmd+Z and Shift+Ctrl/Cmd+Z (or Ctrl+Y) undo/redo the
+  // open project and "?" opens the list, except while typing, where the text field should win.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!current || !(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === 'INPUT' ||
-          t.tagName === 'TEXTAREA' ||
-          t.tagName === 'SELECT' ||
-          t.isContentEditable)
-      )
+      if (isTyping(e.target)) return;
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setShowKeys(true);
+        e.preventDefault();
         return;
+      }
+      if (!current || !(e.ctrlKey || e.metaKey) || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === 'z' && !e.shiftKey) void store.undo(current);
       else if ((k === 'z' && e.shiftKey) || k === 'y') void store.redo(current);
@@ -84,6 +85,20 @@ function Shell({ store }: { store: AppStore }) {
 
   return (
     <>
+      <a
+        href="#main"
+        className="skip-link"
+        onClick={(e) => {
+          e.preventDefault();
+          const main = document.querySelector('main');
+          if (main) {
+            main.tabIndex = -1;
+            main.focus();
+          }
+        }}
+      >
+        Skip to the page
+      </a>
       <header className="topbar">
         <Link to="/" className="brand">
           TrailerForge
@@ -130,6 +145,15 @@ function Shell({ store }: { store: AppStore }) {
             </button>
           </div>
         )}
+        <button
+          type="button"
+          className="ghost"
+          title="Keyboard shortcuts (?)"
+          aria-haspopup="dialog"
+          onClick={() => setShowKeys(true)}
+        >
+          Shortcuts
+        </button>
         <HandoffHost />
         <span className={`status ${status}`} role="status" data-testid="connection-status">
           <span className="dot" aria-hidden="true" />
@@ -150,6 +174,11 @@ function Shell({ store }: { store: AppStore }) {
           </button>
         )}
       </header>
+      <ShortcutsDialog
+        open={showKeys}
+        tab={route.name === 'project' ? route.tab : null}
+        onClose={() => setShowKeys(false)}
+      />
       {route.name === 'home' && <HomePage />}
       {route.name === 'settings' && <SettingsPage />}
       {route.name === 'setup' && <SetupPage />}

@@ -3,6 +3,7 @@ import type { ReviewComment } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
 import { CritiqueDialog } from '../components/CritiqueDialog.js';
 import { OverrideField } from '../components/OverrideField.js';
+import { Link, projectPath } from '../router.js';
 import { busyTask } from '../store.js';
 import {
   APPROVAL_LABEL,
@@ -47,7 +48,8 @@ export function ReviewPage({ id }: { id: string }) {
         <h1>Review</h1>
         <p>
           There is nothing to review yet. Build the rough cut in the Cut tab; each version you add
-          in the Versions tab then shows up here.
+          in the Versions tab then shows up here.{' '}
+          <Link to={projectPath(id, 'cut')}>Open the Cut tab</Link>
         </p>
       </>
     );

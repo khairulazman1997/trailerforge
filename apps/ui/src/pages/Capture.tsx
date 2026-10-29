@@ -23,6 +23,7 @@ import {
   percent,
   splitSetup,
 } from '../capture-view.js';
+import { Chunked } from '../components/Chunked.js';
 import { Link, projectPath } from '../router.js';
 import { busyTask } from '../store.js';
 
@@ -229,51 +230,53 @@ export function CapturePage({ id }: { id: string }) {
                 onRemove={() => void cmd('game-trailer/capture.clear-tips', { key: g.key })}
               />
               <ol className="cap-items" aria-label={`Shots to record: ${groupTitle(g)}`}>
-                {g.items.map((it, i) => (
-                  <CaptureItemRow
-                    key={it.slotId}
-                    item={it}
-                    code={codes.get(it.slotId)}
-                    imported={importedFor(it.slotId)}
-                    chosenTakeId={slots.get(it.slotId)?.chosenTakeId}
-                    onChoose={(takeId) =>
-                      void cmd('core/takes.choose', { slotId: it.slotId, takeId })
-                    }
-                    onReject={(takeId, rejected) =>
-                      void cmd('core/takes.reject', { slotId: it.slotId, takeId, rejected })
-                    }
-                    index={i}
-                    count={g.items.length}
-                    disabled={disabled}
-                    dropMark={markFor(g, it.slotId)}
-                    onStatus={(status) =>
-                      cmd('game-trailer/capture.set-status', { slotId: it.slotId, status })
-                    }
-                    onNotes={(notes) =>
-                      void cmd('game-trailer/capture.set-notes', { slotId: it.slotId, notes })
-                    }
-                    onTakes={(takes) =>
-                      void cmd('game-trailer/capture.set-takes', { slotId: it.slotId, takes })
-                    }
-                    onSkip={() =>
-                      void cmd('game-trailer/capture.set-skipped', {
-                        slotId: it.slotId,
-                        skipped: true,
-                      })
-                    }
-                    onMove={(dir) => reorder(g, moveWithin(ids, it.slotId, dir))}
-                    onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = 'move';
-                      e.dataTransfer.setData('text/plain', it.slotId);
-                      const row = e.currentTarget.closest('li');
-                      if (row) e.dataTransfer.setDragImage(row, 12, 12);
-                      setDrag({ groupKey: g.key, slotId: it.slotId });
-                    }}
-                    onDragEnd={endDrag}
-                    onDragOver={(e) => overRow(g, it.slotId, e)}
-                    onDrop={(e) => drop(g, e)}
-                  />
-                ))}
+                <Chunked items={g.items}>
+                  {(it, i) => (
+                    <CaptureItemRow
+                      key={it.slotId}
+                      item={it}
+                      code={codes.get(it.slotId)}
+                      imported={importedFor(it.slotId)}
+                      chosenTakeId={slots.get(it.slotId)?.chosenTakeId}
+                      onChoose={(takeId) =>
+                        void cmd('core/takes.choose', { slotId: it.slotId, takeId })
+                      }
+                      onReject={(takeId, rejected) =>
+                        void cmd('core/takes.reject', { slotId: it.slotId, takeId, rejected })
+                      }
+                      index={i}
+                      count={g.items.length}
+                      disabled={disabled}
+                      dropMark={markFor(g, it.slotId)}
+                      onStatus={(status) =>
+                        cmd('game-trailer/capture.set-status', { slotId: it.slotId, status })
+                      }
+                      onNotes={(notes) =>
+                        void cmd('game-trailer/capture.set-notes', { slotId: it.slotId, notes })
+                      }
+                      onTakes={(takes) =>
+                        void cmd('game-trailer/capture.set-takes', { slotId: it.slotId, takes })
+                      }
+                      onSkip={() =>
+                        void cmd('game-trailer/capture.set-skipped', {
+                          slotId: it.slotId,
+                          skipped: true,
+                        })
+                      }
+                      onMove={(dir) => reorder(g, moveWithin(ids, it.slotId, dir))}
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', it.slotId);
+                        const row = e.currentTarget.closest('li');
+                        if (row) e.dataTransfer.setDragImage(row, 12, 12);
+                        setDrag({ groupKey: g.key, slotId: it.slotId });
+                      }}
+                      onDragEnd={endDrag}
+                      onDragOver={(e) => overRow(g, it.slotId, e)}
+                      onDrop={(e) => drop(g, e)}
+                    />
+                  )}
+                </Chunked>
               </ol>
             </section>
           );

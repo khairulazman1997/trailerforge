@@ -431,7 +431,7 @@ label.inline {
   white-space: nowrap;
 }
 .chip.answered {
-  color: var(--ok);
+  color: var(--ok-text);
   border-color: var(--ok);
 }
 .chip.assumed {
@@ -1718,4 +1718,32 @@ table.brand-contrast caption {
 .critique-fix em {
   font-style: normal;
   color: var(--text);
+}
+
+/* keyboard */
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -4rem;
+  z-index: 30;
+  background: var(--accent);
+  color: var(--accent-text);
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius);
+}
+.skip-link:focus {
+  top: 0.5rem;
+}
+kbd {
+  font: inherit;
+  font-size: 0.85em;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 0.35rem;
+  background: var(--surface);
+  color: var(--text);
+}
+main:focus {
+  outline: none;
 }
