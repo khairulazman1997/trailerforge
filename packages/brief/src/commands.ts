@@ -1,4 +1,5 @@
 import { defineCommand, type CommandDef } from '@trailerforge/core';
+import { SavedVideoType } from '@trailerforge/plugin-api';
 import { Assumption, FormatTarget, Id, PluginRef } from '@trailerforge/schema';
 import { z } from 'zod';
 import { setAt } from './path.js';
@@ -23,10 +24,21 @@ export const setBriefField = defineCommand({
 
 export const setVideoType = defineCommand({
   type: 'core/brief.set-video-type',
-  payload: z.strictObject({ videoTypeId: PluginRef }),
+  payload: z
+    .strictObject({
+      videoTypeId: PluginRef,
+      /** For a saved type: the project keeps its own copy, so later edits or deletes don't change it. */
+      saved: SavedVideoType.optional(),
+    })
+    .refine((p) => !p.saved || p.saved.id === p.videoTypeId, 'saved.id must be the videoTypeId'),
   label: () => 'Change video type',
-  apply: (d, { videoTypeId }) => {
+  apply: (d, { videoTypeId, saved }) => {
     d.brief.videoTypeId = videoTypeId;
+    const core = { ...((d.extensions.core ?? {}) as Record<string, unknown>) };
+    if (saved) core.savedVideoType = saved;
+    else delete core.savedVideoType;
+    if (Object.keys(core).length) d.extensions.core = core as never;
+    else delete d.extensions.core;
   },
 });
 

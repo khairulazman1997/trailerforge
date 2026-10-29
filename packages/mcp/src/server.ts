@@ -19,6 +19,8 @@ import {
   brandViewOp,
   createDefaultVariantsOp,
   effectsViewOp,
+  savedTypesViewOp,
+  saveVideoTypeOp,
   templatePreviewOp,
   templatesViewOp,
   variantsViewOp,
@@ -527,6 +529,48 @@ export function createMcpServer(opts: McpServerOptions): Server {
     },
     async run(args) {
       return createDefaultVariantsOp(await project(args));
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'video_types_list',
+      description:
+        'Every installed video type (id, name, description, whether the user saved it), plus where saved types live and any saved files that failed to load. "game-trailer/custom" is open-ended: the user describes the video in brief.extensions.game-trailer.customType.',
+      inputSchema: object({}),
+    },
+    async run() {
+      const reg = engine.plugins.registries.videoTypes;
+      return {
+        videoTypes: reg.list().map((v) => ({
+          id: v.id,
+          name: v.name,
+          description: v.description,
+          saved: reg.ownerOf(v.id) === 'user',
+        })),
+        saved: savedTypesViewOp(engine),
+      };
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'video_type_save',
+      description:
+        "Save this project's storyboard structure (section names and roles, slot kinds and their share of the length; no shot text or game names) as a video type the user can pick in other projects. Only when the user asks for it.",
+      inputSchema: object(
+        {
+          name: { type: 'string', description: 'Name shown in the type picker' },
+          description: { type: 'string', description: 'Defaults to the description in the brief' },
+        },
+        ['name'],
+      ),
+    },
+    async run(args) {
+      const o = z.object({ name: z.string(), description: z.string().optional() }).parse(args);
+      return saveVideoTypeOp(engine, await project(args), o);
     },
   });
 

@@ -3,6 +3,7 @@ import type { Section } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
 import { ConfirmDialog } from '../components/Dialog.js';
 import { GenerateDialog, RewriteDialog } from '../components/GenerateDialogs.js';
+import { SaveTypeDialog } from '../components/SaveTypeDialog.js';
 import { SectionCard, type DropMark } from '../components/SectionCard.js';
 import type { SlotPatch } from '../components/SlotRow.js';
 import { TimingBar } from '../components/TimingBar.js';
@@ -28,6 +29,7 @@ export function StoryboardPage({ id }: { id: string }) {
   const [newSection, setNewSection] = useState('');
   const [generating, setGenerating] = useState(false);
   const [rewriting, setRewriting] = useState<Section | null>(null);
+  const [savingType, setSavingType] = useState(0);
 
   const revision = sb?.revision;
   const hasStoryboard = sb !== null;
@@ -134,6 +136,9 @@ export function StoryboardPage({ id }: { id: string }) {
         <span className="spacer" />
         <button type="button" disabled={busy} onClick={() => setGenerating(true)}>
           Generate again…
+        </button>
+        <button type="button" onClick={() => setSavingType((n) => n + 1)}>
+          Save as a video type…
         </button>
         <button
           type="button"
@@ -250,6 +255,12 @@ export function StoryboardPage({ id }: { id: string }) {
       </form>
 
       <GenerateDialog id={id} open={generating} onClose={() => setGenerating(false)} />
+      <SaveTypeDialog
+        key={savingType}
+        id={id}
+        open={savingType > 0}
+        onClose={() => setSavingType(0)}
+      />
       <RewriteDialog id={id} section={rewriting} onClose={() => setRewriting(null)} />
 
       <ConfirmDialog

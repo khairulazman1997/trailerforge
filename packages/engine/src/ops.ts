@@ -19,7 +19,12 @@ import {
   scanSource,
   type ScanManifest,
 } from '@trailerforge/knowledge';
-import type { ResolvedVideoType } from '@trailerforge/plugin-api';
+import {
+  SavedVideoType,
+  VideoTypeDef,
+  type ResolvedVideoType,
+  type StoryboardTemplate,
+} from '@trailerforge/plugin-api';
 import {
   collectIds,
   mintId,
@@ -32,6 +37,8 @@ import {
   TakesWouldBeLostError,
   generateStoryboard,
   regenerateSection,
+  savedTemplate,
+  savedVideoTypeDef,
 } from '@trailerforge/storyboard';
 import type { Engine } from './engine.js';
 
@@ -63,7 +70,17 @@ export class OpError extends Error {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-function videoTypeOf(engine: Engine, store: ProjectStore): ResolvedVideoType {
+/** The project's own copy of a saved video type, when it uses one. */
+export function projectSavedType(store: ProjectStore): SavedVideoType | undefined {
+  const core = store.state.extensions.core as { savedVideoType?: unknown } | undefined;
+  const parsed = SavedVideoType.safeParse(core?.savedVideoType);
+  return parsed.success && parsed.data.id === store.state.brief.videoTypeId
+    ? parsed.data
+    : undefined;
+}
+
+/** The project's video type: its own copy of a saved type first, else the registered one. */
+export function videoTypeOf(engine: Engine, store: ProjectStore): ResolvedVideoType {
   const id = store.state.brief.videoTypeId;
   if (!id) {
     throw new OpError(
@@ -71,7 +88,35 @@ function videoTypeOf(engine: Engine, store: ProjectStore): ResolvedVideoType {
       'this project has no video type; create it with `tforge new --type <videoTypeId>`',
     );
   }
-  return engine.plugins.registries.videoTypes.require(id);
+  const saved = projectSavedType(store);
+  if (saved) return VideoTypeDef.parse(savedVideoTypeDef(saved));
+  const vt = engine.plugins.registries.videoTypes.get(id);
+  if (!vt) throw new OpError('not-found', `video type "${id}" is not installed`);
+  return vt;
+}
+
+function templateOf(engine: Engine, store: ProjectStore, id: string): StoryboardTemplate {
+  const saved = projectSavedType(store);
+  if (saved && id === savedVideoTypeDef(saved).defaultTemplateId) return savedTemplate(saved);
+  const t = engine.plugins.registries.templates.get(id);
+  if (!t) throw new OpError('not-found', `template "${id}" is not installed`);
+  return t;
+}
+
+/** For section rewrites, which work without a video type: its text when there is one. */
+function regenerateTypeText(engine: Engine, store: ProjectStore) {
+  try {
+    return { videoType: videoTypeText(store.state, videoTypeOf(engine, store)) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** How the model should name the video: the user's own description for open-ended types. */
+function videoTypeText(project: ProjectStore['state'], vt: ResolvedVideoType): string {
+  const own = vt.describedBy ? getAt(project, vt.describedBy) : undefined;
+  if (typeof own === 'string' && own.trim()) return `video described as: "${own.trim()}"`;
+  return vt.name;
 }
 
 // ------------------------------------------------------------------ brief
@@ -352,7 +397,7 @@ export async function generateStoryboardOp(
   const templateId = opts.template ?? vt.defaultTemplateId;
   if (!templateId)
     throw new OpError('usage', `${vt.name} has no default template; pass a template id`);
-  const template = engine.plugins.registries.templates.require(templateId);
+  const template = templateOf(engine, store, templateId);
 
   const report = checkCompleteness(store.state, vt);
   let assumptionsAdded = 0;
@@ -375,6 +420,7 @@ export async function generateStoryboardOp(
       {
         template,
         targetDuration: duration,
+        videoType: videoTypeText(store.state, vt),
         ...(opts.signal ? { signal: opts.signal } : {}),
         ...(opts.discardTakes ? { discardTakes: true } : {}),
       },
@@ -437,6 +483,7 @@ export async function regenerateSectionOp(
     store.state,
     {
       sectionId: opts.sectionId,
+      ...(regenerateTypeText(engine, store) ?? {}),
       ...(opts.instruction ? { instruction: opts.instruction } : {}),
       ...(opts.keepEdited !== undefined ? { keepEdited: opts.keepEdited } : {}),
       ...(opts.signal ? { signal: opts.signal } : {}),

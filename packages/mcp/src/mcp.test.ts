@@ -139,6 +139,8 @@ describe('tool surface', () => {
         'variants_status',
         'variants_create_defaults',
         'brand_status',
+        'video_types_list',
+        'video_type_save',
         'effects_list',
         'template_preview',
         'core_variants_override',

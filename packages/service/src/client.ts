@@ -52,6 +52,11 @@ import type {
   effectsViewOp,
   setSfxFolderOp,
   sfxViewOp,
+  removeSavedTypeOp,
+  savedTypesViewOp,
+  saveVideoTypeOp,
+  setVideoTypeOp,
+  updateSavedTypeOp,
   templatePreviewOp,
   templatesViewOp,
   variantsViewOp,
@@ -203,6 +208,8 @@ export class ServiceClient {
         description?: string;
         defaultTemplateId?: string;
         typicalDuration?: { min: number; max: number };
+        /** Saved by the user from one of their storyboards (`user/…`). */
+        saved: boolean;
       }[];
       templates: { id: string; videoTypeId: string; name: string }[];
       commands: string[];
@@ -414,6 +421,37 @@ export class ServiceClient {
   }
   setSfxFolder(folder: string | null) {
     return this.request<Result<typeof setSfxFolderOp>>('POST', '/v1/sfx/folder', { folder });
+  }
+  savedVideoTypes() {
+    return this.request<Result<typeof savedTypesViewOp>>('GET', '/v1/video-types/saved');
+  }
+  /** Switch the project's video type (a saved type goes in with the project's own copy). */
+  setVideoType(id: string, videoTypeId: string) {
+    return this.request<Result<typeof setVideoTypeOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/video-type`,
+      { videoTypeId },
+    );
+  }
+  saveVideoType(id: string, o: { name: string; description?: string }) {
+    return this.request<Result<typeof saveVideoTypeOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/video-types/save`,
+      o,
+    );
+  }
+  updateSavedVideoType(typeId: string, patch: { name?: string; description?: string }) {
+    return this.request<Result<typeof updateSavedTypeOp>>(
+      'PUT',
+      `/v1/video-types/saved/${encodeURIComponent(typeId.replace(/^user\//, ''))}`,
+      patch,
+    );
+  }
+  removeSavedVideoType(typeId: string) {
+    return this.request<Result<typeof removeSavedTypeOp>>(
+      'DELETE',
+      `/v1/video-types/saved/${encodeURIComponent(typeId.replace(/^user\//, ''))}`,
+    );
   }
   footage(id: string) {
     return this.request<Result<typeof footageStatusOp>>(

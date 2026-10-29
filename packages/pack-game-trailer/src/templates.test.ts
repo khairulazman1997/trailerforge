@@ -56,7 +56,8 @@ describe('storyboard templates', () => {
       }),
       gameTrailerPack,
     ]);
-    expect(host.registries.templates.list()).toHaveLength(3);
+    expect(host.registries.templates.list()).toHaveLength(4);
+    expect(host.registries.templates.require('game-trailer/tpl-custom').flexible).toBe(true);
     expect(host.registries.templates.require('game-trailer/tpl-release').name).toBe(
       'Release trailer',
     );

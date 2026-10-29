@@ -3,6 +3,7 @@ import type { BriefField } from '@trailerforge/service/client';
 import { useAppState, useStore } from '../app-context.js';
 import { ConfirmDialog } from '../components/Dialog.js';
 import { FieldEditor } from '../components/FieldEditor.js';
+import { VideoTypeOptions } from '../components/VideoTypeOptions.js';
 
 const describeValue = (v: unknown) =>
   v === null || v === undefined
@@ -29,17 +30,14 @@ export function BriefPage({ id }: { id: string }) {
       Video type
       <select
         value={videoTypeId ?? ''}
-        onChange={(e) =>
-          e.target.value &&
-          void store.command(id, 'core/brief.set-video-type', { videoTypeId: e.target.value })
-        }
+        onChange={(e) => e.target.value && void store.setVideoType(id, e.target.value)}
       >
         {!videoTypeId && <option value="">Choose…</option>}
-        {(videoTypes ?? []).map((v) => (
-          <option key={v.id} value={v.id}>
-            {v.name}
-          </option>
-        ))}
+        {videoTypeId && !(videoTypes ?? []).some((v) => v.id === videoTypeId) && (
+          // A saved type deleted since: the project still has its own copy.
+          <option value={videoTypeId}>{form?.videoTypeName ?? videoTypeId}</option>
+        )}
+        <VideoTypeOptions types={videoTypes ?? []} />
       </select>
     </label>
   );

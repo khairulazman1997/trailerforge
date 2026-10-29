@@ -40,6 +40,11 @@ export const VideoTypeDef = z.strictObject({
   description: z.string().default(''),
   requirements: z.array(BriefRequirement).default([]),
   defaultTemplateId: PluginRef.optional(),
+  /**
+   * A brief path holding the user's own words for what the video is (open-ended types). When it
+   * has text, generation names the video with it instead of the type's name.
+   */
+  describedBy: z.string().min(1).optional(),
   /** Typical duration range in seconds, used for defaults and critique. */
   typicalDuration: z
     .strictObject({ min: z.number().positive(), max: z.number().positive() })
@@ -121,6 +126,8 @@ export interface StoryboardTemplate {
   videoTypeId: string;
   name: string;
   description?: string;
+  /** The skeleton is only a loose start: the model may choose the sections, their number and roles. */
+  flexible?: boolean;
   /** Build a starting storyboard; validated against the Storyboard schema by the caller. */
   build(input: { targetDuration: number }): z.input<typeof Storyboard>;
 }

@@ -267,6 +267,23 @@ class Fake {
       throw new Error('unused');
     },
     watchedFolders: async () => ({ folders: [], watching: false, problems: [] }),
+    savedVideoTypes: async () => ({ dir: '/home/video-types', types: [], problems: [] }),
+    setVideoType: async (_id: string, videoTypeId: string) => ({ videoTypeId }),
+    saveVideoType: async (_id: string, o: { name: string }) => ({
+      id: 'user/x',
+      name: o.name,
+      description: '',
+      sections: [],
+      savedAt: '2026-01-01T00:00:00.000Z',
+    }),
+    updateSavedVideoType: async (id: string) => ({
+      id,
+      name: 'x',
+      description: '',
+      sections: [],
+      savedAt: '2026-01-01T00:00:00.000Z',
+    }),
+    removeSavedVideoType: async (id: string) => ({ removed: id }),
     setWatchedFolders: async (folders) => ({ folders, watching: folders.length > 0, problems: [] }),
     llmPreview: async (_id, task) => ({
       task,

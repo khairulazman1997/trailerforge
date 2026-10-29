@@ -141,4 +141,32 @@ export const gameplayTrailer: VideoTypeDef = {
   ],
 };
 
-export const videoTypes = [releaseTrailer, announcementTrailer, gameplayTrailer];
+/** Open-ended: the user describes the video; the template is only a loose start. */
+export const customVideo: VideoTypeDef = {
+  id: 'game-trailer/custom',
+  name: 'Something else',
+  description: 'Any other kind of video: describe it in your own words.',
+  defaultTemplateId: 'game-trailer/tpl-custom',
+  describedBy: ext('customType'),
+  typicalDuration: { min: 15, max: 180 },
+  requirements: [
+    r.title,
+    {
+      field: ext('customType'),
+      label: 'What kind of video is it?',
+      input: 'long-text',
+      help: 'E.g. a 20 s Kickstarter teaser, a patch-notes recap, a devlog intro, a festival sizzle',
+      weight: 2,
+    },
+    r.tone,
+    r.formats,
+    { ...sellingPoints(1, 'What it should show'), required: false },
+    { ...r.genre, required: false },
+    { ...r.cta, required: false },
+    { ...r.platforms, required: false },
+    { ...r.release, required: false },
+    r.audience,
+  ],
+};
+
+export const videoTypes = [releaseTrailer, announcementTrailer, gameplayTrailer, customVideo];

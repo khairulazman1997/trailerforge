@@ -102,6 +102,20 @@ describe('tforge CLI (end-to-end smoke)', () => {
     expect(r.out).toMatch(/^core\s+active/m);
   });
 
+  it('lists video types and refuses to save a project without a storyboard', async () => {
+    const r = await run('types', 'list');
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/^game-trailer\/custom\s+Something else$/m);
+    const dir = join(root, 'custom.tforge');
+    expect((await run('new', dir, '--name', 'Teaser', '--type', 'game-trailer/custom')).code).toBe(
+      0,
+    );
+    const saved = await run('types', 'save', dir, '--name', 'Teaser');
+    expect(saved.code).toBe(1);
+    expect(saved.err).toMatch(/no storyboard/);
+    expect((await run('types', 'save', dir)).code).not.toBe(0);
+  });
+
   it('reports failures with typed messages and exit codes', async () => {
     const bad = join(root, 'bad.mp4');
     await writeFile(bad, 'not a video');

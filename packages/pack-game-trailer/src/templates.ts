@@ -483,6 +483,49 @@ const gameplaySections: SectionSpec[] = [
   },
 ];
 
+const customSections: SectionSpec[] = [
+  {
+    id: 'sec_hook',
+    name: 'Opening',
+    role: 'hook',
+    purpose: 'Grab attention and say what this video is about',
+    slots: [
+      shot(
+        'hook_shot',
+        'Opening shot',
+        'The moment that sets up this video',
+        'Capture the moment that best opens this video.',
+      ),
+    ],
+  },
+  {
+    id: 'sec_body',
+    name: 'Main part',
+    role: 'body',
+    purpose: 'What the video is for',
+    slots: [
+      shot(
+        'body_1',
+        'Main beat 1',
+        'First thing to show',
+        'Capture the first thing to show.',
+        {},
+        2,
+      ),
+      shot('body_2', 'Main beat 2', 'Second thing to show', 'Capture the second thing.', {}, 2),
+      shot('body_3', 'Main beat 3', 'Third thing to show', 'Capture the third thing.', {}, 2, 30),
+      shot('body_4', 'Main beat 4', 'More to show', 'Capture one more strong moment.', {}, 2, 60),
+    ],
+  },
+  {
+    id: 'sec_end',
+    name: 'Ending',
+    role: 'end-slate',
+    purpose: 'Name the game and what to do next',
+    slots: [card('end_title', 'title', 'core/title-card', 'Closing card', 'Game name', 1.5)],
+  },
+];
+
 const make = (
   id: string,
   videoTypeId: string,
@@ -490,11 +533,13 @@ const make = (
   description: string,
   specs: SectionSpec[],
   music: string,
+  flexible = false,
 ): StoryboardTemplate => ({
   id,
   videoTypeId,
   name,
   description,
+  ...(flexible ? { flexible } : {}),
   build: ({ targetDuration }) => assemble(videoTypeId, id, specs, targetDuration, music),
 });
 
@@ -525,4 +570,19 @@ export const gameplayTemplate = make(
   'Steady rhythmic track; cut on the beat, stay out of the way of gameplay audio.',
 );
 
-export const storyboardTemplates = [releaseTemplate, announcementTemplate, gameplayTemplate];
+export const customTemplate = make(
+  `${PACK}/tpl-custom`,
+  `${PACK}/custom`,
+  'Something else',
+  'A loose start (opening, main part, ending) that the model reshapes to the description.',
+  customSections,
+  'Music that suits the description; cut on the beat.',
+  true,
+);
+
+export const storyboardTemplates = [
+  releaseTemplate,
+  announcementTemplate,
+  gameplayTemplate,
+  customTemplate,
+];

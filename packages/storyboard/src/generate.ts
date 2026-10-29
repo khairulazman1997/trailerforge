@@ -126,6 +126,11 @@ async function systemPrompt(project: Project) {
   return loadPrompt('system.trailer-craft', { projectName: project.name }, [BUILTIN_PROMPTS_DIR]);
 }
 
+const FIXED_STRUCTURE =
+  'Start from this template structure. Keep its order and roles unless the brief clearly calls for something else, and replace the generic beats with concrete moments from this game:';
+const FLEXIBLE_STRUCTURE =
+  'This structure is only a loose starting point. Choose the sections, how many there are and their roles to suit what the video is for, and fill them with concrete moments from this game. Keep a section with the role "hook" first:';
+
 export interface GenerateResult {
   storyboard: Storyboard;
   decisions: DecisionRecord[];
@@ -158,6 +163,8 @@ export async function generateStoryboard(
   opts: {
     template: StoryboardTemplate;
     targetDuration: number;
+    /** What the video is, as the model reads it (default: the template's name). */
+    videoType?: string;
     signal?: AbortSignal;
     /** Replace unlocked sections even though some of their shots have recordings attached. */
     discardTakes?: boolean;
@@ -197,7 +204,8 @@ export async function generateStoryboard(
   const prompt = await loadPrompt(
     'storyboard.generate',
     {
-      videoType: template.name,
+      videoType: opts.videoType?.trim() || template.name,
+      structure: template.flexible ? FLEXIBLE_STRUCTURE : FIXED_STRUCTURE,
       targetDuration: String(targetDuration),
       budget: String(budget),
       skeleton: skeleton.sections.map((s) => outlineSection(s)).join('\n'),
@@ -320,6 +328,8 @@ export async function regenerateSection(
   opts: {
     sectionId: string;
     instruction?: string;
+    /** What the video is, as the model reads it (default: the storyboard's video type id). */
+    videoType?: string;
     /**
      * Keep slots the user edited or added by hand (default true). They stay at their positions
      * and the model writes only the rest, in the time that is left.
@@ -361,7 +371,7 @@ export async function regenerateSection(
   const prompt = await loadPrompt(
     'storyboard.regenerate-section',
     {
-      videoType: sb.meta.videoTypeId,
+      videoType: opts.videoType?.trim() || sb.meta.videoTypeId,
       sectionName: target.name,
       role: target.role ?? 'unspecified',
       budget: String(budget),

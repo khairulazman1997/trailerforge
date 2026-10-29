@@ -91,6 +91,11 @@ export interface Catalog {
 export type ClientLike = Pick<
   ServiceClient,
   | 'info'
+  | 'savedVideoTypes'
+  | 'setVideoType'
+  | 'saveVideoType'
+  | 'updateSavedVideoType'
+  | 'removeSavedVideoType'
   | 'graphicTemplates'
   | 'effects'
   | 'variants'
@@ -166,6 +171,7 @@ export interface SettingsData {
 }
 
 export type Info = Awaited<ReturnType<ServiceClient['info']>>;
+export type SavedTypesView = Awaited<ReturnType<ServiceClient['savedVideoTypes']>>;
 
 export interface JobUpdate {
   jobId: string;
@@ -242,6 +248,8 @@ export interface AppState {
   claudeCode: ClaudeCodeView | null;
   /** Folders whose new recordings are imported automatically; null until a screen asks. */
   watched: WatchedFoldersView | null;
+  /** Video types the user saved from storyboards; null until a screen asks. */
+  savedTypes: SavedTypesView | null;
   toasts: Toast[];
   /** Last event sequence number applied; used to resume after a dropped stream. */
   lastSeq: number;
@@ -279,6 +287,7 @@ const initial: AppState = {
   analysisSetup: null,
   visionDownload: null,
   watched: null,
+  savedTypes: null,
   claudeCode: null,
   toasts: [],
   lastSeq: 0,
@@ -501,6 +510,11 @@ export class AppStore {
         if (this.state.settings) await this.loadSettings();
         if (this.state.localModels) await this.loadLocalModels();
         if (this.state.watched) await this.loadWatched();
+        if ((data as { what?: string }).what === 'video-types') {
+          const info = await this.run((c) => c.info());
+          if (info) this.set({ info });
+          if (this.state.savedTypes) await this.loadSavedTypes();
+        }
         break;
       case 'setup.progress': {
         const p = data as { taskId: string; line: string };
@@ -830,6 +844,37 @@ export class AppStore {
   async disconnectClaudeCode(): Promise<void> {
     const v = await this.run((c) => c.disconnectClaudeCode());
     if (v) this.set({ claudeCode: v });
+  }
+
+  async loadSavedTypes(): Promise<void> {
+    const v = await this.run((c) => c.savedVideoTypes());
+    if (v) this.set({ savedTypes: v });
+  }
+
+  /** Switch a project's video type; a saved type goes in with the project's own copy. */
+  async setVideoType(projectId: string, videoTypeId: string): Promise<boolean> {
+    return (await this.run((c) => c.setVideoType(projectId, videoTypeId))) !== undefined;
+  }
+
+  async saveVideoType(
+    projectId: string,
+    o: { name: string; description?: string },
+  ): Promise<boolean> {
+    const t = await this.run((c) => c.saveVideoType(projectId, o));
+    if (!t) return false;
+    this.toast('info', `Saved "${t.name}". Pick it as the video type of any new project.`);
+    return true;
+  }
+
+  async updateSavedType(
+    typeId: string,
+    patch: { name?: string; description?: string },
+  ): Promise<boolean> {
+    return (await this.run((c) => c.updateSavedVideoType(typeId, patch))) !== undefined;
+  }
+
+  async removeSavedType(typeId: string): Promise<boolean> {
+    return (await this.run((c) => c.removeSavedVideoType(typeId))) !== undefined;
   }
 
   async loadWatched(): Promise<void> {

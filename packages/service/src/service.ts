@@ -20,6 +20,11 @@ import {
   analyzeOp,
   brandImportOp,
   brandViewOp,
+  removeSavedTypeOp,
+  savedTypesViewOp,
+  saveVideoTypeOp,
+  setVideoTypeOp,
+  updateSavedTypeOp,
   createDefaultVariantsOp,
   effectsViewOp,
   setSfxFolderOp,
@@ -378,7 +383,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         : events.emit('handoff.resolved', { id: c.id, outcome: c.outcome }),
     ),
   );
-  const settingsChanged = (what: 'secrets' | 'routes' | 'watched-folders') =>
+  const settingsChanged = (what: 'secrets' | 'routes' | 'watched-folders' | 'video-types') =>
     events.emit('settings.changed', { what });
 
   let visionTaskId: string | undefined;
@@ -447,6 +452,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           description: v.description,
           typicalDuration: v.typicalDuration,
           defaultTemplateId: v.defaultTemplateId,
+          saved: engine.plugins.registries.videoTypes.ownerOf(v.id) === 'user',
         })),
         templates: engine.plugins.registries.templates.list().map((t) => ({
           id: t.id,
@@ -945,6 +951,59 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           .parse(await body());
         notBusy(store);
         return brandImportOp(store, o);
+      },
+    ],
+    ['GET', /^\/v1\/video-types\/saved$/, async () => savedTypesViewOp(engine)],
+    [
+      'PUT',
+      /^\/v1\/video-types\/saved\/(?<slug>[a-z0-9-]+)$/,
+      async ({ params, body }) => {
+        const patch = z
+          .strictObject({
+            name: z.string().max(200).optional(),
+            description: z.string().max(2000).optional(),
+          })
+          .parse(await body());
+        const out = await updateSavedTypeOp(engine, `user/${params.slug!}`, patch);
+        settingsChanged('video-types');
+        return out;
+      },
+    ],
+    [
+      'DELETE',
+      /^\/v1\/video-types\/saved\/(?<slug>[a-z0-9-]+)$/,
+      async ({ params }) => {
+        const out = await removeSavedTypeOp(engine, `user/${params.slug!}`);
+        settingsChanged('video-types');
+        return out;
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/video-type$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        const { videoTypeId } = z
+          .strictObject({ videoTypeId: z.string().min(1) })
+          .parse(await body());
+        notBusy(store);
+        return setVideoTypeOp(engine, store, videoTypeId);
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/video-types\/save$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        const o = z
+          .strictObject({
+            name: z.string().max(200),
+            description: z.string().max(2000).optional(),
+          })
+          .parse(await body());
+        const out = await saveVideoTypeOp(engine, store, o);
+        settingsChanged('video-types');
+        return out;
       },
     ],
     ['GET', /^\/v1\/templates$/, async () => templatesViewOp(engine)],

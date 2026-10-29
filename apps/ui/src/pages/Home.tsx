@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppState, useStore } from '../app-context.js';
 import { BrowseButton } from '../components/BrowseButton.js';
+import { VideoTypeOptions } from '../components/VideoTypeOptions.js';
 import { examplePath, joinPath } from '../desktop.js';
 import { Link, navigate, projectPath } from '../router.js';
 import type { Info } from '../store.js';
@@ -197,11 +198,7 @@ export function HomePage() {
               Video type
               <select value={videoType} onChange={(e) => setVideoType(e.target.value)}>
                 <option value="">Choose later</option>
-                {videoTypes.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}
-                  </option>
-                ))}
+                <VideoTypeOptions types={videoTypes} />
               </select>
             </label>
             <label>

@@ -362,6 +362,28 @@ describe('tasks', () => {
     expect((await client.decisions('proj_sample')).length).toBeGreaterThan(0);
   });
 
+  it('saves a storyboard as a video type, lists it, and switches a project to it', async () => {
+    const before = (await client.getProject('proj_sample')).project.brief.videoTypeId!;
+    const saved = await client.saveVideoType('proj_sample', { name: 'Sizzle reel' });
+    expect(saved).toMatchObject({ id: 'user/sizzle-reel', name: 'Sizzle reel' });
+    expect((await client.info()).videoTypes.find((v) => v.id === saved.id)).toMatchObject({
+      saved: true,
+    });
+    expect((await client.savedVideoTypes()).types.map((t) => t.id)).toEqual([saved.id]);
+    await client.setVideoType('proj_sample', saved.id);
+    const p = (await client.getProject('proj_sample')).project;
+    expect(p.extensions.core).toMatchObject({ savedVideoType: { id: saved.id } });
+    expect(await client.updateSavedVideoType(saved.id, { name: 'Sizzle' })).toMatchObject({
+      name: 'Sizzle',
+    });
+    await expect(client.setVideoType('proj_sample', 'user/nope')).rejects.toMatchObject({
+      status: 404,
+    });
+    await client.removeSavedVideoType(saved.id);
+    expect((await client.savedVideoTypes()).types).toEqual([]);
+    await client.setVideoType('proj_sample', before);
+  });
+
   it('cancelling a task means its result never lands', async () => {
     let release!: () => void;
     gate = new Promise((r) => (release = r));

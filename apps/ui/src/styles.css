@@ -1321,6 +1321,19 @@ span.handle {
   gap: 0.5rem;
   padding: 0.25rem 0;
 }
+.saved-types {
+  list-style: none;
+  padding-left: 0;
+}
+.saved-types > li {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.saved-types > li > button {
+  justify-self: start;
+}
 progress {
   width: 14rem;
 }

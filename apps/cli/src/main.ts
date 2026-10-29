@@ -26,6 +26,7 @@ import {
   reviewCommand,
 } from './render.js';
 import { briefCheck, knowledgeScan, storyboardGenerate, type CmdCtx } from './m2.js';
+import { typesCommand } from './types.js';
 
 export interface Io {
   out(line: string): void;
@@ -37,6 +38,12 @@ const HELP = `tforge — TrailerForge command line
 Usage:
   tforge new <dir> --name <name> [--type <videoTypeId>]   Create a project folder
   tforge info <dir>                                       Show a project summary
+  tforge types list                                       Video types, including the ones you saved
+  tforge types save <dir> --name <name> [--description <text>]
+                                                          Save this storyboard's structure as a video type
+  tforge types use <dir> <videoTypeId>                    Switch the project's video type
+  tforge types rename <user/…> [--name <n>] [--description <text>]
+  tforge types remove <user/…>                            Delete a saved type (projects keep their copy)
   tforge brief check <dir>                                Check the brief against its video type
   tforge knowledge scan <dir> [--repo <path>] [--force]   Scan a game repo into the knowledge base
   tforge storyboard generate <dir> [--duration <s>] [--template <id>] [--assume]
@@ -119,6 +126,7 @@ export async function main(
         json: { type: 'boolean', default: false },
         home: { type: 'string' },
         name: { type: 'string' },
+        description: { type: 'string' },
         type: { type: 'string' },
         out: { type: 'string' },
         height: { type: 'string' },
@@ -188,6 +196,7 @@ export async function main(
     'brand',
     'sfx',
     'review',
+    'types',
   ].includes(positionals[0] ?? '');
   const cmd = twoWord ? `${positionals[0]} ${positionals[1] ?? ''}`.trim() : positionals[0];
   const arg = positionals[twoWord ? 2 : 1];
@@ -413,6 +422,13 @@ export async function main(
         return need(arg, '<dir>')
           ? await reviewCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
           : 2;
+      case 'types':
+      case 'types list':
+      case 'types save':
+      case 'types use':
+      case 'types rename':
+      case 'types remove':
+        return await typesCommand(ctx, cmd.split(' ')[1] ?? '', arg, positionals[3], o);
       case 'storyboard generate':
         return need(arg, '<dir>') ? await storyboardGenerate(ctx, arg) : 2;
       case 'new': {

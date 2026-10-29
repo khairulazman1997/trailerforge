@@ -31,6 +31,7 @@ describe('Game Trailer pack', () => {
     ]);
     expect(host.registries.videoTypes.list().map((v) => v.id)).toEqual([
       'game-trailer/announcement-trailer',
+      'game-trailer/custom',
       'game-trailer/gameplay-trailer',
       'game-trailer/release-trailer',
     ]);

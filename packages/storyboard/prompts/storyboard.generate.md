@@ -1,6 +1,6 @@
 Write a storyboard for a {{videoType}} lasting {{targetDuration}} seconds. The sections you write must fill {{budget}} seconds in total; sections listed under "Locked" are already final and are added back automatically, so do not write them again.
 
-Start from this template structure. Keep its order and roles unless the brief clearly calls for something else, and replace the generic beats with concrete moments from this game:
+{{structure}}
 {{skeleton}}
 
 Locked sections (keep the story consistent with them):

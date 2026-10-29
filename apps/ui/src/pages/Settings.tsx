@@ -5,6 +5,7 @@ import { ConfirmDialog } from '../components/Dialog.js';
 import { LocalModelsPanel } from '../components/LocalModelsPanel.js';
 import { RoutesEditor } from '../components/RoutesEditor.js';
 import { VisionPanel } from '../components/VisionPanel.js';
+import { SavedTypesPanel } from '../components/SavedTypesPanel.js';
 import { WatchedFoldersPanel } from '../components/WatchedFoldersPanel.js';
 
 export function SettingsPage() {
@@ -115,6 +116,7 @@ export function SettingsPage() {
       <LocalModelsPanel />
       <ClaudeCodePanel />
       <WatchedFoldersPanel />
+      <SavedTypesPanel />
       <VisionPanel />
 
       <section aria-labelledby="routes-h">

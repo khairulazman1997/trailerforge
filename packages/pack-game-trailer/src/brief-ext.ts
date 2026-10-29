@@ -70,5 +70,7 @@ export const GameBriefExt = z.strictObject({
   steamAppId: z.string().regex(/^\d+$/, 'Steam app ids are numeric').optional(),
   multiplayer: z.enum(['single-player', 'co-op', 'pvp', 'mmo']).optional(),
   artStyle: z.string().optional(),
+  /** "Something else" video type: what the video is, in the user's words. */
+  customType: z.string().trim().min(1).max(2000).optional(),
 });
 export type GameBriefExt = z.infer<typeof GameBriefExt>;

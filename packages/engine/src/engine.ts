@@ -45,6 +45,7 @@ import {
 import { excludedTerms, gameTrailerPack } from '@trailerforge/pack-game-trailer';
 import { FilterRegistry } from '@trailerforge/effects';
 import { corePlugin } from './core-plugin.js';
+import { loadSavedTypes, savedTypeSnapshot, type SavedTypesState } from './saved-types-ops.js';
 import { HandoffHub } from './handoff.js';
 import { openFileSecretStore, type SecretStore } from './secrets.js';
 import { WatchedFolders } from './watched-folders.js';
@@ -231,6 +232,7 @@ export class Engine {
     );
     engine.ollama = providers['core/ollama'];
     engine.tools = opts.ffmpegTools ?? resolveTools();
+    await loadSavedTypes(engine);
     await watched.start();
     return engine;
   }
@@ -243,6 +245,9 @@ export class Engine {
   llmFor(store: { state: { knowledge: readonly KnowledgeEntity[] } }): LlmClient {
     return this.llm.withForbidden(excludedTerms(store.state.knowledge));
   }
+
+  /** Video types the user saved from their storyboards (`<home>/video-types`). */
+  savedTypes: SavedTypesState = { dir: '', types: [], problems: [] };
 
   /** The local model provider (Ollama), for the model list in settings. */
   ollama!: ReturnType<typeof createOllamaProvider>;
@@ -293,6 +298,13 @@ export class Engine {
     init: Partial<ProjectInput> & { name: string },
   ): Promise<ProjectStore> {
     const now = new Date().toISOString();
+    // A project made with a saved type keeps its own copy of it.
+    const saved = savedTypeSnapshot(this, init.brief?.videoTypeId);
+    if (saved)
+      init = {
+        ...init,
+        extensions: { ...init.extensions, core: { savedVideoType: saved as never } },
+      };
     const store = await ProjectStore.create(
       resolve(dir),
       {
