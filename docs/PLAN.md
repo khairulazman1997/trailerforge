@@ -104,16 +104,17 @@ Estimated cost: ~50–80k extra output tokens (~+3–5% overall).
 
 Opus for schemas, interfaces, algorithms, determinism, crash recovery, hard debugging. Sonnet for UI, wiring, fixtures, docs, template content.
 
-| Milestone              | Lead          |
-| ---------------------- | ------------- |
-| M1 Foundations         | Opus (~70%)   |
-| M2 Intake + storyboard | Mixed         |
-| M3 Capture Pack        | Sonnet (~80%) |
-| M4 Ingest + auto-cut   | Opus (~75%)   |
-| M5 Variants + graphics | Mixed         |
-| M6 Review + render     | Mixed         |
-| M7 Polish              | Sonnet (~65%) |
-| M8 Planner scaffold    | Sonnet (~85%) |
+| Milestone              | Lead              |
+| ---------------------- | ----------------- |
+| M1 Foundations         | Opus (~70%)       |
+| M2 Intake + storyboard | Mixed             |
+| M3 Capture Pack        | Sonnet (~80%)     |
+| M4 Ingest + auto-cut   | Opus (~75%)       |
+| M5 Variants + graphics | Mixed             |
+| M6 Review + render     | Mixed             |
+| M7 Polish              | Sonnet (~65%)     |
+| M8 EffectCraft plugin  | Mixed (~55% Opus) |
+| M9 Planner scaffold    | Sonnet (~85%)     |
 
 ### In-app defaults (`llm.routes.json`, user-editable)
 
@@ -143,7 +144,8 @@ Opus for schemas, interfaces, algorithms, determinism, crash recovery, hard debu
 | M5        | 170–255k      | 17–29M          |
 | M6        | 230–320k      | 21–35M          |
 | M7        | 120–200k      | 12–20M          |
-| M8        | 50–80k        | 4–8M            |
+| M8        | 70–110k       | 6–10M           |
+| M9        | 50–80k        | 4–8M            |
 
 Plan: pause after M1 tasks 1.1–1.2 to read actual plan usage % and extrapolate.
 
@@ -362,9 +364,39 @@ Rough budget: 7.1–7.3, 7.5, 7.7 and 7.13 on Opus, the rest on Sonnet (about 50
 
 **M7 status (2026-10-29):** 7.1–7.13 done and green here (`pnpm check`, `pnpm test:e2e`). Still open, on the user's Windows PC: `pnpm check`, `pnpm test:e2e`, and the installer smoke checklist in `docs/NEXT_SESSION.md`. Nothing on Windows has been verified by Claude.
 
-## Milestone 8 — Planner scaffold
+## Milestone 8 — EffectCraft motion plugin
 
-Opens the door for the Content Calendar Planner without building it: the project already carries `campaignId`, `scheduledDate`, `platformTargets[]` and `status` (M1), assets carry `themes` and `reuseHistory`, and the plugin API has the `nav.planner` slot. M8 makes those fields usable (set them, query them, see them on a calendar behind a feature flag) and adds the stable `core.projects.createFromCalendarSlot(slot)` API a future Planner plugin calls. It is a scaffold: no social posting, no analytics, no scheduling automation, no network. Principles carried over: `project.json` holds only user decisions; every change is a typed, undoable command; local-first; the Planner is a plugin-shaped module behind `features.planner`, off by default.
+Adds EffectCraft (storytold/effectcraft, MIT/Apache-2.0, alpha) as an **optional** `MotionRenderer` plugin for hero-shot motion graphics, as approved in "Motion engine (option A)". The built-in SVG/resvg renderer stays the default and the fallback; nothing in M1–M7 depends on EffectCraft. Moved ahead of the Planner (now M9) at the user's request, 2026-10-29. The M5 decision to skip the spike is reversed here: the spike is task 8.1 and decides go/no-go.
+
+Design decisions (recommended defaults, **to confirm**):
+
+1. **Spike first (8.1).** Headless Linux and Windows, ProRes 4444 alpha output, determinism (same bytes twice), speed, licence of the pinned version and its dependencies, and whether the CLI needs a GPU or window. No-go ends the milestone after 8.1 with a written finding; the interface and fallback stay.
+2. **Optional and pinned.** The user installs EffectCraft themselves (like FFmpeg); Setup detects its path and version, accepts only the pinned version range, and shows a plain fix. Nothing is bundled or downloaded by the app. Alternative: bundle it (refused until the licence check in 8.1).
+3. **Adapter shape.** `MotionRenderer` plugin `effectcraft`: generates an `.ecproj` from a Scene or template params (brand tokens included), renders headless with `effectcraft-cli render` into a scratch dir, returns a ProRes 4444 clip. The compiler uses it like the handoff alpha clips, as a graphics-track input; content-hashed so unchanged scenes render once.
+4. **Which templates.** A small set of EffectCraft-backed templates (`effectcraft/title-reveal`, `logo-sting`, `kinetic-text`) next to the built-in ones; the picker marks them "needs EffectCraft". Without it they are hidden and a storyboard that uses one falls back to the nearest built-in template with a warning.
+5. **Determinism.** The plan hash includes the EffectCraft version and the `.ecproj` hash; a non-reproducible result is flagged `reproducible: false` in the render manifest (as hardware encoders are) and a warning shows at export. Approvals still vouch for the plan hash.
+6. **Privacy.** Local process only, no network, run through the same sandboxed-spawn rules as FFmpeg; the Egress log stays empty (spied in tests).
+7. **Interchange and polish.** "Open in EffectCraft" exports the `.ecproj` for hand polish and imports the rendered clip back as a replaced graphic (one undoable command). Lottie and After Effects `.jsx` stay out.
+
+Task breakdown:
+
+| #   | Task                                                                                                                                                            | Model  | Acceptance                                                                                                                            |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 8.1 | **Spike**: install the pinned version, render a title with alpha headless, twice; measure speed, determinism, licences; written go/no-go in `docs/`             | Opus   | Report with numbers and a decision; needs the repo reachable (blocked in the cloud container so far: GitHub API 403) or the user's PC |
+| 8.2 | **Adapter and detection**: `EffectCraftRenderer` (`MotionRenderer`), version pin, `available()`, `.ecproj` writer from Scene/params, cancel kills the process   | Opus   | Contract tests on a stub CLI and, when installed, the real one; cancel leaves no temp files; version outside the pin is refused       |
+| 8.3 | **Compiler and cache**: rendered clips as graphics inputs, content-hash cache, plan hash includes version and project hash, `reproducible` flag in the manifest | Opus   | Range render equals full render; second render uses the cache; hash changes only when scene or version changes                        |
+| 8.4 | **Templates and fallback**: three EffectCraft-backed templates, hidden when absent, fallback with warning                                                       | Sonnet | Registry lists them only when available; fallback test; storyboard still validates                                                    |
+| 8.5 | **Setup, engine, service, CLI, MCP**: health check row (path, version, fix), settings for the path, `tforge effectcraft status`, MCP read tool                  | Sonnet | Setup shows missing / wrong version / ready; no network used (spied)                                                                  |
+| 8.6 | **UI**: picker badges, preview note (the preview shows the built-in stand-in), "Open in EffectCraft" and re-import                                              | Sonnet | Playwright with the stub CLI; axe clean; re-import is one undo step                                                                   |
+| 8.7 | **Hardening and docs**: whole-flow test (demo → EffectCraft title → export, identical twice), README section, privacy note, Windows verification items          | Opus   | `pnpm check` and `pnpm test:e2e` green here; Windows run listed in `docs/NEXT_SESSION.md`                                             |
+
+Rough budget: 8.1–8.3 and 8.7 on Opus, the rest on Sonnet (about 55% Opus by tokens); 70–110k output tokens, roughly 10–15% of a week over 3 session windows. Suggested sessions: (1) 8.1 spike (+ 8.2 if go); (2) 8.2–8.4; (3) 8.5–8.7. A no-go in 8.1 stops the milestone.
+
+**M8 status (2026-10-29):** broken down; defaults awaiting confirmation.
+
+## Milestone 9 — Planner scaffold
+
+Opens the door for the Content Calendar Planner without building it: the project already carries `campaignId`, `scheduledDate`, `platformTargets[]` and `status` (M1), assets carry `themes` and `reuseHistory`, and the plugin API has the `nav.planner` slot. M9 makes those fields usable (set them, query them, see them on a calendar behind a feature flag) and adds the stable `core.projects.createFromCalendarSlot(slot)` API a future Planner plugin calls. It is a scaffold: no social posting, no analytics, no scheduling automation, no network. Principles carried over: `project.json` holds only user decisions; every change is a typed, undoable command; local-first; the Planner is a plugin-shaped module behind `features.planner`, off by default.
 
 Design decisions (recommended defaults, **to confirm**):
 
@@ -380,18 +412,18 @@ Task breakdown:
 
 | #   | Task                                                                                                                                                                                                                                                                   | Model  | Acceptance                                                                                                                                |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 8.1 | **Planner schema and stores**: `Campaign`, `CalendarSlot` (Zod strict, schema `planner.ts`), JSON Schemas, `PlannerStore` (`<home>/planner/*.json`, atomic writes, validated on load, dangling ids tolerated)                                                          | Opus   | Round-trip and corrupt-file tests; JSON Schema emitted; no change to the project schema version                                           |
-| 8.2 | **Scheduling commands**: `core/project.set-schedule`, campaign and slot commands (`planner.campaign.add\|update\|remove`, `planner.slot.add\|update\|remove`) with undo for app-level data; dates validated                                                            | Sonnet | Command tests: undo/redo, bad dates refused, one step per change, no revision bump of the storyboard                                      |
-| 8.3 | **`createFromCalendarSlot(slot)`**: the stable API in core and the plugin host (`core.projects.createFromCalendarSlot`), fills schedule, platform targets (and matching format targets), pack by `videoTypeId`, `calendarSlotId`                                       | Sonnet | Deterministic output with injected id/clock; unknown video type or platform refused with a reason; API shape pinned by a test             |
-| 8.4 | **Footage reuse tracking**: `reuseHistory` written on `core/takes.attach\|attach-many` and removed on detach, `core/assets.set-themes\|set-tags`, `reuseQuery` (by theme, by campaign, unused)                                                                         | Opus   | Undo restores history exactly; attach twice to the same slot records once; query tests on a two-project fixture; library file stays valid |
-| 8.5 | **Feature flag and shell**: `features.planner` setting, Planner tab through `nav.planner`, lazy entry, hidden when off                                                                                                                                                 | Sonnet | Flag off: no Planner tab or code in the main bundle path; flag on: tab appears; axe clean                                                 |
-| 8.6 | **Engine ops, service, CLI, MCP**: `plannerViewOp` (projects with schedule, campaigns, slots, warnings), `createFromSlotOp`, `reuseOp`; service routes; `tforge planner list\|campaign\|slot\|schedule\|new`; MCP `planner_status`, `planner_reuse` plus command tools | Sonnet | Service/CLI tests on real stores; MCP lists tools; no network used (spied)                                                                |
-| 8.7 | **Planner UI**: month and list views, campaign editor, slot editor, "New from this day", drag a card to another day (and a keyboard date field)                                                                                                                        | Sonnet | Playwright: create campaign, slot, project from slot, reschedule by drag and by keyboard, undo; empty state; axe clean                    |
-| 8.8 | **Hardening and docs**: whole-flow engine test (campaign → slots → projects → reuse), README "Planning (scaffold)" section and privacy note, `docs/PLAN.md` / `BUILD_LOG.md`, update `docs/NEXT_SESSION.md` with the Windows results                                   | Opus   | `pnpm check` and `pnpm test:e2e` green here; Planner off by default verified; scaffold limits stated plainly                              |
+| 9.1 | **Planner schema and stores**: `Campaign`, `CalendarSlot` (Zod strict, schema `planner.ts`), JSON Schemas, `PlannerStore` (`<home>/planner/*.json`, atomic writes, validated on load, dangling ids tolerated)                                                          | Opus   | Round-trip and corrupt-file tests; JSON Schema emitted; no change to the project schema version                                           |
+| 9.2 | **Scheduling commands**: `core/project.set-schedule`, campaign and slot commands (`planner.campaign.add\|update\|remove`, `planner.slot.add\|update\|remove`) with undo for app-level data; dates validated                                                            | Sonnet | Command tests: undo/redo, bad dates refused, one step per change, no revision bump of the storyboard                                      |
+| 9.3 | **`createFromCalendarSlot(slot)`**: the stable API in core and the plugin host (`core.projects.createFromCalendarSlot`), fills schedule, platform targets (and matching format targets), pack by `videoTypeId`, `calendarSlotId`                                       | Sonnet | Deterministic output with injected id/clock; unknown video type or platform refused with a reason; API shape pinned by a test             |
+| 9.4 | **Footage reuse tracking**: `reuseHistory` written on `core/takes.attach\|attach-many` and removed on detach, `core/assets.set-themes\|set-tags`, `reuseQuery` (by theme, by campaign, unused)                                                                         | Opus   | Undo restores history exactly; attach twice to the same slot records once; query tests on a two-project fixture; library file stays valid |
+| 9.5 | **Feature flag and shell**: `features.planner` setting, Planner tab through `nav.planner`, lazy entry, hidden when off                                                                                                                                                 | Sonnet | Flag off: no Planner tab or code in the main bundle path; flag on: tab appears; axe clean                                                 |
+| 9.6 | **Engine ops, service, CLI, MCP**: `plannerViewOp` (projects with schedule, campaigns, slots, warnings), `createFromSlotOp`, `reuseOp`; service routes; `tforge planner list\|campaign\|slot\|schedule\|new`; MCP `planner_status`, `planner_reuse` plus command tools | Sonnet | Service/CLI tests on real stores; MCP lists tools; no network used (spied)                                                                |
+| 9.7 | **Planner UI**: month and list views, campaign editor, slot editor, "New from this day", drag a card to another day (and a keyboard date field)                                                                                                                        | Sonnet | Playwright: create campaign, slot, project from slot, reschedule by drag and by keyboard, undo; empty state; axe clean                    |
+| 9.8 | **Hardening and docs**: whole-flow engine test (campaign → slots → projects → reuse), README "Planning (scaffold)" section and privacy note, `docs/PLAN.md` / `BUILD_LOG.md`, update `docs/NEXT_SESSION.md` with the Windows results                                   | Opus   | `pnpm check` and `pnpm test:e2e` green here; Planner off by default verified; scaffold limits stated plainly                              |
 
-Rough budget: 8.1, 8.4 and 8.8 on Opus, the rest on Sonnet (about 85% Sonnet); 50–80k output tokens, roughly 8–12% of a week over 2–3 session windows. Suggested sessions: (1) breakdown + 8.1–8.3, 20–30k; (2) 8.4–8.6, 20–30k; (3) 8.7–8.8, 15–25k. A session short of budget stops at a task boundary.
+Rough budget: 9.1, 9.4 and 9.8 on Opus, the rest on Sonnet (about 85% Sonnet); 50–80k output tokens, roughly 8–12% of a week over 2–3 session windows. Suggested sessions: (1) breakdown + 9.1–9.3, 20–30k; (2) 9.4–9.6, 20–30k; (3) 9.7–9.8, 15–25k. A session short of budget stops at a task boundary.
 
-**M8 status (2026-10-29):** broken down; defaults awaiting confirmation. The user reports the three Windows checks (M7 `pnpm check`, `pnpm test:e2e`, installer smoke) as run; their results were not pasted, so nothing from Windows is recorded as verified yet.
+**M9 status (2026-10-29):** broken down; defaults awaiting confirmation. Runs after M8 (EffectCraft), reordered 2026-10-29 at the user's request. The user reports the three Windows checks (M7 `pnpm check`, `pnpm test:e2e`, installer smoke) as run; their results were not pasted, so nothing from Windows is recorded as verified yet.
 
 ## Potential extensions (not scheduled, not in any milestone)
 
