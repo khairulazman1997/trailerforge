@@ -4,6 +4,7 @@ import type { Project } from '@trailerforge/schema';
 // Wire types come from the engine; type-only, so nothing from it reaches the browser bundle.
 export type {
   BriefField,
+  DemoOutcome,
   HealthCheck,
   HealthReport,
   CritiqueFactsView,
@@ -296,6 +297,10 @@ export class ServiceClient {
   /** Start the one-time model download (a task; progress arrives as `vision.progress` events). */
   downloadVision() {
     return this.request<TaskView>('POST', '/v1/vision/download', { consent: true });
+  }
+  /** Build the demo project from generated footage and music (a task; its result has the project id). */
+  startDemo() {
+    return this.request<TaskView>('POST', '/v1/demo');
   }
   /** Is this computer ready? FFmpeg, the analysis tools, disk space, AI and the vision model. */
   health() {

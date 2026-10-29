@@ -231,6 +231,9 @@ class Fake {
     }),
     useOfflineRoutes: async () => ({}) as never,
     health: async () => ({ checks: [], ready: true, sidecarSetup: {} }) as never,
+    startDemo: async () => ({ id: 'd', kind: 'create-demo', status: 'running' }) as never,
+    waitForTask: async () =>
+      ({ id: 'd', status: 'succeeded', result: { projectId: 'p1', dir: '/p' } }) as never,
     setupAnalysis: async () => ({ id: 't', kind: 'analysis-setup', status: 'running' }) as never,
     critiqueFacts: async () => ({ variantId: null, summary: ['x'], wire: {}, excluded: 0 }),
     secrets: async () =>

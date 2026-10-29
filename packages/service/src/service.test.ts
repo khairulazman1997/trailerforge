@@ -1415,3 +1415,17 @@ describe('health', () => {
     }
   });
 });
+
+describe('demo', () => {
+  it('builds the demo project as a task and opens it', async () => {
+    const t = await client.startDemo();
+    const done = await client.waitForTask(t.id, 100);
+    expect(done.status).toBe('succeeded');
+    const r = done.result as { projectId: string; shots: number; versions: string[] };
+    expect(r.shots).toBe(5);
+    expect(r.versions).toHaveLength(2);
+    const view = await client.getProject(r.projectId);
+    expect(view.project.name).toBe('Demo: Ember Knight');
+    expect(view.project.timelines.some((tl) => tl.id === 'tl_rough')).toBe(true);
+  }, 180_000);
+});

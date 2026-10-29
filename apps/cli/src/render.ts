@@ -2,6 +2,7 @@ import { secondsToFlicks } from '@trailerforge/schema';
 import {
   OpError,
   approveVersionOp,
+  createDemoOp,
   critiqueFactsOp,
   healthOp,
   critiqueOp,
@@ -98,6 +99,23 @@ export async function qcCommand(ctx: CmdCtx, dir: string): Promise<number> {
     );
     return v.allowed ? 0 : 1;
   });
+}
+
+/**
+ * `tforge demo [--dir <folder>]`: build the demo project (generated footage and music, a cut, two
+ * versions) and print where it is. Nothing is downloaded or sent anywhere.
+ */
+export async function demoCommand(ctx: CmdCtx): Promise<number> {
+  try {
+    const r = await createDemoOp(ctx.engine, ctx.flags.dir ? { dir: ctx.flags.dir } : {});
+    ctx.emit(
+      `Demo project ready: ${r.dir}\n  ${r.shots} shots, ${r.seconds.toFixed(1)} s cut, versions ${r.versions.join(', ')}. Open it in the app, or try: tforge export "${r.dir}" --version master`, // prettier-ignore
+      r,
+    );
+    return 0;
+  } catch (err) {
+    return fail(ctx, err);
+  }
 }
 
 /**

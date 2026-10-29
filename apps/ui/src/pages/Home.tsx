@@ -38,6 +38,7 @@ export function HomePage() {
   const [name, setName] = useState('');
   const [videoType, setVideoType] = useState('');
   const [busy, setBusy] = useState(false);
+  const [demoing, setDemoing] = useState(false);
   const [recent, setRecent] = useState(readRecent);
   const health = useAppState((s) => s.health);
   useEffect(() => {
@@ -84,6 +85,34 @@ export function HomePage() {
           </ul>
         </section>
       )}
+
+      <section aria-labelledby="demo-heading" className="demo-offer">
+        <h2 id="demo-heading">New here?</h2>
+        <p>
+          Try a demo: a small finished project with a storyboard, recordings, a cut on the music and
+          two versions, so you can look around every tab. It is made on this computer from invented
+          footage and generated music; nothing is downloaded or sent anywhere.
+        </p>
+        <button
+          type="button"
+          className="primary"
+          disabled={busy || demoing}
+          onClick={() => {
+            setDemoing(true);
+            void store
+              .createDemo()
+              .then((id) => id && navigate(projectPath(id)))
+              .finally(() => setDemoing(false));
+          }}
+        >
+          {demoing ? 'Building the demo…' : 'Try a demo'}
+        </button>
+        {demoing && (
+          <p role="status" className="muted">
+            Making the footage and music and cutting them. This takes about half a minute.
+          </p>
+        )}
+      </section>
 
       <div className="two-col">
         <section aria-labelledby="open-form">

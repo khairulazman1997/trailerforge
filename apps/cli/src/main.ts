@@ -20,6 +20,7 @@ import {
   handoffCommand,
   presetsCommand,
   critiqueCommand,
+  demoCommand,
   doctorCommand,
   qcCommand,
   reviewCommand,
@@ -68,6 +69,7 @@ Usage:
   tforge effects                                          Installed transitions, effects, graphics templates and sounds
   tforge sfx show | tforge sfx folder <path|none>         Your folder of licensed or CC0 sound effects (nothing is uploaded)
   tforge presets                                          The export presets (YouTube, Steam, Vertical social, X, ProRes master)
+  tforge demo [--dir <folder>]                            Build a demo project (generated footage and music, a cut, two versions); nothing is downloaded
   tforge doctor                                           Is this computer ready? FFmpeg, analysis tools, disk space, AI help
   tforge critique <dir> [--version <id|master>] [--show]    Ask the AI for a critique of a version (text only); --show lists what would be sent
   tforge qc <dir> [--version <id|master>] [--override <check>=<reason>]...
@@ -149,6 +151,7 @@ export async function main(
         lead: { type: 'string' },
         'overwrite-chosen': { type: 'boolean', default: false },
         show: { type: 'boolean', default: false },
+        dir: { type: 'string' },
         target: { type: 'string' },
         length: { type: 'string' },
         reframe: { type: 'string' },
@@ -266,6 +269,7 @@ export async function main(
       lead: o.lead,
       overwriteChosen: o['overwrite-chosen'],
       show: o.show,
+      dir: o.dir,
       target: o.target,
       length: o.length,
       name: o.name,
@@ -386,6 +390,8 @@ export async function main(
         return need(arg, '<dir>') ? await cutCommand(ctx, arg) : 2;
       case 'presets':
         return await presetsCommand(ctx);
+      case 'demo':
+        return await demoCommand(ctx);
       case 'doctor':
         return await doctorCommand(ctx);
       case 'critique':

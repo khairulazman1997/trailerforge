@@ -140,6 +140,8 @@ export type ClientLike = Pick<
   | 'localModels'
   | 'health'
   | 'setupAnalysis'
+  | 'startDemo'
+  | 'waitForTask'
   | 'useOfflineRoutes'
   | 'secrets'
   | 'setApiKey'
@@ -762,6 +764,23 @@ export class AppStore {
     if (!t) return false;
     this.set((s) => ({ analysisSetup: s.analysisSetup ?? { taskId: t.id, lines: [] } }));
     return true;
+  }
+
+  /**
+   * Build the demo project (generated footage and music) and open it. Returns its id, or null if
+   * it failed (a toast says why). Takes a few seconds: footage is made and cut on this computer.
+   */
+  async createDemo(): Promise<string | null> {
+    const t = await this.run((c) => c.startDemo());
+    if (!t) return null;
+    const done = await this.run((c) => c.waitForTask(t.id, 100));
+    if (!done) return null;
+    if (done.status !== 'succeeded') {
+      this.toast('error', `The demo could not be built: ${done.error?.message ?? 'unknown error'}`);
+      return null;
+    }
+    const r = done.result as { projectId: string; dir: string };
+    return (await this.openProject(r.dir)) ?? r.projectId;
   }
 
   async cancelAnalysisSetup(): Promise<void> {

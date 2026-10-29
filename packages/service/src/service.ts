@@ -52,6 +52,7 @@ import {
   exportVersionOp,
   handoffOp,
   presetsViewOp,
+  createDemoOp,
   critiqueFactsOp,
   healthOp,
   setupSidecarOp,
@@ -382,6 +383,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
 
   let visionTaskId: string | undefined;
   let setupTaskId: string | undefined;
+  let demoTaskId: string | undefined;
   // Read at each request: the port is only known once the server listens.
   const claudeSetup = (): ClaudeCodeSetup => ({
     app: { url: `http://127.0.0.1:${port}/mcp`, token: mcpToken },
@@ -622,6 +624,21 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       },
     ],
     ['GET', /^\/v1\/health$/, async () => healthOp(engine)],
+    [
+      'POST',
+      /^\/v1\/demo$/,
+      async ({ res }) => {
+        // Builds a small finished project from generated footage and music; nothing is sent anywhere.
+        const running = demoTaskId ? tasks.get(demoTaskId) : undefined;
+        res.statusCode = 202;
+        if (running?.status === 'running') return running;
+        const task = tasks.start('create-demo', APP_TASK, (signal) =>
+          createDemoOp(engine, { signal }),
+        );
+        demoTaskId = task.id;
+        return task;
+      },
+    ],
     [
       'POST',
       /^\/v1\/health\/analysis-setup$/,

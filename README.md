@@ -68,6 +68,10 @@ The Settings page shows which AI providers are available and why not, takes an A
 
 Open **Setup** (or run `tforge doctor`) to see whether this computer is ready: FFmpeg and the filters and encoders renders use (a missing one is named, with how to install a full build), the music and footage analysis tools, free disk space, AI help and the optional vision model. Checking only reads. If the analysis tools have not been set up, **Create the analysis environment…** shows what it downloads (about 900 MB of Python packages from PyPI, through `uv`, once), asks first, shows progress and can be cancelled; the step is written to the network log. A render that needs something this FFmpeg lacks stops before it starts and says which filter or encoder is missing.
 
+### Try a demo
+
+On the Projects page, **Try a demo** (or `tforge demo`) builds a small finished project in about half a minute: five recordings of an invented game, a 120 BPM music loop, a storyboard, a cut on the music and two versions (16:9 and 9:16) whose Quality Gate is clear, so you can look at every tab and export one. Everything is made on this computer (FFmpeg draws the footage, the music is generated in code) and nothing is downloaded or sent; building it twice gives the same recordings, cut and video. It needs only FFmpeg, not the analysis tools. Demo projects go in `<home>/demo-projects/`.
+
 ### Desktop app (Electron)
 
 In the desktop app, **Browse…** buttons open the Windows file chooser to open a project, pick where a new one goes, link a game repo and add a watched folder. A web browser cannot learn where a chosen folder is, so there you type or paste the path.
