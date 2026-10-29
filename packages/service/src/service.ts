@@ -649,13 +649,14 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             'storyboard.regenerate-section',
             'brief.suggest',
             'capture.tips',
+            'critique.run',
           ])
           .safeParse(query.get('task'));
         if (!task.success)
           throw new HttpError(
             400,
             'bad-request',
-            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest or capture.tips',
+            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips or critique.run',
           );
         return llmPreviewOp(engine, storeById(params.id!), task.data);
       },

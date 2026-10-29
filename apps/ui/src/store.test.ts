@@ -230,6 +230,7 @@ class Fake {
       offlineModel: null,
     }),
     useOfflineRoutes: async () => ({}) as never,
+    critiqueFacts: async () => ({ variantId: null, summary: ['x'], wire: {}, excluded: 0 }),
     secrets: async () =>
       ({
         anthropicApiKey: { set: this.keySet, source: this.keySet ? 'stored' : null },

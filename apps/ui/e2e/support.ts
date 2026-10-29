@@ -91,6 +91,30 @@ export async function startTestService(
         })),
       };
     },
+    'critique.run': (req: LlmRequest<unknown>) => {
+      prompts.push(req.prompt);
+      return {
+        notes: [
+          {
+            about: 'shot-1',
+            kind: 'issue',
+            text: 'The hook runs long for a parry.',
+            fix: {
+              type: 'slot-duration',
+              shot: 'shot-1',
+              seconds: 1.5,
+              summary: 'Cut the hook to 1.5 seconds',
+            },
+          },
+          {
+            about: 'overall',
+            kind: 'idea',
+            text: 'The pacing does not speed up toward the end.',
+            atSeconds: 3,
+          },
+        ],
+      };
+    },
     'brief.suggest': (req: LlmRequest<unknown>) => {
       prompts.push(req.prompt);
       const field = /^Field: .*\(([^()\s]+)\)$/m.exec(req.prompt)?.[1] ?? '';

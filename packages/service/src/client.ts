@@ -315,7 +315,11 @@ export class ServiceClient {
   llmPreview(
     id: string,
     task:
-      'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest' | 'capture.tips',
+      | 'storyboard.generate'
+      | 'storyboard.regenerate-section'
+      | 'brief.suggest'
+      | 'capture.tips'
+      | 'critique.run',
   ) {
     return this.request<LlmPreview>(
       'GET',

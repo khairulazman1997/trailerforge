@@ -95,6 +95,7 @@ export type ClientLike = Pick<
   | 'exportPresets'
   | 'approveVersion'
   | 'quality'
+  | 'critiqueFacts'
   | 'draft'
   | 'createDefaultVariants'
   | 'brand'
@@ -823,9 +824,18 @@ export class AppStore {
   async llmPreview(
     projectId: string,
     task:
-      'storyboard.generate' | 'storyboard.regenerate-section' | 'brief.suggest' | 'capture.tips',
+      | 'storyboard.generate'
+      | 'storyboard.regenerate-section'
+      | 'brief.suggest'
+      | 'capture.tips'
+      | 'critique.run',
   ): Promise<LlmPreview | null> {
     return (await this.run((c) => c.llmPreview(projectId, task))) ?? null;
+  }
+
+  /** What a critique of a version would send (words and data); null if it failed (a toast says why). */
+  async critiqueFacts(projectId: string, variantId: string | null) {
+    return (await this.run((c) => c.critiqueFacts(projectId, variantId))) ?? null;
   }
 
   // ---- the cut ----

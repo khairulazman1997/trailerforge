@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReviewComment } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
+import { CritiqueDialog } from '../components/CritiqueDialog.js';
 import { OverrideField } from '../components/OverrideField.js';
 import { busyTask } from '../store.js';
 import {
@@ -105,6 +106,7 @@ function VersionReview({ id, view }: { id: string; view: View }) {
   const [src, setSrc] = useState<string | null>(null);
   const [playbackFailed, setPlaybackFailed] = useState(false);
   const [now, setNow] = useState(0);
+  const [critiquing, setCritiquing] = useState(false);
   const mine = useMemo(() => commentsFor(comments, view.variantId), [comments, view.variantId]);
   const label = APPROVAL_LABEL[view.approval];
   const disabled = !!busy;
@@ -200,7 +202,24 @@ function VersionReview({ id, view }: { id: string; view: View }) {
         </p>
       )}
 
-      <h3>Comments</h3>
+      <div className="row">
+        <h3>Comments</h3>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setCritiquing(true)}
+          title="The AI reads a text description of this version and writes up to ten notes"
+        >
+          Ask for a critique
+        </button>
+      </div>
+      <CritiqueDialog
+        id={id}
+        variantId={view.variantId}
+        versionName={view.name}
+        open={critiquing}
+        onClose={() => setCritiquing(false)}
+      />
       <Ruler duration={view.seconds} comments={mine} now={src ? now : null} onSeek={seek} />
       <CommentForm
         key={mine.length}
@@ -364,9 +383,29 @@ function CommentList({
           ) : (
             <>
               <span className="grow">
+                {c.author === 'critique' && <span className="chip info">AI critique </span>}
                 {c.text}
                 {c.resolved && <span className="chip ok"> resolved</span>}
+                {c.fix && !c.resolved && (
+                  <span className="critique-fix" data-testid="critique-fix">
+                    {' '}
+                    <em>Suggested: {c.fix.summary}</em>
+                  </span>
+                )}
               </span>
+              {c.fix && !c.resolved && (
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={disabled}
+                  aria-label={`Apply the suggestion at ${formatTime(seconds(c.at))} seconds: ${c.fix.summary}`}
+                  onClick={() =>
+                    void store.command(id, 'core/critique.apply-fix', { commentId: c.id })
+                  }
+                >
+                  Apply
+                </button>
+              )}
               <button
                 type="button"
                 disabled={disabled}
@@ -380,23 +419,25 @@ function CommentList({
               >
                 {c.resolved ? 'Reopen' : 'Resolve'}
               </button>
+              {c.author !== 'critique' && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    setEditing(c.id);
+                    setDraft(c.text);
+                  }}
+                >
+                  Edit
+                </button>
+              )}
               <button
                 type="button"
                 disabled={disabled}
-                onClick={() => {
-                  setEditing(c.id);
-                  setDraft(c.text);
-                }}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                disabled={disabled}
-                aria-label={`Delete the comment at ${formatTime(seconds(c.at))} seconds`}
+                aria-label={`${c.author === 'critique' ? 'Dismiss' : 'Delete'} the ${c.author === 'critique' ? 'note' : 'comment'} at ${formatTime(seconds(c.at))} seconds`}
                 onClick={() => void store.command(id, 'core/review.delete', { commentId: c.id })}
               >
-                Delete
+                {c.author === 'critique' ? 'Dismiss' : 'Delete'}
               </button>
             </>
           )}
