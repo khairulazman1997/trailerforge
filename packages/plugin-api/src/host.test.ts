@@ -168,7 +168,9 @@ describe('PluginHost', () => {
   });
 
   it('supports async register and times out hung ones', async () => {
-    const host = new PluginHost({ registerTimeoutMs: 50 });
+    // A wide margin: under a full parallel `pnpm check` a busy machine can take tens of ms to run
+    // a 10 ms timer, and the hung plugin still has to wait the whole timeout.
+    const host = new PluginHost({ registerTimeoutMs: 1000 });
     const statuses = await host.load([
       noop('slow-ok', { register: () => new Promise((r) => setTimeout(r, 10)) }),
       noop('hung', { register: () => new Promise(() => {}) }),
