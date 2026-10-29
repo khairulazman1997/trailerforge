@@ -17,6 +17,7 @@ import {
   type ServiceEventMessage,
   type TaskRequest,
   type TaskView,
+  type LocalModelsView,
   type VisionView,
   type WatchedFoldersView,
 } from '@trailerforge/service/client';
@@ -134,6 +135,8 @@ export type ClientLike = Pick<
   | 'llmRoutes'
   | 'saveRoutes'
   | 'resetRoutes'
+  | 'localModels'
+  | 'useOfflineRoutes'
   | 'secrets'
   | 'setApiKey'
   | 'clearApiKey'
@@ -218,6 +221,7 @@ export interface AppState {
   settings: SettingsData | null;
   /** The opt-in vision model: state and disclosure; null until a screen asks. */
   vision: VisionView | null;
+  localModels: LocalModelsView | null;
   /** Download progress 0–1 and its task, while the model is downloading. */
   visionDownload: { taskId: string; fraction: number } | null;
   /** Whether Claude Code is connected to this app's tools; null until Settings asks. */
@@ -256,6 +260,7 @@ const initial: AppState = {
   handoffs: [],
   settings: null,
   vision: null,
+  localModels: null,
   visionDownload: null,
   watched: null,
   claudeCode: null,
@@ -462,6 +467,7 @@ export class AppStore {
       case 'settings.changed':
         // Someone (this window, another one, Claude Code) changed keys, routes or watched folders.
         if (this.state.settings) await this.loadSettings();
+        if (this.state.localModels) await this.loadLocalModels();
         if (this.state.watched) await this.loadWatched();
         break;
       case 'vision.progress': {
@@ -779,6 +785,20 @@ export class AppStore {
     const r = await this.run((c) => c.saveRoutes(config));
     if (!r) return false;
     await this.loadSettings();
+    return true;
+  }
+
+  /** Ask the local model server (on this computer) which models it has. */
+  async loadLocalModels(): Promise<void> {
+    const v = await this.run((c) => c.localModels());
+    if (v) this.set({ localModels: v });
+  }
+
+  /** Route every task to one local model. */
+  async useOfflineRoutes(model: string): Promise<boolean> {
+    const r = await this.run((c) => c.useOfflineRoutes(model));
+    if (!r) return false;
+    await Promise.all([this.loadSettings(), this.loadLocalModels()]);
     return true;
   }
 

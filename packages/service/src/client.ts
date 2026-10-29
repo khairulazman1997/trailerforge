@@ -12,6 +12,7 @@ export type {
   ExportOutcome,
   LibraryMediaKind,
   LlmPreview,
+  LocalModelsView,
   RenderedPack,
   PendingHandoff,
   RoutesView,
@@ -20,7 +21,13 @@ export type {
   VisionView,
   WatchedFoldersView,
 } from '@trailerforge/engine';
-import type { LlmPreview, PendingHandoff, RoutesView, SecretsView } from '@trailerforge/engine';
+import type {
+  LlmPreview,
+  LocalModelsView,
+  PendingHandoff,
+  RoutesView,
+  SecretsView,
+} from '@trailerforge/engine';
 import type {
   ClaudeCodeView,
   LibraryMediaKind,
@@ -236,6 +243,13 @@ export class ServiceClient {
   }
   saveRoutes(config: unknown) {
     return this.request<RoutesView>('PUT', '/v1/llm/routes', config);
+  }
+  localModels() {
+    return this.request<LocalModelsView>('GET', '/v1/llm/local-models');
+  }
+  /** Route every task to one local model (the "fully offline" preset). */
+  useOfflineRoutes(model: string) {
+    return this.request<RoutesView>('POST', '/v1/llm/routes/offline', { model });
   }
   resetRoutes() {
     return this.request<RoutesView>('DELETE', '/v1/llm/routes');

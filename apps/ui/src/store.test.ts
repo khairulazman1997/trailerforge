@@ -222,6 +222,14 @@ class Fake {
       ({ config: {}, defaults: {}, custom: false, tasks: [], providers: [], models: [] }) as never,
     saveRoutes: async () => ({}) as never,
     resetRoutes: async () => ({}) as never,
+    localModels: async () => ({
+      url: 'http://127.0.0.1:11434',
+      available: false,
+      reason: 'no',
+      models: [],
+      offlineModel: null,
+    }),
+    useOfflineRoutes: async () => ({}) as never,
     secrets: async () =>
       ({
         anthropicApiKey: { set: this.keySet, source: this.keySet ? 'stored' : null },
@@ -581,5 +589,18 @@ describe('describeFailure', () => {
     ]);
     expect(describeFailure(err)).toBe('core/x: invalid payload (Expected string; Required)');
     expect(describeFailure(new Error('boom'))).toBe('boom');
+  });
+});
+
+describe('local models', () => {
+  it('reads the local model list and switches the routes over', async () => {
+    const { store, fake } = await setup();
+    const calls: string[] = [];
+    fake.client.useOfflineRoutes = async (m: string) => (calls.push(m), {} as never);
+    await store.loadLocalModels();
+    expect(store.getState().localModels).toMatchObject({ available: false, models: [] });
+    expect(await store.useOfflineRoutes('qwen3:14b')).toBe(true);
+    expect(calls).toEqual(['qwen3:14b']);
+    store.disconnect();
   });
 });

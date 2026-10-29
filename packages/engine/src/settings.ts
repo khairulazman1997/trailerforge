@@ -120,3 +120,67 @@ export async function clearAnthropicKey(engine: Engine): Promise<SecretsView> {
 }
 
 export const providerStatus = (engine: Engine) => engine.llm.status(engine.llmProviderIds());
+
+export interface LocalModelsView {
+  /** Where the local model server is expected. */
+  url: string;
+  available: boolean;
+  /** Why not, in words with the fix. */
+  reason?: string;
+  models: string[];
+  /** The model every task is routed to right now when the routes are the offline preset. */
+  offlineModel: string | null;
+}
+
+/** The models Ollama has on this computer, for the settings screen. Sends nothing off the machine. */
+export async function localModelsView(engine: Engine): Promise<LocalModelsView> {
+  const provider = engine.ollama;
+  const url = engine.ollamaUrl();
+  const status = await provider.available();
+  const models = status.ok ? await provider.models().catch(() => []) : [];
+  const cfg = engine.llm.routesConfig;
+  const all = [cfg.default, ...Object.values(cfg.routes)].filter(Boolean);
+  const offline =
+    all.length > 0 && all.every((r) => r!.provider === 'core/ollama')
+      ? (all[0]!.model ?? null)
+      : null;
+  return {
+    url,
+    available: status.ok,
+    ...(status.ok ? {} : { reason: status.reason }),
+    models,
+    offlineModel: offline,
+  };
+}
+
+/**
+ * The "fully offline" routes: every task (and the default) goes to one local model, and the only
+ * fallback is copy-to-chat, which asks first. Saved like any edit of the routes.
+ */
+export function offlineRoutes(model: string): RoutesConfig {
+  const defaults = RoutesConfig.parse(DEFAULT_ROUTES);
+  const route = (effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max') => ({
+    provider: 'core/ollama',
+    model,
+    ...(effort ? { effort } : {}),
+  });
+  return RoutesConfig.parse({
+    default: route(),
+    routes: Object.fromEntries(Object.keys(defaults.routes).map((task) => [task, route()])),
+    fallbacks: ['core/chat-handoff'],
+  });
+}
+
+export async function useOfflineRoutes(engine: Engine, model: unknown): Promise<RoutesView> {
+  if (typeof model !== 'string' || !model.trim())
+    throw new OpError('usage', 'choose one of the local models');
+  const view = await localModelsView(engine);
+  if (!view.available)
+    throw new OpError('usage', view.reason ?? 'the local model server is not available');
+  if (!view.models.includes(model))
+    throw new OpError(
+      'usage',
+      `"${model}" is not one of the local models (${view.models.join(', ') || 'none'})`,
+    );
+  return saveRoutes(engine, offlineRoutes(model));
+}

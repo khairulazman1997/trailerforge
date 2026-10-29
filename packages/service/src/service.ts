@@ -60,11 +60,13 @@ import {
   HandoffCancelled,
   llmPreviewOp,
   OpError,
+  localModelsView,
   providerStatus,
   regenerateSectionOp,
   resetRoutes,
   routesView,
   saveRoutes,
+  useOfflineRoutes,
   scanKnowledgeOp,
   secretsView,
   setAnthropicKey,
@@ -511,6 +513,16 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     ],
     ['GET', /^\/v1\/llm\/providers$/, async () => providerStatus(engine)],
     ['GET', /^\/v1\/llm\/routes$/, async () => routesView(engine)],
+    ['GET', /^\/v1\/llm\/local-models$/, async () => localModelsView(engine)],
+    [
+      'POST',
+      /^\/v1\/llm\/routes\/offline$/,
+      async ({ body }) => {
+        const view = await useOfflineRoutes(engine, ((await body()) as { model?: unknown })?.model);
+        settingsChanged('routes');
+        return view;
+      },
+    ],
     [
       'PUT',
       /^\/v1\/llm\/routes$/,

@@ -23,6 +23,8 @@ import {
   createAnthropicProvider,
   createChatHandoffProvider,
   createClaudeCodeProvider,
+  createOllamaProvider,
+  normalizeOllamaUrl,
   LlmClient,
   loadRoutesConfig,
   type ClaudeCodeOptions,
@@ -162,6 +164,11 @@ export class Engine {
         apiKey: () => secrets.get('anthropic-api-key'),
         fetch: egress.llmFetch({ provider: 'core/anthropic', hosts: ['api.anthropic.com'] }),
       }),
+      // A model on this computer: only `localhost` is reachable for it, whatever the address says.
+      'core/ollama': createOllamaProvider({
+        fetch: egress.llmFetch({ provider: 'core/ollama', hosts: [], localhost: true }),
+        scope: (purpose, run) => egress.scope({ purpose }, run),
+      }),
       'core/claude-code': createClaudeCodeProvider({
         ...opts.claudeCode,
         handOff: (text) =>
@@ -187,7 +194,8 @@ export class Engine {
           egress.scope(
             {
               purpose: `AI request "${info.task}" (${info.provider.name})`,
-              forbidden: info.forbidden,
+              // Exclusions keep names off other people's servers; a model on this computer may see them.
+              forbidden: info.provider.sendsDataOffDevice ? info.forbidden : [],
             },
             run,
           ),
@@ -213,6 +221,7 @@ export class Engine {
       status,
       opts.autosaveMs ?? 2000,
     );
+    engine.ollama = providers['core/ollama'];
     await watched.start();
     return engine;
   }
@@ -226,6 +235,14 @@ export class Engine {
     return this.llm.withForbidden(excludedTerms(store.state.knowledge));
   }
 
+  /** The local model provider (Ollama), for the model list in settings. */
+  ollama!: ReturnType<typeof createOllamaProvider>;
+
+  /** Where the local model server is expected to listen. */
+  ollamaUrl(): string {
+    return normalizeOllamaUrl(process.env.OLLAMA_HOST);
+  }
+
   llmProviderIds(): string[] {
     const cfg = this.llm.routesConfig;
     return [
@@ -233,6 +250,7 @@ export class Engine {
         'core/anthropic',
         'core/claude-code',
         'core/chat-handoff',
+        'core/ollama',
         ...Object.values(cfg.routes).map((r) => r.provider),
         ...(cfg.default ? [cfg.default.provider] : []),
         ...cfg.fallbacks,

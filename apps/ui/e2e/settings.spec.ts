@@ -1,3 +1,5 @@
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { ServiceClient } from '@trailerforge/service';
@@ -5,10 +7,19 @@ import { startTestService, type TestService } from './support.js';
 
 let t: TestService;
 let projectId: string;
+let ollama: Server;
+const savedOllamaHost = process.env.OLLAMA_HOST;
 const savedEnvKey = process.env.ANTHROPIC_API_KEY;
 
 test.beforeAll(async () => {
   delete process.env.ANTHROPIC_API_KEY;
+  // A stand-in for the local model server, which only has to list its models here.
+  ollama = createServer((_req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ models: [{ name: 'llama3.1:8b' }, { name: 'qwen3:14b' }] }));
+  });
+  await new Promise<void>((r) => ollama.listen(0, '127.0.0.1', r));
+  process.env.OLLAMA_HOST = `127.0.0.1:${(ollama.address() as AddressInfo).port}`;
   t = await startTestService({ realProviders: true });
   const client = new ServiceClient({ baseUrl: t.svc.url, token: t.svc.token });
   projectId = (
@@ -20,6 +31,9 @@ test.beforeAll(async () => {
   ).id;
 });
 test.afterAll(async () => {
+  ollama.close();
+  if (savedOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+  else process.env.OLLAMA_HOST = savedOllamaHost;
   if (savedEnvKey !== undefined) process.env.ANTHROPIC_API_KEY = savedEnvKey;
   await t.close();
 });
@@ -123,4 +137,25 @@ test('Chat Handoff round-trip with a fix-it follow-up', async ({ context, page }
   await expect(page.getByRole('button', { name: /chat request/ })).toHaveCount(0);
 
   await client.resetRoutes();
+});
+
+test('use a model on this computer for everything, then reset', async ({ page }) => {
+  await open(page, '/settings');
+  const panel = page.getByTestId('local-models');
+  await expect(panel).toContainText('Running');
+  await expect(page.locator('[data-provider="core/ollama"]')).toContainText('Available');
+  await expect(page.locator('[data-provider="core/ollama"]')).toContainText(
+    'Stays on this computer',
+  );
+  await panel.getByLabel('Model').selectOption('qwen3:14b');
+  await panel.getByRole('button', { name: 'Use it for everything' }).click();
+  await expect(panel).toContainText('every task uses qwen3:14b');
+  await expect(page.getByLabel('Provider for Default for everything else')).toHaveValue(
+    'core/ollama',
+  );
+  await expect(page.getByText('Customised')).toBeVisible();
+  await page.getByRole('button', { name: 'Reset to defaults' }).click();
+  await page.getByRole('button', { name: 'Reset routes' }).click();
+  await expect(page.getByText('Customised')).toHaveCount(0);
+  await expect(panel).not.toContainText('every task uses');
 });

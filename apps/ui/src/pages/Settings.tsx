@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppState, useStore } from '../app-context.js';
 import { ClaudeCodePanel } from '../components/ClaudeCodePanel.js';
 import { ConfirmDialog } from '../components/Dialog.js';
+import { LocalModelsPanel } from '../components/LocalModelsPanel.js';
 import { RoutesEditor } from '../components/RoutesEditor.js';
 import { VisionPanel } from '../components/VisionPanel.js';
 import { WatchedFoldersPanel } from '../components/WatchedFoldersPanel.js';
@@ -111,6 +112,7 @@ export function SettingsPage() {
         </p>
       </section>
 
+      <LocalModelsPanel />
       <ClaudeCodePanel />
       <WatchedFoldersPanel />
       <VisionPanel />
