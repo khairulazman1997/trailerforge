@@ -100,6 +100,8 @@ function mix(timeline: Timeline, sources: Map<string, SourceMedia>, master?: Mas
 }
 
 const firstSound = (x: Float32Array) => x.findIndex((v) => Math.abs(v) > 1e-5);
+const peak = (x: Float32Array, from: number, to: number) =>
+  x.subarray(from, to).reduce((m, v) => Math.max(m, Math.abs(v)), 0);
 const rmsDb = (x: Float32Array, from: number, to: number) => {
   let sum = 0;
   for (let i = Math.round(from * 48000); i < Math.round(to * 48000); i++) sum += x[i]! ** 2;
@@ -149,8 +151,11 @@ describe('audio mix', { timeout: 60_000 }, () => {
       v({ core: { clipAudio: { enabled: true, lead: s(0.25), lag: s(0.5) } } }),
       sources,
     );
-    // Sound from 0.75 s (a quarter second before the picture), on past its end.
-    expect(firstSound(on.samples)).toBe(36000);
+    // Sound from 0.75 s (a quarter second before the picture), on past its end. The tone crosses
+    // zero exactly there (880 Hz at source 0.75 s), and FFmpeg builds differ on whether that first
+    // sample is 0 or a hair off, so check silence before it and sound by the next sample.
+    expect(peak(on.samples, 0, 36000)).toBeLessThan(1e-5);
+    expect(peak(on.samples, 36000, 36002)).toBeGreaterThan(0.005);
     expect(on.plan.samples).toBe(96000);
     expect(rmsDb(on.samples, 1.9, 1.99)).toBeGreaterThan(-30);
   });
