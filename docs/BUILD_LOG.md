@@ -234,3 +234,14 @@ Breakdown at 15:37 UTC: 13 tasks (6.1–6.13), eight design defaults, all confir
 | After 6.13       | —       | —    | user to report; M6 complete |
 
 **M6 summary.** 13 tasks over four session windows (15:37–21:10 UTC, 2026-10-28) and about 16% of a week by the readings so far (8% → 24% before 6.13), against 5–7 windows and 20–30% planned. Delivered: the render compiler (one filtergraph and a sample-exact mix per version, `planHash`), resumable crash-safe segment renders, five export presets, the two-stage Quality Gate with logged overrides, review comments and approvals tied to what a version renders to, FCPXML/OTIO/EDL handoff, engine/service/CLI/MCP operations, and the Review and Export tabs. Not verified here: hardware encoders on real GPUs, any M6 task on Windows, the FCPXML against Apple's DTD or in Resolve, H.264 playback in Playwright's Chromium. Speed is the main weakness: 0.2–0.35× real time at 1080p on 4 cores.
+
+## Milestone 7 — Polish (broken down 2026-10-29, UTC)
+
+Breakdown at 02:33 UTC: 13 tasks (7.1–7.13), eight design defaults, all confirmed as proposed the same session; about 160–240k output tokens (~50% Opus) over 4–6 session windows, roughly 15–22% of a week.
+
+| Task | Commit | Start | End | Duration | Model | Notes |
+| ---- | ------ | ----- | --- | -------- | ----- | ----- |
+
+| When (M7)        | Session | Week | Note           |
+| ---------------- | ------- | ---- | -------------- |
+| Before breakdown | 0%      | 26%  | user's reading |
