@@ -23,8 +23,12 @@ const UV_URL = `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/
 const here = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repo = join(here, '..', '..');
 const args = new Set(process.argv.slice(2));
+// On Windows the shell joins the arguments into one command line, so a path with a space
+// (`D:\Craft Tools\...`) must be quoted or it arrives as two arguments.
+const win = process.platform === 'win32';
+const quote = (s) => (/[\s&|<>^()%!]/.test(s) ? `"${s}"` : s);
 const run = (cmd, a, cwd = repo) =>
-  execFileSync(cmd, a, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
+  execFileSync(cmd, win ? a.map(quote) : a, { cwd, stdio: 'inherit', shell: win });
 
 if (!args.has('--skip-build')) run('pnpm', ['turbo', 'build']);
 
