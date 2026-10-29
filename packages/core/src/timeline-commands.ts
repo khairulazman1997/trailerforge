@@ -82,15 +82,36 @@ function pruneTransitions(track: Draft<Track>): void {
   );
 }
 
-/** Move an edge: `in` (positive = later start, shorter) or `out` (positive = longer), in flicks. */
+/** Items on `track` starting at or after `from` (other than `except`), moved by `delta`. */
+function shiftFollowers(track: Draft<Track>, from: number, delta: number, except: string): void {
+  if (delta === 0) return;
+  for (const it of track.items) {
+    if (it.id === except || it.start < from) continue;
+    it.start += delta;
+    markEdited(it);
+  }
+}
+
+/**
+ * Move an edge: `in` (positive = later start, shorter) or `out` (positive = longer), in flicks.
+ * With `ripple`, the item keeps its start and the items after it on the track move by the change
+ * in length instead (later for longer, earlier for shorter).
+ */
 export const trimItem = defineCommand({
   type: 'core/timeline.trim',
-  payload: z.strictObject({ ...Ref, edge: z.enum(['in', 'out']), delta: z.int() }),
-  label: ({ edge }) => `Trim ${edge === 'in' ? 'start' : 'end'}`,
-  apply: (d, { timelineId, itemId, edge, delta }) => {
+  payload: z.strictObject({
+    ...Ref,
+    edge: z.enum(['in', 'out']),
+    delta: z.int(),
+    ripple: z.boolean().optional(),
+  }),
+  label: ({ edge, ripple }) =>
+    `${ripple ? 'Ripple trim' : 'Trim'} ${edge === 'in' ? 'start' : 'end'}`,
+  apply: (d, { timelineId, itemId, edge, delta, ripple }) => {
     const { item, track } = find(d, timelineId, itemId, 'core/timeline.trim');
+    const oldEnd = item.start + item.duration;
     if (edge === 'in') {
-      item.start += delta;
+      if (!ripple) item.start += delta;
       item.duration -= delta;
       if ('sourceIn' in item)
         item.sourceIn += Math.round(delta * ('speed' in item ? item.speed : 1));
@@ -101,26 +122,74 @@ export const trimItem = defineCommand({
         'that trim goes past the start or end of the item',
       );
     }
+    if (ripple) shiftFollowers(track, oldEnd, edge === 'in' ? -delta : delta, itemId);
     markEdited(item);
     pruneTransitions(track);
   },
   merge: {
-    key: ({ timelineId, itemId, edge }) => `${timelineId}/${itemId}/${edge}`,
+    key: ({ timelineId, itemId, edge, ripple }) =>
+      `${timelineId}/${itemId}/${edge}${ripple ? '/ripple' : ''}`,
     windowMs: 1000,
   },
 });
 
+/**
+ * Move an item to `start`, optionally onto another track of the same kind. With
+ * `ripple`, on the same track the items after it move by the same amount; onto another track,
+ * the items after it close the gap it leaves and the items from `start` on the new track make
+ * room for it. Overlaps that remain are refused by the store's validation.
+ */
 export const moveItem = defineCommand({
   type: 'core/timeline.move',
-  payload: z.strictObject({ ...Ref, start: Flicks }),
-  label: () => 'Move clip',
-  apply: (d, { timelineId, itemId, start }) => {
-    const { item, track } = find(d, timelineId, itemId, 'core/timeline.move');
+  payload: z.strictObject({
+    ...Ref,
+    start: Flicks,
+    trackId: Id.optional(),
+    ripple: z.boolean().optional(),
+  }),
+  label: ({ trackId, ripple }) =>
+    `${ripple ? 'Ripple move' : 'Move'} clip${trackId ? ' to another track' : ''}`,
+  apply: (d, { timelineId, itemId, start, trackId, ripple }) => {
+    const type = 'core/timeline.move';
+    const { item, track, index } = find(d, timelineId, itemId, type);
+    const oldStart = item.start;
+    const oldEnd = oldStart + item.duration;
+    const target =
+      trackId && trackId !== track.id
+        ? d.timelines.find((t) => t.id === timelineId)!.tracks.find((t) => t.id === trackId)
+        : track;
+    if (!target) throw new CommandError(type, `no track "${trackId}"`);
+    if (target.locked)
+      throw new CommandError(type, `track "${target.name || target.id}" is locked`);
+    if (target.kind !== track.kind)
+      throw new CommandError(type, `it can only move to another ${track.kind} track`);
+    if (target === track) {
+      if (ripple) shiftFollowers(track, oldEnd, start - oldStart, itemId);
+      item.start = start;
+      markEdited(item);
+      pruneTransitions(track);
+      return;
+    }
+    track.items.splice(index, 1);
+    track.transitions = track.transitions.filter(
+      (t) => t.fromItemId !== itemId && t.toItemId !== itemId,
+    );
+    if (ripple) {
+      shiftFollowers(track, oldEnd, -item.duration, itemId);
+      shiftFollowers(target, start, item.duration, itemId);
+      pruneTransitions(track);
+    }
     item.start = start;
     markEdited(item);
-    pruneTransitions(track);
+    target.items.push(item);
+    target.items.sort((a, b) => a.start - b.start);
+    pruneTransitions(target);
   },
-  merge: { key: ({ timelineId, itemId }) => `${timelineId}/${itemId}`, windowMs: 1000 },
+  merge: {
+    key: ({ timelineId, itemId, trackId, ripple }) =>
+      `${timelineId}/${itemId}/${trackId ?? ''}${ripple ? '/ripple' : ''}`,
+    windowMs: 1000,
+  },
 });
 
 /** Fill an item from another recording (or another moment of the same one). */

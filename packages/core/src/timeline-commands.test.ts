@@ -226,6 +226,42 @@ describe('core/timeline commands', () => {
     expect(isUserEdited(it_('rc_a'))).toBe(false);
   });
 
+  it('ripple trims and moves carry the items after them, each in one undo step', () => {
+    store.dispatch('core/timeline.trim', { ...ref('rc_a'), edge: 'out', delta: F, ripple: true });
+    expect([it_('rc_a').duration, it_('rc_b').start]).toEqual([3 * F, 3 * F]);
+    expect(isUserEdited(it_('rc_b'))).toBe(true);
+    store.undo();
+    expect([it_('rc_a').duration, it_('rc_b').start]).toEqual([2 * F, 2 * F]);
+    store.dispatch('core/timeline.trim', {
+      ...ref('rc_a'),
+      edge: 'in',
+      delta: F / 2,
+      ripple: true,
+    });
+    expect(it_('rc_a')).toMatchObject({ start: 0, duration: 1.5 * F, sourceIn: 1.5 * F });
+    expect(it_('rc_b').start).toBe(1.5 * F);
+    store.undo();
+    store.dispatch('core/timeline.move', { ...ref('rc_a'), start: F / 2, ripple: true });
+    expect([it_('rc_a').start, it_('rc_b').start]).toEqual([F / 2, 2.5 * F]);
+    store.undo();
+    expect([it_('rc_a').start, it_('rc_b').start]).toEqual([0, 2 * F]);
+  });
+
+  it('moves an item onto another track of the same kind; locked or other kinds refuse', () => {
+    const t = cut();
+    t.tracks.push({ id: 'trk_over', kind: 'video', name: 'Over', muted: false, locked: false, items: [], transitions: [] }); // prettier-ignore
+    store.dispatch('core/timeline.set', { timeline: t });
+    store.dispatch('core/timeline.move', { ...ref('rc_b'), start: 3 * F, trackId: 'trk_over', ripple: true }); // prettier-ignore
+    const where = () =>
+      tl().tracks.map((k) => [k.id, k.items.map((i) => `${i.id}@${i.start / F}`)]);
+    expect(where()).toEqual([['trk_picture', ['rc_a@0']], ['trk_music', ['rc_m@0']], ['trk_over', ['rc_b@3']]]); // prettier-ignore
+    store.undo();
+    expect(where()[0]).toEqual(['trk_picture', ['rc_a@0', 'rc_b@2']]);
+    expect(() => store.dispatch('core/timeline.move', { ...ref('rc_b'), start: 0, trackId: 'trk_music' })).toThrow(/locked/); // prettier-ignore
+    store.dispatch('core/timeline.set-track-locked', { timelineId: 'tl_rough', trackId: 'trk_music', locked: false }); // prettier-ignore
+    expect(() => store.dispatch('core/timeline.move', { ...ref('rc_b'), start: 5 * F, trackId: 'trk_music' })).toThrow(/another video track/); // prettier-ignore
+  });
+
   it('refuses trims past the item and moves that overlap', () => {
     expect(() =>
       store.dispatch('core/timeline.trim', { ...ref('rc_a'), edge: 'in', delta: -2 * F }),

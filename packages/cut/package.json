@@ -22,5 +22,8 @@
   "dependencies": {
     "@trailerforge/effects": "workspace:*",
     "@trailerforge/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@trailerforge/core": "workspace:*"
   }
 }

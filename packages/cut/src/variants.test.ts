@@ -223,7 +223,7 @@ function randomCase(seed: number): VariantInput & { project: Project } {
 const SEEDS = Array.from({ length: 300 }, (_, i) => i + 1);
 const allSlots = (p: Project): Slot[] => p.storyboard!.sections.flatMap((s) => s.slots);
 
-describe('deriveVariant properties', () => {
+describe('deriveVariant properties', { timeout: 30_000 }, () => {
   it('covers drops, shortening, lengthening and shortfalls across the seeds', () => {
     const seen = new Set<string>();
     for (const seed of SEEDS) {

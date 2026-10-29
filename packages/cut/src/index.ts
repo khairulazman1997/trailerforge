@@ -8,3 +8,4 @@ export * from './variants.js';
 export * from './reframe.js';
 export * from './accents.js';
 export * from './quality.js';
+export * from './drag.js';

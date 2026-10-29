@@ -220,6 +220,10 @@ importers:
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema
+    devDependencies:
+      '@trailerforge/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/effects:
     dependencies:
