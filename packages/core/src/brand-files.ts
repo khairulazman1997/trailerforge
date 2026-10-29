@@ -107,5 +107,11 @@ export async function brandStatus(projectDir: string, brand: Brand | null) {
 }
 
 /** Where the shipped fallback fonts live (`assets/fonts/` at the app's root). */
-export const FALLBACK_FONT_DIR = fileURLToPath(new URL('../../../assets/fonts/', import.meta.url));
+/**
+ * The bundled fallback fonts. `TFORGE_ASSETS_DIR` points at a folder with `fonts/` inside, for
+ * builds where the packages are not laid out as in this repository (the desktop installer).
+ */
+export const FALLBACK_FONT_DIR = process.env.TFORGE_ASSETS_DIR
+  ? join(process.env.TFORGE_ASSETS_DIR, 'fonts')
+  : fileURLToPath(new URL('../../../assets/fonts/', import.meta.url));
 export const fallbackFontPath = (f: Pick<FallbackFont, 'file'>) => join(FALLBACK_FONT_DIR, f.file);

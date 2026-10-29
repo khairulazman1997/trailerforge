@@ -1,6 +1,8 @@
+import './env.js';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell } from 'electron';
+import { menuTemplate } from './packaged-env.js';
 import { startDesktop, type DesktopHost, type WindowLike } from './desktop.js';
 import { WINDOW_PREFERENCES } from './window-policy.js';
 
@@ -59,6 +61,10 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   let running: Awaited<ReturnType<typeof startDesktop>> | undefined;
   void app.whenReady().then(async () => {
+    const template = menuTemplate(process.platform);
+    Menu.setApplicationMenu(
+      template ? Menu.buildFromTemplate(template as Electron.MenuItemConstructorOptions[]) : null,
+    );
     try {
       running = await startDesktop(host);
     } catch (err) {

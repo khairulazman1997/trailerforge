@@ -36,13 +36,15 @@ The plan asks for a person to judge an M4 cut. With your own recordings and a mu
 
 ## Deferred: desktop smoke checklist (run on Windows later)
 
-1. `pnpm approve-builds` (allow electron), `pnpm build`, `pnpm --filter @trailerforge/desktop start`.
-2. Open or create a project, generate a storyboard (Chat Handoff is fine), open the **Capture** tab.
-3. Tick a shot, add a take and a note, undo once. Change the frame rate, then reset it.
-4. In "Share the pack", click **Write to the project folder**; open `exports/capture/capture-pack.html` in a browser and print-preview it.
-5. Click **Download Markdown**: does a Windows **Save As** dialog appear, and does the saved file open?
-6. Quit the app; reopen the project; the ticks, takes and notes are still there.
+Packaging (7.11) is verified here only as far as an unsigned `win-unpacked` folder goes; nothing was launched and no installer was built (NSIS needs Windows or wine).
 
-## Deferred: desktop polish (Sonnet, small)
+1. `pnpm install`, `pnpm approve-builds` (allow electron), then `pnpm --filter @trailerforge/desktop package` (builds everything, stages a flat production copy, adds resvg's Windows binary and the pinned uv, runs electron-builder). Then `pnpm --filter @trailerforge/desktop package:check -- --installer` must print "Package complete" and name `TrailerForge-Setup-<version>.exe` in `apps/desktop/release/`.
+2. Install it (unsigned: SmartScreen warns, choose "Run anyway"), start TrailerForge. The window opens, there is no File/Edit/View menu and no **Disconnect** button; path placeholders look like `C:\Games\...`.
+3. Setup page: FFmpeg must be on PATH (install a full build); the analysis tools say "needs setup". Click **Create the analysis environment…**, read the disclosure (about 900 MB, an estimate), accept; it builds under the app's data folder (`%APPDATA%`). Check again: ready.
+4. Projects → **Try a demo**: opens a project with a cut and two versions. Draft a review video and export one version.
+5. Open or create a real project, generate a storyboard (Chat Handoff is fine), open the **Capture** tab; tick a shot, add a take and a note, undo once.
+6. In "Share the pack", click **Write to the project folder**, then **Download Markdown**: does a Windows **Save As** dialog appear, and does the saved file open?
+7. Add a logo and a font under **Brand**, then look at **Graphics**: the preview uses them. Export once more and check the card text is drawn with the brand font (this uses resvg's Windows binary).
+8. Quit, reopen the project: everything is still there. Uninstall: the app folder goes, your projects stay.
 
-Browse buttons with the native pickers are done (2026-10-25). Still open: hide the "Disconnect" button and the default File/Edit/View/Window menu in desktop mode; Windows-style path placeholders.
+Open for the installer: no icon yet (default Electron icon), no code signing, no auto-update.

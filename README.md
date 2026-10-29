@@ -156,6 +156,10 @@ tforge capture export ./Ember.tforge --format md,html --omit-excluded
 tforge capture status ./Ember.tforge --json
 ```
 
+### Windows build
+
+`pnpm --filter @trailerforge/desktop package` makes an unsigned Windows x64 installer (`apps/desktop/release/TrailerForge-Setup-<version>.exe`; build it on Windows). `package --dir` only unpacks to `release/win-unpacked`, which also works on Linux; `package:check` verifies the result. The installer carries the app, fonts, resvg's Windows binary, the analysis sidecar's source and a pinned uv, but not FFmpeg (install a full build) and not the Python environment: the Setup page builds that after you agree.
+
 App data (job database, temp files, drop-in plugins) lives in `$TFORGE_HOME` (default `~/.trailerforge`).
 
 ## Architecture

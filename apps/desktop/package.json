@@ -1,6 +1,6 @@
 {
   "name": "@trailerforge/desktop",
-  "version": "0.0.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "main": "./dist/main.js",
@@ -8,7 +8,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "start": "pnpm --filter @trailerforge/ui build && pnpm build && electron ."
+    "start": "pnpm --filter @trailerforge/ui build && pnpm build && electron .",
+    "package": "node scripts/package.mjs",
+    "package:check": "node scripts/verify.mjs"
   },
   "dependencies": {
     "@trailerforge/engine": "workspace:*",
@@ -17,5 +19,11 @@
   "devDependencies": {
     "electron": "^45.0.0",
     "electron-builder": "^26.15.3"
-  }
+  },
+  "description": "TrailerForge desktop app",
+  "author": "TrailerForge",
+  "files": [
+    "dist",
+    "preload.cjs"
+  ]
 }

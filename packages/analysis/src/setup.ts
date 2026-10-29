@@ -1,6 +1,12 @@
 import { spawn } from 'node:child_process';
 import { runTool } from '@trailerforge/media';
-import { callSidecar, defaultSidecarCommand, findSidecarProject, SidecarError } from './sidecar.js';
+import {
+  callSidecar,
+  defaultSidecarCommand,
+  findSidecarProject,
+  SidecarError,
+  uvCommand,
+} from './sidecar.js';
 
 /**
  * The analysis sidecar's Python environment: whether it is ready, and creating it after the user
@@ -11,8 +17,8 @@ import { callSidecar, defaultSidecarCommand, findSidecarProject, SidecarError } 
 /** Roughly what `uv sync` downloads (numpy, scipy, librosa, OpenCV, onnxruntime...). */
 export const SIDECAR_SETUP_DISCLOSURE = {
   approxMegabytes: 900,
-  source: 'PyPI (python packages), through uv',
-  what: 'The Python packages for music and footage analysis, at the exact versions this app was tested with.',
+  source: 'PyPI (Python packages) and GitHub (a Python build), through uv',
+  what: 'A private copy of Python and the packages for music and footage analysis, at the exact versions this app was tested with.',
 } as const;
 
 export type SidecarState = 'ready' | 'needs-setup' | 'uv-missing' | 'missing' | 'broken';
@@ -30,8 +36,8 @@ export class SidecarSetupConsentRequired extends Error {
   }
 }
 
-const uvVersion = async (): Promise<string | null> =>
-  runTool('uv', ['--version'], { timeoutMs: 10_000 }).then(
+const uvVersion = async (env: NodeJS.ProcessEnv = process.env): Promise<string | null> =>
+  runTool(uvCommand(env), ['--version'], { timeoutMs: 10_000 }).then(
     (r) => r.stdout.trim(),
     () => null,
   );
@@ -50,8 +56,8 @@ export async function sidecarStatus(
       detail: `${(err as Error).message}. Reinstall TrailerForge, or set TFORGE_ANALYSIS_CMD.`,
     };
   }
-  const managed = cmd.command === 'uv';
-  if (managed && !(await uvVersion()))
+  const managed = cmd.command === uvCommand(env);
+  if (managed && !(await uvVersion(env)))
     return {
       state: 'uv-missing',
       detail:
@@ -86,13 +92,15 @@ export async function prepareSidecar(opts: {
   env?: NodeJS.ProcessEnv;
 }): Promise<SidecarStatus> {
   if (opts.consent !== true) throw new SidecarSetupConsentRequired();
-  const project = findSidecarProject();
+  const env = opts.env ?? process.env;
+  const project = findSidecarProject(env);
   if (!project) throw new SidecarError('sidecar-missing', 'cannot find workers/analysis');
-  if (!(await uvVersion()))
+  if (!(await uvVersion(env)))
     throw new SidecarError('uv-missing', 'uv is not installed (docs.astral.sh/uv)');
   await new Promise<void>((resolve, reject) => {
     opts.signal?.throwIfAborted();
-    const child = spawn('uv', ['sync', '--project', project, '--frozen'], {
+    const child = spawn(uvCommand(env), ['sync', '--project', project, '--frozen'], {
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });

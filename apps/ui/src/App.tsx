@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAppState, useStore } from './app-context.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { desktop } from './desktop.js';
 import { HandoffHost } from './components/HandoffHost.js';
 import { Toasts } from './components/Toasts.js';
 import { clearConnection } from './connection.js';
@@ -134,17 +135,20 @@ function Shell({ store }: { store: AppStore }) {
           <span className="dot" aria-hidden="true" />
           {STATUS_TEXT[status]}
         </span>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => {
-            clearConnection();
-            store.disconnect();
-            window.location.reload();
-          }}
-        >
-          Disconnect
-        </button>
+        {/* The desktop app is always connected to its own engine: there is nothing to disconnect. */}
+        {!desktop() && (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              clearConnection();
+              store.disconnect();
+              window.location.reload();
+            }}
+          >
+            Disconnect
+          </button>
+        )}
       </header>
       {route.name === 'home' && <HomePage />}
       {route.name === 'settings' && <SettingsPage />}

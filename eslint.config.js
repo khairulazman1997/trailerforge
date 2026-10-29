@@ -11,6 +11,9 @@ export default tseslint.config(
       '**/test-results/**',
       '**/playwright-report/**',
       'workers/**',
+      'apps/desktop/stage/**',
+      'apps/desktop/release/**',
+      'apps/desktop/vendor/**',
     ],
   },
   js.configs.recommended,
@@ -22,6 +25,13 @@ export default tseslint.config(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+    },
+  },
+  {
+    // Plain Node scripts.
+    files: ['apps/desktop/scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly', fetch: 'readonly' },
     },
   },
   {

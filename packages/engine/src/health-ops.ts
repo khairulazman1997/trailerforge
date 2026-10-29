@@ -268,12 +268,12 @@ export async function setupSidecarOp(
     await engine.egress.logSetup({
       purpose,
       tool: 'uv sync',
-      source: 'pypi.org (via uv)',
+      source: 'pypi.org, github.com (via uv)',
       ok: true,
     });
   } catch (err) {
     if (err instanceof SidecarSetupConsentRequired) throw new OpError('usage', err.message);
-    await engine.egress.logSetup({ purpose, tool: 'uv sync', source: 'pypi.org (via uv)', ok: false, error: (err as Error).message.slice(0, 300) }); // prettier-ignore
+    await engine.egress.logSetup({ purpose, tool: 'uv sync', source: 'pypi.org, github.com (via uv)', ok: false, error: (err as Error).message.slice(0, 300) }); // prettier-ignore
     throw err;
   }
   return sidecarCheck(engine);

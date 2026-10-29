@@ -46,14 +46,14 @@ export function defaultSidecarCommand(env: NodeJS.ProcessEnv = process.env): Sid
     }
     return { command: parts[0] as string, args: parts.slice(1) as string[] };
   }
-  const project = findSidecarProject();
+  const project = findSidecarProject(env);
   if (!project)
     throw new SidecarError(
       'sidecar-missing',
       'cannot find workers/analysis; set TFORGE_ANALYSIS_CMD',
     );
   return {
-    command: 'uv',
+    command: uvCommand(env),
     args: [
       'run',
       '--project',
@@ -70,8 +70,18 @@ export function defaultSidecarCommand(env: NodeJS.ProcessEnv = process.env): Sid
   };
 }
 
-/** The `workers/analysis` folder (with its `pyproject.toml`), looked for above this file. */
-export function findSidecarProject(): string | null {
+/** `uv`: the one the installer ships (`TFORGE_UV`), else the one on PATH. */
+export const uvCommand = (env: NodeJS.ProcessEnv = process.env): string => env.TFORGE_UV || 'uv';
+
+/**
+ * The `workers/analysis` folder (with its `pyproject.toml`): `TFORGE_SIDECAR_DIR` when set (the
+ * installer ships it beside the app), else looked for above this file.
+ */
+export function findSidecarProject(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.TFORGE_SIDECAR_DIR)
+    return existsSync(join(env.TFORGE_SIDECAR_DIR, 'pyproject.toml'))
+      ? env.TFORGE_SIDECAR_DIR
+      : null;
   let dir = dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 8; i++) {
     const project = join(dir, 'workers', 'analysis');

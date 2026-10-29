@@ -5,6 +5,7 @@ import { useAppState, useStore } from '../app-context.js';
 import { BrowseButton } from '../components/BrowseButton.js';
 import { ConfirmDialog, ConsentDialog } from '../components/Dialog.js';
 import { EntityRow } from '../components/EntityRow.js';
+import { examplePath } from '../desktop.js';
 import {
   filterEntities,
   KINDS,
@@ -140,7 +141,7 @@ export function KnowledgePage({ id }: { id: string }) {
             <input
               value={repo}
               onChange={(e) => setRepo(e.target.value)}
-              placeholder="/path/to/YourGame"
+              placeholder={examplePath('YourGame')}
               spellCheck={false}
             />
           </label>

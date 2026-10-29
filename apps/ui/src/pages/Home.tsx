@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppState, useStore } from '../app-context.js';
 import { BrowseButton } from '../components/BrowseButton.js';
-import { joinPath } from '../desktop.js';
+import { examplePath, joinPath } from '../desktop.js';
 import { Link, navigate, projectPath } from '../router.js';
 import type { Info } from '../store.js';
 
@@ -129,7 +129,7 @@ export function HomePage() {
               <input
                 value={openDir}
                 onChange={(e) => setOpenDir(e.target.value)}
-                placeholder="/path/to/MyGame.tforge"
+                placeholder={examplePath('MyGame.tforge')}
                 spellCheck={false}
               />
             </label>
@@ -209,7 +209,7 @@ export function HomePage() {
               <input
                 value={newDir}
                 onChange={(e) => setNewDir(e.target.value)}
-                placeholder="/path/to/MyGame.tforge"
+                placeholder={examplePath('MyGame.tforge')}
                 spellCheck={false}
               />
             </label>

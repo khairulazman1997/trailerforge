@@ -1,11 +1,38 @@
 appId: app.trailerforge.desktop
 productName: TrailerForge
+asar: false
+npmRebuild: false
 directories:
   output: release
+  app: stage
 files:
-  - dist/**
-  - preload.cjs
-  - package.json
+  - '**/*'
+  - '!**/@resvg/resvg-js-{linux-*,darwin-*,android-*,freebsd-*,win32-arm64-*,win32-ia32-*}/**'
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: TrailerForge-Setup-${version}.${ext}
 extraResources:
+  - from: stage/node_modules
+    to: app/node_modules
   - from: ../ui/dist
     to: ui
+  - from: ../../assets
+    to: assets
+  - from: ../../workers/analysis
+    to: analysis
+    filter:
+      - pyproject.toml
+      - uv.lock
+      - .python-version
+      - src/**/*
+      - '!**/__pycache__'
+      - '!**/*.pyc'
+  - from: vendor/uv
+    to: uv
