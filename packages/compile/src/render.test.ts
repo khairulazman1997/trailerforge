@@ -322,10 +322,19 @@ describe('transitions, effects and graphics', { timeout: 120_000 }, () => {
     expect(plan.warnings).toEqual([]);
     expect(raw.length).toBe(24 * FB);
     expect(plan.filtergraph).toContain('xfade');
-    // Mid-overlap the card's red half is partly there; after it, fully; the other half is black.
+    // Mid-overlap the picture is part shot, part card (whole frames compared: what the test
+    // source draws at any one pixel differs between FFmpeg builds); after it, the card alone:
+    // its red half, the other half black.
     const at = (f: number, x: number) => raw[f * FB + (45 * 160 + x) * 3]!;
-    expect(at(12, 20)).toBeGreaterThan(60);
-    expect(at(12, 20)).toBeLessThan(at(18, 20));
+    const diff = (f: number, g: number) => {
+      let d = 0;
+      for (let i = 0; i < FB; i++) d += Math.abs(raw[f * FB + i]! - raw[g * FB + i]!);
+      return d;
+    };
+    expect(diff(12, 18)).toBeGreaterThan(0);
+    expect(diff(12, 18)).toBeLessThan(diff(8, 18));
+    expect(diff(12, 8)).toBeGreaterThan(0);
+    expect(at(18, 20)).toBeGreaterThan(200);
     expect(at(18, 140)).toBeLessThan(20);
   });
 

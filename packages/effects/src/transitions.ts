@@ -57,8 +57,24 @@ export const xfadeTransition: TransitionDef<{ style: (typeof XFADE_STYLES)[numbe
   kind: 'transition',
   params: z.strictObject({ style: z.enum(XFADE_STYLES).default('wipeleft') }),
   defaultDuration: 0.5,
-  filter: (p, ctx, io) => simple(io, xfade(p.style, ctx)),
+  filter: (p, ctx, io) =>
+    p.style === 'squeezev' ? squeezev(ctx, io) : simple(io, xfade(p.style, ctx)),
 };
+
+/**
+ * `squeezev` as `squeezeh` on pictures turned on their side: FFmpeg 8.0's own `squeezev`
+ * crashes (a segfault at any size), and a squeeze is symmetric about the centre.
+ */
+function squeezev(
+  ctx: { duration: number; offset: number },
+  io: { a: string; b: string; out: string },
+) {
+  const [a, b] = [pad(`${io.out}_sa`), pad(`${io.out}_sb`)];
+  return (
+    `${pad(io.a)}transpose=clock${a};${pad(io.b)}transpose=clock${b};` +
+    `${a}${b}${xfade('squeezeh', ctx)},transpose=cclock${pad(io.out)}`
+  );
+}
 
 export const dip: TransitionDef<{ color: 'black' | 'white' }> = {
   id: 'core/dip',

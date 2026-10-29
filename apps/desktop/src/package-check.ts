@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 /**
  * What an unpacked Windows build must contain, checked against the folder `electron-builder`
@@ -67,6 +67,6 @@ function findFiles(dir: string, re: RegExp): string[] {
 function findDirs(dir: string, name: string): string[] {
   const out: string[] = [];
   if (!existsSync(dir)) return out;
-  walk(dir, (p, d) => d && p.endsWith(`/${name}`) && out.push(p));
+  walk(dir, (p, d) => d && basename(p) === name && out.push(p));
   return out;
 }

@@ -660,6 +660,9 @@ export function compileRender(input: CompileInput): RenderPlan {
     const still = (ps: Point[]) =>
       ps.length === 1 || ps.every((p) => p.v.every((x, i) => x === ps[0]!.v[i]));
     const scaleOpts = 'flags=lanczos+accurate_rnd+full_chroma_int';
+    // The frame number from `t`: the frame counters of overlay (FFmpeg 6.1) and scale (FFmpeg 8)
+    // start at 1.
+    const tf = `round(t*${rate.num}/${rate.den})`;
     let sized = pic;
     let w = W;
     let h = H;
@@ -671,7 +674,7 @@ export function compileRender(input: CompileInput): RenderPlan {
     } else {
       // Converted first: a format change after a size-changing scale would get FFmpeg's own
       // fixed-size converter, which squeezes every frame back to the first size.
-      const s = piecewise(one(scale, 0));
+      const s = piecewise(one(scale, 0), tf);
       sized = `${pic},format=${WORK_FMT},scale=${opts({
         w: `max(1,round(${W}*(${s})))`,
         h: `max(1,round(${H}*(${s})))`,
@@ -680,7 +683,6 @@ export function compileRender(input: CompileInput): RenderPlan {
     }
     chains.push(still(scale) ? `${sized},format=${WORK_FMT}[${key}s]` : `${sized}[${key}s]`);
     const placeStill = still(pos) && still(anchor) && still(scale);
-    const tf = `round(t*${rate.num}/${rate.den})`;
     const xy = placeStill
       ? {
           x: Math.round(pos[0]!.v[0]! * W - anchor[0]!.v[0]! * w),
@@ -688,7 +690,6 @@ export function compileRender(input: CompileInput): RenderPlan {
           eval: 'init',
         }
       : {
-          // overlay's own frame counter starts at 1 in FFmpeg 6.1: the frame number from `t`.
           x: `round((${piecewise(one(pos, 0), tf)})*W-(${piecewise(one(anchor, 0), tf)})*w)`,
           y: `round((${piecewise(one(pos, 1), tf)})*H-(${piecewise(one(anchor, 1), tf)})*h)`,
           eval: 'frame',
