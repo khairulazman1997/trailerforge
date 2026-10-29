@@ -271,3 +271,4 @@ Breakdown at 02:33 UTC: 13 tasks (7.1–7.13), eight design defaults, all confir
 | After 7.11          | 30%     | 40%  | before 7.12                                    |
 | After 7.12          | 35%     | 41%  | before 7.13 (Opus)                             |
 | Before M8 breakdown | 55%     | 43%  | user's reading; M7 Windows checks reported run |
+| 8.1 spike | (this) | 12:47 | 13:02 | ~25 min | Opus | EffectCraft 0.9.2 built from source; go (docs/spikes/effectcraft.md) |

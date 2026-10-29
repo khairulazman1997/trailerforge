@@ -396,7 +396,7 @@ Task breakdown:
 
 Rough budget: 8.1–8.3, 8.4b, 8.4c and 8.7 on Opus, the rest on Sonnet (about 55% Opus by tokens); 100–155k output tokens, roughly 14–20% of a week over 3–4 session windows. Suggested sessions: (1) 8.1 spike (+ 8.2 if go); (2) 8.2–8.4; (3) 8.4b–8.4c; (4) 8.5–8.7. A no-go in 8.1 stops the milestone.
 
-**M8 status (2026-10-29):** broken down; defaults awaiting confirmation.
+**M8 status (2026-10-29):** 8.1 spike done in the container: **go** (EffectCraft 0.9.2 headless, ProRes 4444 alpha, byte-identical across runs and thread counts, no network, JSON project, templates with values); details and plan adjustments in `docs/spikes/effectcraft.md`. Windows run of the spike script still open. Defaults 1–9 awaiting confirmation.
 
 ## Milestone 9 — Planner scaffold
 
