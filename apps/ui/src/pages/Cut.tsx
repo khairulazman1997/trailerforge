@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  planDrag,
+  snapTargets,
+  type DragMode,
+  type DragPlan,
+  type SnapTarget,
+} from '@trailerforge/cut';
+import {
   flicksPerFrame,
   itemEnd,
   timelineDuration,
@@ -8,6 +15,7 @@ import {
 } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
 import { AccentsPanel } from '../components/AccentsPanel.js';
+import { DRAG_SLOP_PX, SNAP_PX, dragNote, planKeyMove } from '../cut-drag.js';
 import { ConfirmDialog } from '../components/Dialog.js';
 import {
   F,
@@ -200,6 +208,17 @@ export function CutPage({ id }: { id: string }) {
 
 // ---------------------------------------------------------------------------------------------
 
+interface Drag {
+  itemId: string;
+  mode: DragMode;
+  x0: number;
+  laneWidth: number;
+  targets: SnapTarget[];
+  moved: boolean;
+  ripple: boolean;
+  plan: DragPlan | null;
+}
+
 function Timeline({
   id,
   selected,
@@ -215,10 +234,109 @@ function Timeline({
   const tl = view.project.timelines.find((t) => t.id === TIMELINE_ID)!;
   const total = Math.max(timelineDuration(tl), 1);
   const rate = tl.frameRate;
-  const bars = gridState?.grid?.bars ?? [];
+  const grid = gridState?.grid ?? null;
+  const bars = grid?.bars ?? [];
+  const lanes = useRef(new Map<string, HTMLDivElement>());
+  const dragged = useRef(false);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [note, setNote] = useState('');
+
+  const targetsFor = (itemId: string) =>
+    snapTargets(tl, grid ? { beats: grid.beats, bars: grid.bars } : null, {
+      exclude: itemId,
+    });
+  const find = (itemId: string) => {
+    for (const track of tl.tracks) {
+      const item = track.items.find((i) => i.id === itemId);
+      if (item) return { track, item };
+    }
+    return undefined;
+  };
+  const trackName = (trackId: string) => {
+    const t = tl.tracks.find((x) => x.id === trackId);
+    return t ? t.name || t.id : trackId;
+  };
+  const drop = (plan: DragPlan, item: TimelineItem, mode: DragMode, ripple: boolean) => {
+    const sameTrack = find(item.id)?.track.id === plan.trackId;
+    setNote(
+      dragNote(plan, item, rate, {
+        mode,
+        ripple,
+        ...(sameTrack ? {} : { trackName: trackName(plan.trackId) }),
+      }),
+    );
+    if (plan.ok && plan.command) void store.command(id, plan.command.type, plan.command.payload);
+  };
+
+  const start = (e: React.PointerEvent, itemId: string, mode: DragMode, trackId: string) => {
+    const lane = lanes.current.get(trackId);
+    if (e.button !== 0 || !lane || tl.tracks.find((t) => t.id === trackId)?.locked) return;
+    e.stopPropagation();
+    (e.currentTarget.closest('.cut-item') as HTMLElement | null)?.setPointerCapture(e.pointerId);
+    dragged.current = false;
+    setDrag({
+      itemId,
+      mode,
+      x0: e.clientX,
+      laneWidth: lane.getBoundingClientRect().width,
+      targets: targetsFor(itemId),
+      moved: false,
+      ripple: false,
+      plan: null,
+    });
+  };
+  const move = (e: React.PointerEvent) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x0;
+    const over = document
+      .elementFromPoint(e.clientX, e.clientY)
+      ?.closest<HTMLElement>('[data-track-id]')?.dataset.trackId;
+    const from = find(drag.itemId)?.track.id;
+    const toTrackId = drag.mode === 'move' && over && over !== from ? over : undefined;
+    if (!drag.moved && Math.abs(dx) < DRAG_SLOP_PX && !toTrackId) return;
+    const perPx = total / drag.laneWidth;
+    const plan = planDrag({
+      timeline: tl,
+      itemId: drag.itemId,
+      mode: drag.mode,
+      delta: dx * perPx,
+      ripple: e.shiftKey,
+      snap: e.altKey ? null : { targets: drag.targets, threshold: SNAP_PX * perPx },
+      ...(toTrackId ? { toTrackId } : {}),
+    });
+    setDrag({ ...drag, moved: true, ripple: e.shiftKey, plan });
+  };
+  const end = () => {
+    if (!drag) return;
+    const hit = find(drag.itemId);
+    if (drag.moved && drag.plan && hit) {
+      dragged.current = true;
+      drop(drag.plan, hit.item, drag.mode, drag.ripple);
+    }
+    setDrag(null);
+  };
+  const keys = (e: React.KeyboardEvent, item: TimelineItem, locked: boolean) => {
+    if (locked || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    e.preventDefault();
+    const plan = planKeyMove(tl, item, e.key === 'ArrowLeft' ? -1 : 1, {
+      toBeat: e.shiftKey,
+      ripple: e.altKey,
+      targets: targetsFor(item.id),
+    });
+    drop(plan, item, 'move', e.altKey);
+  };
+
+  const live = drag?.plan;
+  const dragItem = drag ? find(drag.itemId)?.item : undefined;
   return (
     <section aria-labelledby="cut-tl">
       <h2 id="cut-tl">Timeline</h2>
+      <p className="muted">
+        Drag a clip to move it, or its edges to trim. It snaps to beats, bars, sections and other
+        clips; hold Alt to place it freely and Shift to move the clips after it along. With a clip
+        selected, the arrow keys move it by a frame (with Shift, to the next beat; with Alt, moving
+        the clips after it).
+      </p>
       <div className="cut-tl" style={{ position: 'relative' }}>
         <div className="cut-ruler" aria-hidden="true">
           {bars
@@ -251,23 +369,93 @@ function Timeline({
                 <span className="sr-only"> {track.name || track.id}</span>
               </button>
             </div>
-            <div className="cut-lane">
+            <div
+              className="cut-lane"
+              data-track-id={track.id}
+              ref={(el) => {
+                if (el) lanes.current.set(track.id, el);
+                else lanes.current.delete(track.id);
+              }}
+            >
               {track.items.map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  className={`cut-item ${kindLabel(item)}${selected === item.id ? ' selected' : ''}${track.locked ? ' locked' : ''}`}
+                  className={`cut-item ${kindLabel(item)}${selected === item.id ? ' selected' : ''}${track.locked ? ' locked' : ''}${drag?.itemId === item.id && drag.moved ? ' dragging' : ''}`}
                   style={{
                     left: `${percent(item.start, total)}%`,
                     width: `${Math.max(percent(item.duration, total), 0.5)}%`,
                   }}
                   aria-pressed={selected === item.id}
                   aria-label={`${item.label ?? kindLabel(item)}, ${kindLabel(item)}, ${timecode(item.start, rate)} to ${timecode(itemEnd(item), rate)}`}
-                  onClick={() => onSelect(selected === item.id ? null : item.id)}
+                  data-item-id={item.id}
+                  onClick={() => {
+                    if (dragged.current) {
+                      dragged.current = false;
+                      return;
+                    }
+                    onSelect(selected === item.id ? null : item.id);
+                  }}
+                  onKeyDown={(e) => keys(e, item, track.locked)}
+                  onPointerDown={(e) => start(e, item.id, 'move', track.id)}
+                  onPointerMove={move}
+                  onPointerUp={end}
+                  onPointerCancel={() => setDrag(null)}
                 >
+                  {!track.locked && (
+                    <span
+                      className="cut-edge in"
+                      aria-hidden="true"
+                      data-edge="in"
+                      onPointerDown={(e) => start(e, item.id, 'trim-in', track.id)}
+                    />
+                  )}
                   <span className="cut-item-name">{item.label ?? kindLabel(item)}</span>
+                  {!track.locked && (
+                    <span
+                      className="cut-edge out"
+                      aria-hidden="true"
+                      data-edge="out"
+                      onPointerDown={(e) => start(e, item.id, 'trim-out', track.id)}
+                    />
+                  )}
                 </button>
               ))}
+              {live && live.trackId === track.id && (
+                <span
+                  className={`cut-ghost${live.ok ? '' : ' refused'}`}
+                  data-testid="cut-ghost"
+                  aria-hidden="true"
+                  style={{
+                    left: `${percent(live.start, total)}%`,
+                    width: `${Math.max(percent(live.end - live.start, total), 0.5)}%`,
+                  }}
+                />
+              )}
+              {live?.shifted
+                .filter((s) => s.trackId === track.id)
+                .map((s) => {
+                  const it = track.items.find((i) => i.id === s.itemId);
+                  return it ? (
+                    <span
+                      key={s.itemId}
+                      className="cut-ghost shifted"
+                      aria-hidden="true"
+                      style={{
+                        left: `${percent(s.start, total)}%`,
+                        width: `${Math.max(percent(it.duration, total), 0.5)}%`,
+                      }}
+                    />
+                  ) : null;
+                })}
+              {live?.snapped && (
+                <span
+                  className="cut-snap"
+                  data-testid="cut-snap"
+                  aria-hidden="true"
+                  style={{ left: `${percent(live.snapped.at, total)}%` }}
+                />
+              )}
             </div>
           </div>
         ))}
@@ -285,6 +473,11 @@ function Timeline({
             ))}
         </div>
       </div>
+      <p className="cut-drag-note" role="status" data-testid="cut-drag-note">
+        {live && dragItem
+          ? dragNote(live, dragItem, rate, { mode: drag!.mode, ripple: drag!.ripple })
+          : note}
+      </p>
     </section>
   );
 }
@@ -327,9 +520,14 @@ function Inspector({
     return d === undefined || d === null ? null : Math.round(d * F);
   };
   const locked = trackLocked;
+  const [ripple, setRipple] = useState(false);
+  const [trimNote, setTrimNote] = useState('');
   const trim = (edge: 'in' | 'out', delta: number | null) => {
     if (delta === null || delta === 0) return;
-    void store.command(id, 'core/timeline.trim', { ...ref, edge, delta });
+    const mode = edge === 'in' ? 'trim-in' : 'trim-out';
+    const plan = planDrag({ timeline: tl, itemId: item.id, mode, delta, ripple });
+    setTrimNote(plan.ok ? '' : dragNote(plan, item, rate, { mode, ripple }));
+    if (plan.ok && plan.command) void store.command(id, plan.command.type, plan.command.payload);
   };
   const edge = (e: 'in' | 'out') => (e === 'in' ? item.start : itemEnd(item));
   const window = decision?.reasons['window'];
@@ -359,6 +557,15 @@ function Inspector({
         <p className="muted">No automatic decision recorded (you made this one).</p>
       )}
 
+      <label className="field inline">
+        <input
+          type="checkbox"
+          checked={ripple}
+          disabled={locked}
+          onChange={(e) => setRipple(e.target.checked)}
+        />
+        <span>Ripple: move the clips after it along</span>
+      </label>
       {(['in', 'out'] as const).map((e) => (
         <div
           key={e}
@@ -397,6 +604,11 @@ function Inspector({
           </button>
         </div>
       ))}
+      {trimNote && (
+        <p className="banner warn" role="status">
+          {trimNote}
+        </p>
+      )}
 
       {(item.kind === 'clip' || item.kind === 'placeholder') && takes.length > 0 && (
         <label className="field inline">

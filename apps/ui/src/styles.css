@@ -1187,6 +1187,53 @@ span.handle {
 .cut-item.locked {
   opacity: 0.7;
 }
+.cut-item {
+  touch-action: none;
+}
+.cut-item.dragging {
+  opacity: 0.45;
+}
+.cut-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+.cut-edge.in {
+  left: 0;
+}
+.cut-edge.out {
+  right: 0;
+}
+.cut-ghost {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border: 2px dashed var(--accent, currentColor);
+  border-radius: 4px;
+  pointer-events: none;
+}
+.cut-ghost.refused {
+  border-color: var(--danger, #c0392b);
+  background: color-mix(in srgb, var(--danger, #c0392b) 15%, transparent);
+}
+.cut-ghost.shifted {
+  border-style: dotted;
+  opacity: 0.7;
+}
+.cut-snap {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent, currentColor);
+  pointer-events: none;
+}
+.cut-drag-note {
+  min-height: 1.4em;
+}
 .cut-item-name {
   white-space: nowrap;
   overflow: hidden;
