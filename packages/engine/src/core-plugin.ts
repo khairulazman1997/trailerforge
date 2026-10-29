@@ -3,6 +3,7 @@ import { builtinEffects, builtinTransitions } from '@trailerforge/effects';
 import { builtinTemplates } from '@trailerforge/graphics';
 import { genericExtractor, knowledgeCommands } from '@trailerforge/knowledge';
 import { storyboardCommands } from '@trailerforge/storyboard';
+import { critiqueCommands } from './critique-commands.js';
 import { JobError, defineJob } from '@trailerforge/jobs';
 import { MediaError, makeProxy, probe } from '@trailerforge/media';
 import { definePlugin, PLUGIN_API_VERSION } from '@trailerforge/plugin-api';
@@ -93,6 +94,7 @@ export const corePlugin = definePlugin({
     for (const command of briefCommands) ctx.commands.register(command);
     for (const command of storyboardCommands) ctx.commands.register(command);
     for (const command of knowledgeCommands) ctx.commands.register(command);
+    for (const command of critiqueCommands) ctx.commands.register(command);
     for (const template of builtinTemplates) ctx.graphicTemplates.register(template);
     for (const t of builtinTransitions) ctx.transitions.register(t);
     for (const e of builtinEffects) ctx.effects.register(e);

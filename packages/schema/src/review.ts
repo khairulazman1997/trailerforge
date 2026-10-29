@@ -9,6 +9,26 @@ import { Flicks } from './time.js';
  * the time stays meaningful when the item goes away. An approval records the render plan hash
  * it saw: when the plan changes, the approval is stale (see `approvalState`).
  */
+/**
+ * A change an AI critique suggests, as data the user can apply or dismiss: never applied on its
+ * own. Slots are named by their real ids here (the model only ever saw aliases).
+ */
+export const CritiqueFix = z.discriminatedUnion('type', [
+  z.strictObject({
+    type: z.literal('slot-duration'),
+    slotId: Id,
+    /** The new ideal length; the range widens to include it. */
+    seconds: z.number().positive().max(600),
+    summary: z.string().trim().min(1).max(200),
+  }),
+  z.strictObject({
+    type: z.literal('remove-slot'),
+    slotId: Id,
+    summary: z.string().trim().min(1).max(200),
+  }),
+]);
+export type CritiqueFix = z.infer<typeof CritiqueFix>;
+
 export const ReviewComment = z.strictObject({
   id: Id,
   /** The version; null is the master cut. */
@@ -21,6 +41,10 @@ export const ReviewComment = z.strictObject({
   resolved: z.boolean().default(false),
   createdAt: IsoDateTime,
   editedAt: IsoDateTime.optional(),
+  /** Set on notes the AI critique wrote; people's comments have no author. */
+  author: z.literal('critique').optional(),
+  /** What applying this critique note would change, if it has a fix. */
+  fix: CritiqueFix.optional(),
 });
 export type ReviewComment = z.infer<typeof ReviewComment>;
 

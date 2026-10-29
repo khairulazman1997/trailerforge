@@ -57,6 +57,8 @@ export interface Flags {
   override: string[];
   at?: string | undefined;
   text?: string | undefined;
+  /** `critique --show`: print what would be sent. */
+  show: boolean;
 }
 
 export interface CmdCtx {

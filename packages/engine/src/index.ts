@@ -11,3 +11,6 @@ export * from './vision-ops.js';
 export * from './watched-folders.js';
 export * from './graphics-ops.js';
 export * from './render-ops.js';
+export * from './critique.js';
+export * from './critique-commands.js';
+export * from './critique-ops.js';

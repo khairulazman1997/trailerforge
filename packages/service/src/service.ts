@@ -52,6 +52,8 @@ import {
   exportVersionOp,
   handoffOp,
   presetsViewOp,
+  critiqueFactsOp,
+  critiqueOp,
   qualityOp,
   renderDraftOp,
   reviewViewOp,
@@ -269,6 +271,7 @@ const TaskRequest = z.discriminatedUnion('kind', [
     kind: z.literal('rank-takes'),
     options: z.strictObject({ overwriteChosen: z.boolean().optional() }).default({}),
   }),
+  z.strictObject({ kind: z.literal('critique'), options: VersionOptions }),
   z.strictObject({ kind: z.literal('render-draft'), options: VersionOptions }),
   z.strictObject({
     kind: z.literal('export'),
@@ -805,6 +808,12 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     ],
     [
       'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/versions\/(?<version>[^/]+)\/critique\/facts$/,
+      async ({ params }) =>
+        critiqueFactsOp(engine, storeById(params.id!), versionParam(params.version!)),
+    ],
+    [
+      'GET',
       /^\/v1\/projects\/(?<id>[^/]+)\/versions\/(?<version>[^/]+)\/draft$/,
       async ({ params, res }) => {
         const file = await draftFileOp(
@@ -1075,6 +1084,8 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await captureTipsOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'rank-takes')
             out = await rankTakesOp(engine, store, { ...t.options, signal });
+          else if (t.kind === 'critique')
+            out = await critiqueOp(engine, store, t.options.variantId, { signal });
           else {
             out = await scanKnowledgeOp(engine, store, {
               ...t.options,

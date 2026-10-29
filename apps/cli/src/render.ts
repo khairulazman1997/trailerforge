@@ -2,6 +2,8 @@ import { secondsToFlicks } from '@trailerforge/schema';
 import {
   OpError,
   approveVersionOp,
+  critiqueFactsOp,
+  critiqueOp,
   exportVersionOp,
   handoffOp,
   presetsViewOp,
@@ -94,6 +96,42 @@ export async function qcCommand(ctx: CmdCtx, dir: string): Promise<number> {
       q,
     );
     return v.allowed ? 0 : 1;
+  });
+}
+
+/**
+ * `tforge critique <dir> [--version <id|master>] [--show]`: ask the AI for a critique of a version
+ * (text only). `--show` prints what would be sent and sends nothing.
+ */
+export async function critiqueCommand(ctx: CmdCtx, dir: string): Promise<number> {
+  return withProject(ctx, dir, async (engine, store) => {
+    const id = versionOf(ctx);
+    if (ctx.flags.show) {
+      const f = await critiqueFactsOp(engine, store, id);
+      ctx.emit(
+        [
+          'A critique would send:',
+          ...f.summary.map((l) => `  - ${l}`),
+          ...(f.excluded ? [`  (${f.excluded} game fact${f.excluded === 1 ? '' : 's'} left out because you excluded them)`] : []), // prettier-ignore
+        ].join('\n'),
+        f,
+      );
+      return 0;
+    }
+    const r = await critiqueOp(engine, store, id);
+    ctx.emit(
+      [
+        `Critique of ${id ?? 'the master cut'}: ${r.notes.length} note${r.notes.length === 1 ? '' : 's'} on the Review tab (one undo step)`,
+        ...r.notes.map(
+          (n) =>
+            `  ${n.kind === 'issue' ? '!' : '+'} ${n.text}${n.fix ? `  [fix: ${n.fix.summary}]` : ''}`,
+        ),
+        ...r.skipped.map((s) => `  skipped a note about ${s.about} (${s.reason})`),
+        ...r.droppedFixes.map((d) => `  dropped a fix for ${d.about}: ${d.reason}`),
+      ].join('\n'),
+      r,
+    );
+    return 0;
   });
 }
 

@@ -28,6 +28,7 @@ import {
   rankTakesOp,
   exportVersionOp,
   handoffOp,
+  critiqueOp,
   qualityOp,
   renderDraftOp,
   reviewViewOp,
@@ -784,6 +785,19 @@ export function createMcpServer(opts: McpServerOptions): Server {
             }
           : null,
       };
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'critique_run',
+      description:
+        "Ask the configured AI for a critique of one version (text only: the brief, the storyboard's words for each shot, numbers measured on the cut and the Quality Gate's findings; never footage, frames, sound, file names, ids or game facts the user excluded; the user is asked first when the provider is not local). At most ten notes land on the Review tab as comments by the critique (one undo step; the version's earlier open notes are replaced). Some notes carry a suggested fix; applying a fix is the user's decision (in the app) and is not offered here.",
+      inputSchema: object({ version: VERSION_PROP }),
+    },
+    async run(args) {
+      return critiqueOp(engine, await project(args), versionArg(args));
     },
   });
 

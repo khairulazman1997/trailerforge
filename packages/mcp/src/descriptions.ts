@@ -111,6 +111,10 @@ export const HIDDEN_COMMANDS = new Set([
   // Approving is the user's sign-off, and the plan hash must come from the real content: the
   // app and `tforge review approve` compute it. Claude can read approvals in render_status.
   'core/review.approve',
+  // Applying an AI critique's fix is the user's call: the notes can be read, the fixes are theirs.
+  'core/critique.apply-fix',
+  // Critique notes come from `critique_run`, which checks and redacts what the model said.
+  'core/critique.add',
   'core/knowledge.apply-scan',
   'core/storyboard.set',
   'core/storyboard.replace-section',

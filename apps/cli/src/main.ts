@@ -19,6 +19,7 @@ import {
   exportCommand,
   handoffCommand,
   presetsCommand,
+  critiqueCommand,
   qcCommand,
   reviewCommand,
 } from './render.js';
@@ -66,6 +67,7 @@ Usage:
   tforge effects                                          Installed transitions, effects, graphics templates and sounds
   tforge sfx show | tforge sfx folder <path|none>         Your folder of licensed or CC0 sound effects (nothing is uploaded)
   tforge presets                                          The export presets (YouTube, Steam, Vertical social, X, ProRes master)
+  tforge critique <dir> [--version <id|master>] [--show]    Ask the AI for a critique of a version (text only); --show lists what would be sent
   tforge qc <dir> [--version <id|master>] [--override <check>=<reason>]...
                                                           The Quality Gate on a version's plan; exit 1 when it blocks an export
   tforge draft <dir> [--version <id|master>]              Render a 720p review draft (cached by content)
@@ -144,6 +146,7 @@ export async function main(
         min: { type: 'string' },
         lead: { type: 'string' },
         'overwrite-chosen': { type: 'boolean', default: false },
+        show: { type: 'boolean', default: false },
         target: { type: 'string' },
         length: { type: 'string' },
         reframe: { type: 'string' },
@@ -260,6 +263,7 @@ export async function main(
       min: o.min,
       lead: o.lead,
       overwriteChosen: o['overwrite-chosen'],
+      show: o.show,
       target: o.target,
       length: o.length,
       name: o.name,
@@ -380,6 +384,8 @@ export async function main(
         return need(arg, '<dir>') ? await cutCommand(ctx, arg) : 2;
       case 'presets':
         return await presetsCommand(ctx);
+      case 'critique':
+        return need(arg, '<dir>') ? await critiqueCommand(ctx, arg) : 2;
       case 'qc':
         return need(arg, '<dir>') ? await qcCommand(ctx, arg) : 2;
       case 'draft':

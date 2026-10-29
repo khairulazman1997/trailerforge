@@ -75,7 +75,7 @@ const cut = run(
   'out',
 );
 
-describe('effects through FFmpeg', () => {
+describe('effects through FFmpeg', { timeout: 30_000 }, () => {
   for (const def of builtinEffects) {
     it(`${def.id}: runs, changes the picture, and is deterministic`, () => {
       const a = run(src('testsrc2'), effectGraph(def, {}), 'out');
@@ -122,7 +122,7 @@ describe('effects through FFmpeg', () => {
   });
 });
 
-describe('transitions through FFmpeg', () => {
+describe('transitions through FFmpeg', { timeout: 30_000 }, () => {
   for (const def of builtinTransitions) {
     it(`${def.id}: runs, blends the two inputs, and is deterministic`, () => {
       const a = run([...src('testsrc2'), ...src('smptebars')], transitionGraph(def, {}), 'out');

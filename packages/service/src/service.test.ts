@@ -33,6 +33,7 @@ const tipsReply = async (req: { prompt: string }) => {
 const mock = createMockProvider({
   'capture.tips': tipsReply,
   'brief.suggest': { value: 'Ember Knight', reason: 'from the game facts' },
+  'critique.run': { notes: [{ about: 'overall', kind: 'idea', text: 'Open on the parry.', atSeconds: 1 }] }, // prettier-ignore
   'storyboard.generate': async () => {
     if (gate) await gate;
     return genReply;
@@ -1376,5 +1377,23 @@ describe('review, quality and render tasks', { timeout: 120_000 }, () => {
     expect(draft.type).toBe('video/mp4');
     expect(draft.size).toBeGreaterThan(1000);
     expect((await client.review(id)).find((v) => v.variantId === 'var_tt')!.draftReady).toBe(true);
+  });
+});
+
+describe('critique', () => {
+  it('lists what would be sent, then runs as a task and puts the note on the Review tab', async () => {
+    const facts = await client.critiqueFacts('proj_sample', null);
+    expect(facts.summary.at(-1)).toMatch(/Never sent/);
+    expect((facts.wire.shots as unknown[]).length).toBeGreaterThan(0);
+    const calls = mock.calls.length;
+    const t = await client.startTask('proj_sample', { kind: 'critique', options: { variantId: null } }); // prettier-ignore
+    const done = await client.waitForTask(t.id);
+    expect(done).toMatchObject({ status: 'succeeded', result: { provider: 'core/mock', notes: [{ text: 'Open on the parry.', kind: 'idea' }] } }); // prettier-ignore
+    expect(mock.calls.length).toBe(calls + 1);
+    const review = await client.review('proj_sample');
+    expect(review.length).toBeGreaterThan(0);
+    await expect(client.critiqueFacts('proj_sample', 'nope')).rejects.toMatchObject({
+      status: 404,
+    });
   });
 });

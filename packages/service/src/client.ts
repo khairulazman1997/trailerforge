@@ -4,6 +4,8 @@ import type { Project } from '@trailerforge/schema';
 // Wire types come from the engine; type-only, so nothing from it reaches the browser bundle.
 export type {
   BriefField,
+  CritiqueFactsView,
+  CritiqueOutcome,
   BriefForm,
   BriefSuggestion,
   CaptureStatus,
@@ -22,6 +24,7 @@ export type {
   WatchedFoldersView,
 } from '@trailerforge/engine';
 import type {
+  CritiqueFactsView,
   LlmPreview,
   LocalModelsView,
   PendingHandoff,
@@ -117,6 +120,8 @@ export type TaskRequest =
       options: { sectionId: string; instruction?: string; keepEdited?: boolean };
     }
   | { kind: 'rank-takes'; options?: { overwriteChosen?: boolean } }
+  /** Ask the AI to critique a version (`variantId` null = the master cut); notes land on the Review tab. */
+  | { kind: 'critique'; options: { variantId: string | null } }
   /** Render a 720p review draft of a version (`variantId` null = the master cut). */
   | { kind: 'render-draft'; options: { variantId: string | null } }
   | {
@@ -469,6 +474,13 @@ export class ServiceClient {
       'POST',
       `/v1/projects/${encodeURIComponent(id)}/review/approve`,
       { variantId, ...(note ? { note } : {}) },
+    );
+  }
+  /** What a critique of this version would send, in words and as data. Sends nothing. */
+  critiqueFacts(id: string, variantId: string | null) {
+    return this.request<CritiqueFactsView>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/versions/${encodeURIComponent(variantId ?? 'master')}/critique/facts`,
     );
   }
   /** The Quality Gate on a version's plan, with the overrides given. */

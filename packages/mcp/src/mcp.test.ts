@@ -126,6 +126,7 @@ describe('tool surface', () => {
         'match_suggest',
         'match_accept',
         'take_ranking',
+        'critique_run',
         'cut_generate',
         'core_timeline_trim',
         'core_takes_choose',
@@ -164,11 +165,14 @@ describe('tool surface', () => {
     expect(names).not.toContain('core_brand_set-font');
     // Approving is the user's sign-off, and overriding a gate finding is theirs too.
     expect(names).not.toContain('core_review_approve');
+    // Applying an AI critique's fix is the user's decision; Claude can ask for the critique.
+    expect(names).not.toContain('core_critique_apply-fix');
+    expect(names).not.toContain('core_critique_add');
     expect(JSON.stringify(tools.find((t) => t.name === 'export_start')!.inputSchema)).not.toContain(
       'override',
     );
     // Every registered command is exposed except those, and each schema is an object.
-    expect(engine.commands.types().length - 6).toBe(
+    expect(engine.commands.types().length - 8).toBe(
       names.filter((n) => n.startsWith('core_') || n.startsWith('game-trailer_')).length,
     );
     for (const t of tools) {
