@@ -1,10 +1,56 @@
 # TrailerForge
 
-Local-first studio for game trailers and marketing videos: **brief → storyboard → capture guide → auto-cut → review → export**. You supply real gameplay footage and voice; TrailerForge does the structuring and the tedious cutting.
+Local-first studio for game trailers and marketing videos: **brief → storyboard → capture guide → auto-cut → review → export**. You supply real gameplay footage and voice; TrailerForge does the structuring and the tedious cutting, on your computer.
 
-> **Status:** Milestone 1 (foundations) complete: schemas, project store, job queue, plugin system, FFmpeg wrapper, LLM adapter, engine and CLI. No UI yet (M2). See [docs/PLAN.md](docs/PLAN.md) for the full plan.
+> **Status:** Milestones 1–7 are built (see [docs/PLAN.md](docs/PLAN.md)). The Windows installer is built by a script but has not yet been installed and tried on a real Windows machine; the checklist for that is in [docs/NEXT_SESSION.md](docs/NEXT_SESSION.md).
 
-## Setup
+## User guide
+
+### Install
+
+**Windows (installer).** Run `TrailerForge-Setup-<version>.exe`. It is not code-signed yet, so Windows SmartScreen warns: choose "More info", then "Run anyway". It installs for your user only, and you can choose the folder. You also need **FFmpeg** (a full build, with `ffprobe`) on your `PATH`, for example from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/). The installer does not include it. The Python tools for music and footage analysis are set up from inside the app the first time you need them, after you agree (below). To build the installer yourself, see [Windows build](#windows-build).
+
+**From source (any OS).** Install Node 22+, pnpm 10, FFmpeg and [uv](https://docs.astral.sh/uv/), then follow [From source and the command line](#from-source-and-the-command-line). The web UI then runs in your browser against a local service.
+
+### First run
+
+1. **Setup** (top bar) checks that this computer is ready. It looks at FFmpeg and the filters and encoders renders need, the analysis tools, free disk space, AI help and the optional vision model. Anything missing is named, with how to fix it. If the analysis tools are not set up yet, **Create the analysis environment…** downloads about 900 MB of Python packages through `uv`, once, after you agree.
+2. **Try a demo** on the Projects page builds a small finished project in about half a minute: an invented game's recordings, music, storyboard, cut and two versions. Everything in it is made on your computer. Look around every tab, then export it.
+3. **New project** when you are ready: give it a name and a folder. A project is a folder (`<name>.tforge`) with one `project.json` that holds your decisions, plus caches that are safe to delete.
+4. **AI help (optional):** in **Settings**, add an Anthropic API key, use your Claude Code login, run a model on this computer with Ollama, or copy requests into any chat by hand (Chat Handoff). Every AI step shows what it will send, and to whom, before anything goes.
+
+### The tabs
+
+A project has one tab per step. Each tab says what it needs when an earlier step is missing, with a link to it. Every change is undoable (Ctrl+Z; press `?` for the keyboard shortcuts of the page you are on).
+
+| Tab                | What you do there                                                                                                                                                                                                                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Overview**       | The project's name, folder and status at a glance; close the project.                                                                                                                                                                                                                                                                      |
+| **Brief**          | Pick the video type and answer what it needs (game name, selling points, tone, platforms, call to action, output formats). A completeness meter shows what is left. "Suggest for me" drafts an answer for you to review. "Proceed with assumptions" lists each assumption it makes.                                                        |
+| **Game knowledge** | Point it at your game's repo (read-only; secrets and ignored files are never read). It lists levels, bosses, characters, abilities, console commands and save files. Edit, add or remove entries, and mark any of them "keep out of AI requests".                                                                                          |
+| **Storyboard**     | Generate a first draft from the brief and game facts, then edit it: sections and shots with lengths against the target, reorder by dragging, lock a section so nothing changes it, regenerate one section, and ask "Why?" about any generated choice. On-screen text lives here too.                                                       |
+| **Capture**        | The recording checklist, grouped by where you record. It gives the recording settings to use, setup hints from your game knowledge, a shot code for each shot to put in file names, optional AI tips, and a printable capture pack.                                                                                                        |
+| **Footage**        | Add recordings (paste a path, drop files, or Choose folder in the desktop app; or watch a folder in Settings). Read their warnings, match them to shots (shot codes match with certainty; the rest get suggestions with reasons), and pick or reject takes.                                                                                |
+| **Cut**            | Choose and analyse the music, then build the rough cut on its beats. Preview it with the music. Edit by dragging clips and edges (Shift moves the clips after it along, Alt turns off snapping) or with the inspector (trim to a beat, swap a take, effects, transitions, sounds). Rebuilding keeps your edits and locked tracks.          |
+| **Versions**       | Cut the master down to other formats and lengths (16:9, 9:16, 1:1…). Each shot says what happened to it and why. Tall and square versions follow the movement in each clip; click the frame to set the focus yourself.                                                                                                                     |
+| **Brand**          | Colours (checked for contrast), a logo and fonts for titles, captions and labels.                                                                                                                                                                                                                                                          |
+| **Graphics**       | Choose a template for each card and on-screen label, fill in its fields and see the frame in your brand. Text that is too long or too brief to read gets a warning.                                                                                                                                                                        |
+| **Review**         | Per version: render a review draft in the background, leave comments at moments on a ruler, read the Quality Gate (what blocks an export, what needs a written reason, what is only worth a look), ask for an optional AI critique, and approve. An approval goes out of date when the picture or sound changes.                           |
+| **Export**         | Choose a preset per version (YouTube, Steam, vertical, X, ProRes master), a file name and a loudness target. Export (a cancelled or crashed export resumes where it stopped), and write editor files: FCPXML for Final Cut Pro and DaVinci Resolve, OpenTimelineIO, and an EDL that most editors read. Files land in `<project>/exports/`. |
+
+**Settings** holds AI providers and models, local models, watched folders, the optional AI vision model, and the connection for Claude Code (which can then work on the open project with you, through the same undoable commands). **Setup** is the health check above.
+
+### Privacy: what leaves your computer
+
+- **Never:** your footage, frames, sound, game source code, file names or paths. Rendering, analysis, matching, checking and review all run on your computer. Nothing is uploaded to any platform.
+- **AI requests, only when you ask and only as text.** These cover brief suggestions, the storyboard, capture tips, take ranking and critique. Before a request goes, the app shows which provider gets it, whether that leaves your computer, and exactly what is sent. Game facts you mark "keep out of AI requests" are removed, and a request that would still name one is stopped before it leaves. Shots and takes go out as aliases (`shot-1`, `take-2`). With Ollama, requests go to this computer only.
+- **Downloads, only after you agree.** These are the analysis tools (Python packages through `uv`, once) and the optional AI vision model (checked against a pinned checksum before it is kept).
+- **One door, one log.** Every network request the app makes goes through a single service and is written to `<home>/logs/egress.jsonl` with its purpose, host and size. The log never holds the request's text. `<home>` is `%USERPROFILE%\.trailerforge` on Windows (`~/.trailerforge` elsewhere; `TFORGE_HOME` changes it).
+- **Your keys:** an Anthropic API key is stored by the desktop app with the operating system's encryption (Windows DPAPI through Electron), or in an owner-only file when none is available. Settings says which.
+
+The sections below go into each step in more detail, for the command line and for developers.
+
+## From source and the command line
 
 Requirements: **Node 22+**, **pnpm 10**, **FFmpeg + ffprobe** on `PATH` (or set `TFORGE_FFMPEG_DIR`), and **Python 3.11+ with [uv](https://docs.astral.sh/uv/)** for the analysis sidecar.
 
@@ -76,7 +122,7 @@ On the Projects page, **Try a demo** (or `tforge demo`) builds a small finished 
 
 In the desktop app, **Browse…** buttons open the Windows file chooser to open a project, pick where a new one goes, link a game repo and add a watched folder. A web browser cannot learn where a chosen folder is, so there you type or paste the path.
 
-`apps/desktop` runs the engine and service inside the app and opens a window on them. API keys are encrypted with the OS credential store (Electron `safeStorage`, kept in `secrets.safe.json`; when the OS offers no real encryption, including Linux's `basic_text` fallback, it uses the plain owner-only `secrets.json` and says so in Settings). The window can only show the local service (navigations and redirects elsewhere are blocked; other web links open in your browser), grants no device permissions, refuses `<webview>`, and its file pickers answer only that window. Quitting waits for the engine to save and release project locks. Run it on a desktop machine: `pnpm approve-builds` (allow `electron`), then `pnpm --filter @trailerforge/desktop start`. Packaging config is `apps/desktop/electron-builder.yml`. Not verified in the cloud container (no display); the main-process logic is tested with a fake host. The preload exposes native folder/file pickers (`window.trailerforgeDesktop`); the UI does not use them yet. Downloads (such as "Download Markdown" on the Capture tab) use Electron's own Save dialog.
+`apps/desktop` runs the engine and service inside the app and opens a window on them. API keys are encrypted with the OS credential store (Electron `safeStorage`, kept in `secrets.safe.json`; when the OS offers no real encryption, including Linux's `basic_text` fallback, it uses the plain owner-only `secrets.json` and says so in Settings). The window can only show the local service (navigations and redirects elsewhere are blocked; other web links open in your browser), grants no device permissions, refuses `<webview>`, and its file pickers answer only that window. Quitting waits for the engine to save and release project locks. Run it on a desktop machine: `pnpm approve-builds` (allow `electron`), then `pnpm --filter @trailerforge/desktop start`. Packaging config is `apps/desktop/electron-builder.yml`. Not verified in the cloud container (no display); the main-process logic is tested with a fake host. Downloads (such as "Download Markdown" on the Capture tab) use Electron's own Save dialog.
 
 ### Drive a project from Claude Code (MCP)
 

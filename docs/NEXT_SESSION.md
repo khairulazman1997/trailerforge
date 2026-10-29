@@ -1,32 +1,34 @@
-# Next session (Milestone 6, Review + render)
+# Next session (after Milestone 7: verify on Windows)
 
-Paste the block below as the first message of a fresh session. Start on **Opus** (the breakdown and the render compiler are Opus work).
+M1–M7 are built and green in the cloud container (Linux). What is left is verification on your Windows PC, which the container cannot do. Run the three checks below, then paste the block at the end into a fresh session with the results.
+
+## 1. `pnpm check` on Windows
+
+```bash
+git pull
+pnpm install
+pnpm check
+```
+
+Run it in a normal terminal (or outside Claude Code's sandbox, so uv can reach PyPI). Note any failure with its output.
+
+## 2. The browser tests on Windows
+
+```bash
+pnpm test:e2e
+```
+
+Set `TFORGE_CHROMIUM` to Chrome first (`C:/Program Files/Google/Chrome/Application/chrome.exe`) and have uv and FFmpeg on PATH. The new `e2e/whole-app.spec.ts` goes from "Try a demo" to an exported file and editor files. `e2e/a11y.spec.ts` checks every page and times a 200-shot project; its 200 ms limit was measured on a 4-core Linux container, so note the times it prints on your machine.
+
+## 3. The installer smoke test
+
+Follow "Deferred: desktop smoke checklist" below (build the installer, install it, Setup, demo, export, brand fonts, uninstall).
+
+## Prompt for the next session
 
 ---
 
-Read `CLAUDE.md`, then `docs/PLAN.md`: the milestone table, the Quality Gate and NLE handoff lines, the M4 note on what was left for M6 (J/L cuts, screen-direction continuity, speed ramps, the full Quality Gate pass), and the end of the M5 section (what M5 hands to M6, and its known gaps). M1–M5 are complete. M5 left M6 these pieces: derived version timelines (`deriveVariant`), graphics frames as PNG sequences with alpha (`@trailerforge/render`, `renderVariantGraphicsOp`), transitions and effects as FFmpeg filter fragments plus the flash guard (`@trailerforge/effects`), and SFX tracks with music ducks.
-
-Do this, in order:
-
-1. Break M6 down the way M4 and M5 were: a short scope paragraph, the design decisions I need to make, each with your recommended default (for example: export formats and presets per platform, hardware encoding, review/approval flow and comments, which Quality Gate checks block an export, NLE handoff formats (FCPXML / EDL / OTIO) and in which order, whether to re-snap shortened versions to the beat, and the open M5 gaps), then a task table (id, task, model, acceptance) in `docs/PLAN.md` under a new "Milestone 6" heading. Include a render compiler task (timeline → one deterministic FFmpeg filtergraph: picture, reframe crops and blurred fill, transitions, effects, graphics overlays, audio mix with ducks and loudness), crash-safe resumable renders as jobs, the Quality Gate, the review screens, export, NLE handoff, and hardening/docs last.
-2. Ask me to confirm or change the defaults (ask nothing you can decide yourself) and record my answers under the M6 heading.
-3. Give a usage estimate for the milestone and for this session, and say which model each task needs.
-4. Build the first task. Stop after it, tell me which model the next one needs, and wait for "go".
-
-Constraints:
-
-- `project.json` is the single source of truth; derived data (version timelines, render plans, frames) is never stored twice.
-- Edits go through typed, undoable commands; timeline time is integer flicks.
-- Same project + same inputs = same render plan and the same output (pin what you must; say where bit-identical video is not possible, for example hardware encoders).
-- Anything sent to an LLM leaves out entities I marked excluded; the LLM may only pick ids from the installed set.
-- No network calls outside the Egress service; never upload footage or game source. Uploading to platforms is not M6 work unless I say so.
-- Parked ideas (built-in recording/OBS, drag-to-edit on the timeline, deeper offline repo scan, automatic Unity recording) are not this milestone's work.
-
-Workflow (this is a Windows PC):
-
-- One task at a time: `pnpm check` (run uv outside Claude Code's sandbox), and for UI work `pnpm test:e2e` with `TFORGE_CHROMIUM` set to `C:/Program Files/Google/Chrome/Application/chrome.exe` and uv on PATH; then commit, push to `main`, update the CLAUDE.md Progress line.
-- Log start and end times (`date -u`) and my usage readings in `docs/BUILD_LOG.md` under a new "Milestone 6" heading.
-- At each task boundary, tell me which model the next task needs and wait for "go". Keep turns lean (Claude Pro).
+Read `CLAUDE.md`, then the end of `docs/PLAN.md` (Milestone 7) and `docs/NEXT_SESSION.md`. M1–M7 are complete; this session handles what my Windows run found. Here are my results: <paste the failures, the times `a11y.spec.ts` printed, and the smoke checklist answers>. For each problem, find the cause, fix it with a test where one can run in the container, run `pnpm check` (and `pnpm test:e2e` for UI changes), commit and push to `main`, and log it in `docs/BUILD_LOG.md`. Say plainly what you could not verify. Do not start new features: the parked ideas in `docs/PLAN.md` ("Potential extensions") need my go-ahead first. Use Sonnet for fixes in UI, wiring and packaging, and Opus for anything in rendering determinism, crash recovery or schemas; tell me when to switch.
 
 ---
 
