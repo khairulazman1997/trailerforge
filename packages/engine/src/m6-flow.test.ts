@@ -79,8 +79,12 @@ describe('M6 flow', { timeout: 600_000 }, () => {
     for (const id of [null, ...versions()]) {
       const b = await buildVersion(engine, store, id);
       const t0 = performance.now();
-      const r = await exportVersionOp(engine, store, id);
+      const phases = new Map<string, number>();
+      const r = await exportVersionOp(engine, store, id, {
+        onProgress: (p) => phases.set(p.phase, performance.now() - t0),
+      });
       const seconds = (performance.now() - t0) / 1000;
+      const split = [...phases].map(([k, v]) => `${k}@${(v / 1000).toFixed(1)}`).join(' ');
       const record = JSON.parse(readFileSync(r.record, 'utf8')) as {
         facts: { video: { width: number; height: number } };
       };
@@ -88,7 +92,7 @@ describe('M6 flow', { timeout: 600_000 }, () => {
       expect(r).toMatchObject({ reproducible: true, overridden: [] });
       // Real-time factor on this machine's CPU, for the build log (render + checks).
       const film = length(b.timeline) / FLICKS_PER_SECOND;
-      const line = `${id ?? 'master'} ${r.preset} ${film.toFixed(1)} s in ${seconds.toFixed(1)} s = ${(film / seconds).toFixed(2)}x real time\n`; // prettier-ignore
+      const line = `${id ?? 'master'} ${r.preset} ${film.toFixed(1)} s in ${seconds.toFixed(1)} s = ${(film / seconds).toFixed(2)}x real time (${split})\n`; // prettier-ignore
       if (process.env.TFORGE_TIMING_FILE) appendFileSync(process.env.TFORGE_TIMING_FILE, line);
     }
     expect(sizes).toEqual(['1920x1080', '1080x1920', '1920x1080']);

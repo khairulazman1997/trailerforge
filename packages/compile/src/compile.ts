@@ -50,7 +50,7 @@ import { sha256 } from './sha256.js';
  * (`timeline.extensions.core.crossTransitions`): it is then drawn on the picture track itself.
  */
 
-export const COMPILER_VERSION = 2;
+export const COMPILER_VERSION = 3;
 
 /** What the compiler needs to know about a recording (from the probe and the library). */
 export interface SourceMedia {
@@ -243,6 +243,7 @@ export function compileRender(input: CompileInput): RenderPlan {
 
   const picture = timeline.tracks.filter((t) => t.kind !== 'audio' && !t.muted);
   const trackOuts: string[] = [];
+  const trackShown: [number, number][][] = [];
   picture.forEach((track, ti) => {
     const alpha = ti > 0;
     const fmt = alpha ? WORK_FMT_ALPHA : WORK_FMT;
@@ -312,6 +313,12 @@ export function compileRender(input: CompileInput): RenderPlan {
     const pieces: string[] = [];
     let cursor = Math.min(rs, runs[0] ? runs[0][0]!.fs + runs[0][0]!.skip : rs);
     const windowStart = cursor;
+    const shown: [number, number][] = []; // frames of the range with something on this track
+    const show = (from: number, to: number) => {
+      const a = Math.max(from, rs) - rs;
+      const b = Math.min(to, re) - rs;
+      if (b > a) shown.push([a, b]);
+    };
     runs.forEach((run, ri) => {
       const start = run[0]!.fs + run[0]!.skip;
       if (start > cursor) {
@@ -338,6 +345,7 @@ export function compileRender(input: CompileInput): RenderPlan {
         acc = out;
         accLen += memberLength(m) - d;
       });
+      show(start, start + accLen);
       if (run.length === 1) {
         pieces.push(acc);
         cursor = start + accLen;
@@ -368,6 +376,7 @@ export function compileRender(input: CompileInput): RenderPlan {
         : `${pieces.map((l) => `[${l}]`).join('')}concat=n=${pieces.length}:v=1:a=0${trim}[${trackOut}]`,
     );
     trackOuts.push(trackOut);
+    trackShown.push(shown);
   });
 
   function memberLength(m: Member): number {
@@ -626,7 +635,13 @@ export function compileRender(input: CompileInput): RenderPlan {
   let base = trackOuts[0]!;
   trackOuts.slice(1).forEach((top, i) => {
     const out = `ov${i}`;
-    chains.push(`[${base}][${top}]overlay=format=yuv444p10:eof_action=pass[${out}]`);
+    // Blended only while the track shows something: elsewhere the picture below passes through
+    // untouched (a transparent frame through the 10-bit blend is not exact) and costs nothing.
+    const shown = trackShown[i + 1] ?? [];
+    const when = shown.length ? shown.map(([a, b]) => `between(n,${a},${b - 1})`).join('+') : '0';
+    chains.push(
+      `[${base}][${top}]overlay=format=yuv444p10:eof_action=pass:enable=${esc(when)}[${out}]`,
+    );
     base = out;
   });
   chains.push(

@@ -165,11 +165,21 @@ describe('FrameRenderer', () => {
     expect(out.frames).toBe(90);
     expect(out.unique).toBeLessThan(out.frames);
     const files = (await readdir(out.dir)).sort();
-    expect(files).toHaveLength(90);
-    expect(files[0]).toBe('frame_000000.png');
+    expect(files).toHaveLength(91);
+    expect(files[0]).toBe('SEQUENCE_DONE'); // written last: the sequence is complete
+    expect(files[1]).toBe('frame_000000.png');
     expect(files.at(-1)).toBe('frame_000089.png');
     const mid = await readFile(join(out.dir, 'frame_000045.png'));
     expect(mid.equals((await r.renderFrame(s, 45 * (F / 30))).png)).toBe(true);
+    // Drawn on worker threads, the pixels are the same as the synchronous rasterizer's.
+    const svg = await r.prepare(renderSvg(s, 45 * (F / 30)));
+    expect(mid.equals(r.rasterize(svg))).toBe(true);
+    // One worker or many: the same files.
+    const serial = await r.renderSequence(s, { num: 30, den: 1 }, join(work, 'seq1'), { parallel: 1 }); // prettier-ignore
+    for (const f of files)
+      expect((await readFile(join(serial.dir, f))).equals(await readFile(join(out.dir, f)))).toBe(
+        true,
+      );
     const rerun = await r.renderSequence(s, { num: 30, den: 1 }, join(work, 'seq2'));
     expect(rerun.rendered).toBe(0); // everything came from the cache
     const ctrl = new AbortController();
@@ -177,6 +187,7 @@ describe('FrameRenderer', () => {
     await expect(
       r.renderSequence(s, { num: 30, den: 1 }, join(work, 'seq3'), { signal: ctrl.signal }),
     ).rejects.toThrow();
+    expect(await readdir(join(work, 'seq3'))).not.toContain('SEQUENCE_DONE');
   }, 30_000);
 
   it('keeps the alpha of overlays', async () => {

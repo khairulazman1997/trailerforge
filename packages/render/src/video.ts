@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { availableParallelism } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
   compileAudio,
@@ -39,6 +40,11 @@ import { z } from 'zod';
  * Rerunning the same spec after a crash or a cancel renders only what the manifest does not
  * vouch for; with a software encoder the output is byte-identical to an uninterrupted run. A
  * different FFmpeg build starts the segments over (the manifest records the build).
+ *
+ * Segments render in parallel (`parallel` workers, each FFmpeg with the spec's fixed thread
+ * count) while the audio is mixed; a segment's bytes depend only on its own plan, so the output
+ * is the same whatever the number of workers. The segment length is part of the spec, never
+ * derived from the machine.
  */
 
 export const VIDEO_RENDER_VERSION = 1;
@@ -55,7 +61,7 @@ export interface RenderSpec {
   loudness: LoudnessTarget | null;
   retime?: CompileInput['retime'];
   slateFont?: CompileInput['slateFont'];
-  /** Segment length in seconds (rounded to whole frames). Default 10. */
+  /** Segment length in seconds (rounded to whole frames). Default 5. */
   segmentSeconds?: number;
   output: string;
 }
@@ -103,12 +109,25 @@ export interface RenderOptions {
   signal?: AbortSignal;
   onProgress?: (p: RenderProgress) => void;
   tools?: FfmpegTools;
+  /** Segments rendered at once; default half the CPU cores. Never changes the output. */
+  parallel?: number;
+  /** Folder caching the measured loudness of a mix by its plan hash (shared across renders). */
+  loudnessCache?: string;
 }
+
+/** Default segment length: short enough to share a trailer between workers. */
+export const DEFAULT_SEGMENT_SECONDS = 5;
+
+export const defaultParallel = (): number => Math.max(1, Math.floor(availableParallelism() / 2));
 
 const DEFAULT_AUDIO = ['-c:a', 'aac', '-b:a', '320k'];
 
 /** Frame ranges of `seconds` each (the last one shorter). */
-export function planSegments(frames: number, rate: Rate, seconds = 10): FrameRange[] {
+export function planSegments(
+  frames: number,
+  rate: Rate,
+  seconds = DEFAULT_SEGMENT_SECONDS,
+): FrameRange[] {
   const per = Math.max(1, Math.round((seconds * rate.num) / rate.den));
   const out: FrameRange[] = [];
   for (let start = 0; start < frames; start += per)
@@ -152,7 +171,13 @@ async function ffmpegBuild(tools: FfmpegTools): Promise<string> {
 /** Render (or resume) a spec. Throws `MediaError('cancelled')` when aborted. */
 export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promise<RenderResult> {
   const tools = opts.tools ?? resolveTools();
-  const signal = opts.signal;
+  // One failing worker stops the others: their FFmpeg processes are killed and temps removed.
+  const stop = new AbortController();
+  const outer = opts.signal;
+  const onOuter = () => stop.abort(outer!.reason);
+  if (outer?.aborted) onOuter();
+  else outer?.addEventListener('abort', onOuter, { once: true });
+  const signal = stop.signal;
   const run = (args: string[]) => runTool(tools.ffmpeg, args, signal ? { signal } : {});
   const sources = new Map(spec.sources);
   const base: CompileInput = {
@@ -190,7 +215,10 @@ export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promis
   } catch {
     // no manifest yet, or a damaged one: start over
   }
-  const save = () => writeAtomic(manifestPath, JSON.stringify(manifest, null, 2));
+  // Saves run one after another, each writing the manifest as it stands then.
+  let saving = Promise.resolve();
+  const save = () =>
+    (saving = saving.then(() => writeAtomic(manifestPath, JSON.stringify(manifest, null, 2))));
 
   const { width: W, height: H } = spec.timeline.resolution;
   const ranges = planSegments(full.range.frames, spec.timeline.frameRate, spec.segmentSeconds);
@@ -208,79 +236,107 @@ export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promis
     return t;
   };
 
-  try {
-    const segments: SegmentEntry[] = [];
-    for (const [index, range] of ranges.entries()) {
-      signal?.throwIfAborted();
-      const plan = compileRender({ ...base, encode: segEncode, range });
-      const file = `seg_${String(index).padStart(5, '0')}.mkv`;
-      const path = join(workDir, file);
-      const known = manifest.segments.find(
-        (s) => s.index === index && s.planHash === plan.planHash,
-      );
-      if (known && (await exists(path)) && (await sha256File(path)) === known.sha256) {
-        segments.push(known);
-        reused++;
-        report('segments');
-        continue;
-      }
-      const t = tmp(path);
-      await run(ffmpegArgs(plan, t));
-      const got = await frameCount(tools, t, signal);
-      if (got !== range.frames)
-        throw new JobError(
-          `segment ${index}: ${got} frames written, ${range.frames} expected`,
-          true,
-        );
-      const entry: SegmentEntry = {
-        index,
-        ...range,
-        planHash: plan.planHash,
-        file,
-        sha256: await sha256File(t),
-      };
-      await rename(t, path);
-      tmps.delete(t);
-      segments.push(entry);
-      manifest.segments = [...manifest.segments.filter((s) => s.index !== index), entry];
-      await save();
-      rendered++;
+  const renderSegment = async (index: number, range: FrameRange): Promise<SegmentEntry> => {
+    signal.throwIfAborted();
+    const plan = compileRender({ ...base, encode: segEncode, range });
+    const file = `seg_${String(index).padStart(5, '0')}.mkv`;
+    const path = join(workDir, file);
+    const known = manifest.segments.find((s) => s.index === index && s.planHash === plan.planHash);
+    if (known && (await exists(path)) && (await sha256File(path)) === known.sha256) {
+      reused++;
       report('segments');
+      return known;
     }
+    const t = tmp(path);
+    await run(ffmpegArgs(plan, t));
+    const got = await frameCount(tools, t, signal);
+    if (got !== range.frames)
+      throw new JobError(`segment ${index}: ${got} frames written, ${range.frames} expected`, true);
+    const entry: SegmentEntry = {
+      index,
+      ...range,
+      planHash: plan.planHash,
+      file,
+      sha256: await sha256File(t),
+    };
+    await rename(t, path);
+    tmps.delete(t);
+    manifest.segments = [...manifest.segments.filter((s) => s.index !== index), entry];
+    await save();
+    rendered++;
+    report('segments');
+    return entry;
+  };
 
-    // Audio: the mix, measured, then mastered (each step reused when its file is intact).
-    report('audio');
+  const renderSegments = async (): Promise<SegmentEntry[]> => {
+    const out: SegmentEntry[] = new Array(ranges.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < ranges.length) {
+        const index = next++;
+        out[index] = await renderSegment(index, ranges[index]!);
+      }
+    };
+    const workers = Math.max(1, Math.min(opts.parallel ?? defaultParallel(), ranges.length));
+    await settleAll(Array.from({ length: workers }, worker), stop);
+    return out;
+  };
+
+  const audioFile = join(workDir, 'audio.wav');
+  // Audio: the mix, measured, then mastered (each step reused when its file is intact).
+  const renderAudio = async (): Promise<void> => {
     const mixPlan = compileAudio({ timeline: spec.timeline, sources });
     warnings.push(...mixPlan.warnings);
-    let master: MasterSettings | null = null;
-    const audioFile = join(workDir, 'audio.wav');
     const a = manifest.audio;
-    if (!(
+    if (
       a &&
       a.mixHash === mixPlan.planHash &&
       (await exists(audioFile)) &&
       (await sha256File(audioFile)) === a.sha256
-    )) {
-      const mixFile = join(workDir, 'mix.wav');
-      const t = tmp(mixFile);
-      await run(ffmpegAudioArgs(mixPlan, t));
-      await rename(t, mixFile);
-      tmps.delete(t);
-      if (spec.loudness) {
-        master = masterFor(await measureLoudness(mixFile, signal ? { signal } : {}), spec.loudness);
-        const t2 = tmp(audioFile);
-        await run(ffmpegAudioArgs(compileAudio({ timeline: spec.timeline, sources, master }), t2));
-        await rename(t2, audioFile);
-        tmps.delete(t2);
-      } else await rename(mixFile, audioFile);
-      manifest.audio = {
-        mixHash: mixPlan.planHash,
-        master,
-        file: 'audio.wav',
-        sha256: await sha256File(audioFile),
-      };
-      await save();
+    )
+      return;
+    let master: MasterSettings | null = null;
+    if (spec.loudness) {
+      const cached = opts.loudnessCache && join(opts.loudnessCache, `${mixPlan.planHash}.json`);
+      let measured: Awaited<ReturnType<typeof measureLoudness>> | undefined;
+      if (cached)
+        try {
+          measured = JSON.parse(await readFile(cached, 'utf8')) as typeof measured;
+        } catch {
+          // not measured yet
+        }
+      if (!measured) {
+        const mixFile = join(workDir, 'mix.wav');
+        const t = tmp(mixFile);
+        await run(ffmpegAudioArgs(mixPlan, t));
+        await rename(t, mixFile);
+        tmps.delete(t);
+        measured = await measureLoudness(mixFile, { signal });
+        await rm(mixFile, { force: true });
+        if (cached) {
+          await mkdir(opts.loudnessCache!, { recursive: true });
+          await writeAtomic(cached, JSON.stringify(measured));
+        }
+      }
+      master = masterFor(measured, spec.loudness);
     }
+    const t = tmp(audioFile);
+    await run(ffmpegAudioArgs(master ? compileAudio({ timeline: spec.timeline, sources, master }) : mixPlan, t)); // prettier-ignore
+    await rename(t, audioFile);
+    tmps.delete(t);
+    manifest.audio = {
+      mixHash: mixPlan.planHash,
+      master,
+      file: 'audio.wav',
+      sha256: await sha256File(audioFile),
+    };
+    await save();
+  };
+
+  try {
+    report('segments');
+    const [segments] = await settleAll([renderSegments(), renderAudio()] as const, stop);
+    report('audio');
 
     // Join and mux.
     report('mux');
@@ -322,11 +378,36 @@ export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promis
       warnings,
     };
   } catch (err) {
+    await saving.catch(() => undefined);
     for (const t of tmps) await rm(t, { force: true });
-    if (signal?.aborted && !(err instanceof MediaError && err.code === 'cancelled'))
+    if (outer?.aborted && !(err instanceof MediaError && err.code === 'cancelled'))
       throw new MediaError('cancelled', 'render cancelled');
     throw err;
+  } finally {
+    outer?.removeEventListener('abort', onOuter);
   }
+}
+
+/**
+ * Like `Promise.all`, but on the first failure it aborts `stop` and still waits for every task
+ * to finish, so no FFmpeg process or temp file outlives the call; then it throws that failure.
+ */
+async function settleAll<T extends readonly Promise<unknown>[]>(
+  tasks: T,
+  stop: AbortController,
+): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
+  let first: { err: unknown } | undefined;
+  const results = await Promise.all(
+    tasks.map((t) =>
+      t.catch((err: unknown) => {
+        first ??= { err };
+        stop.abort(err);
+        return undefined;
+      }),
+    ),
+  );
+  if (first) throw first.err;
+  return results as { -readonly [K in keyof T]: Awaited<T[K]> };
 }
 
 /** A render as a queue job: the spec lives in a JSON file, so the job input stays small. */

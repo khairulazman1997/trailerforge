@@ -246,37 +246,32 @@ export async function measureOutput(
   const a = streams.find((s) => s.codec_type === 'audio');
   const [rn, rd] = (v.r_frame_rate ?? '0/1').split('/').map(Number) as [number, number];
   const fps = rn / (rd || 1);
-  const frames = await decodeSmall(file, tools, opts.signal);
-  let samplePeakDb: number | null = null;
-  let samples: number | null = null;
-  let loudness: LoudnessMeasurement | null = null;
-  if (a) {
-    const { stderr } = await runTool(
-      tools.ffmpeg,
-      [
-        '-hide_banner',
-        '-nostdin',
-        '-nostats',
-        '-i',
-        file,
-        '-map',
-        '0:a:0',
-        '-af',
-        'astats=metadata=0',
-        '-f',
-        'null',
-        '-',
-      ],
-      sig,
-    );
+  // The picture decode, the sample peaks and the loudness read the file side by side.
+  const sound = async () => {
+    if (!a) return { samplePeakDb: null, samples: null, loudness: null };
+    const [{ stderr }, loudness] = await Promise.all([
+      runTool(
+        tools.ffmpeg,
+        ['-hide_banner', '-nostdin', '-nostats', '-i', file, '-map', '0:a:0',
+          '-af', 'astats=metadata=0', '-f', 'null', '-'], // prettier-ignore
+        sig,
+      ),
+      measureLoudness(file, { tools, ...sig }),
+    ]);
     const peaks = [...stderr.matchAll(/Peak level dB:\s*(-?[\d.]+|-inf)/g)].map((m) =>
       m[1] === '-inf' ? -Infinity : Number(m[1]),
     );
-    samplePeakDb = peaks.length ? round(peaks.at(-1)!) : null;
     const counts = [...stderr.matchAll(/Number of samples:\s*(\d+)/g)].map((m) => Number(m[1]));
-    if (counts.length) samples = counts.at(-1)!;
-    loudness = await measureLoudness(file, { tools, ...sig });
-  }
+    return {
+      samplePeakDb: peaks.length ? round(peaks.at(-1)!) : null,
+      samples: counts.length ? counts.at(-1)! : null,
+      loudness: loudness as LoudnessMeasurement | null,
+    };
+  };
+  const [frames, { samplePeakDb, samples, loudness }] = await Promise.all([
+    decodeSmall(file, tools, opts.signal),
+    sound(),
+  ]);
   return {
     video: {
       width: v.width ?? 0,

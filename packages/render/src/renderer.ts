@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, readdir, rm } from 'node:fs/promises';
+import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
-import { Resvg } from '@resvg/resvg-js';
+import { Resvg, renderAsync, type ResvgRenderOptions } from '@resvg/resvg-js';
 import { fallbackFontPath, mediaFileNames, writeFileAtomic } from '@trailerforge/core';
 import { renderSvg as sceneSvg, type Scene, type TimelineScene } from '@trailerforge/graphics';
 import {
@@ -204,7 +205,8 @@ export class FrameRenderer {
         // not cached yet
       }
     }
-    const png = this.rasterize(prepared);
+    // Off the main thread (libuv's pool): the same pixels as `rasterize`, several at once.
+    const png = (await renderAsync(prepared, this.options('rgba(0,0,0,0)'))).asPng();
     if (file) {
       await mkdir(join(this.cacheDir!, hash.slice(0, 2)), { recursive: true });
       await writeFileAtomic(file, png);
@@ -227,13 +229,17 @@ export class FrameRenderer {
   }
 
   private resvg(prepared: string, background: string): Resvg {
-    return new Resvg(prepared, {
+    return new Resvg(prepared, this.options(background));
+  }
+
+  private options(background: string): ResvgRenderOptions {
+    return {
       font: { fontFiles: this.fontFiles, loadSystemFonts: false, defaultFontFamily: 'Inter' },
       background,
       shapeRendering: 2,
       textRendering: 1,
       imageRendering: 0,
-    });
+    };
   }
 
   /** The frame `at` flicks into a scene. */
@@ -267,33 +273,58 @@ export class FrameRenderer {
   /**
    * Every frame of a scene at `rate` as `frame_000000.png`, `frame_000001.png`… in `outDir`
    * (created; existing frames are overwritten). Frame k is at k frames from the item's start.
+   * Distinct frames are drawn `parallel` at a time (default: the CPU cores); `SEQUENCE_DONE` is
+   * written last, so a sequence without it was interrupted and is not to be trusted.
    */
   async renderSequence(
     scene: Scene,
     rate: Rate,
     outDir: string,
-    opts: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
+    opts: {
+      signal?: AbortSignal;
+      onProgress?: (done: number, total: number) => void;
+      parallel?: number;
+    } = {},
   ): Promise<{ dir: string; pattern: string; frames: number; unique: number; rendered: number }> {
     const fpf = flicksPerFrame(rate);
     const frames = Math.max(1, Math.round(scene.duration / fpf));
     await mkdir(outDir, { recursive: true });
-    const seen = new Map<string, string>();
-    let rendered = 0;
+    await rm(join(outDir, SEQUENCE_DONE), { force: true });
+    const name = (k: number) => join(outDir, `frame_${String(k).padStart(6, '0')}.png`);
+    // Frames that draw the same SVG are drawn once and copied.
+    const firstOf = new Map<string, number>();
+    const copies: [from: number, to: number][] = [];
     for (let k = 0; k < frames; k++) {
-      opts.signal?.throwIfAborted();
       const svg = sceneSvg(scene, Math.round(k * fpf));
-      const name = `frame_${String(k).padStart(6, '0')}.png`;
-      const dest = join(outDir, name);
-      const prev = seen.get(svg);
-      if (prev) await copyFile(prev, dest);
-      else {
+      const first = firstOf.get(svg);
+      if (first === undefined) firstOf.set(svg, k);
+      else copies.push([first, k]);
+    }
+    const unique = [...firstOf];
+    let rendered = 0;
+    let done = 0;
+    let next = 0;
+    const worker = async () => {
+      while (next < unique.length) {
+        const [svg, k] = unique[next++]!;
+        opts.signal?.throwIfAborted();
         const f = await this.render(svg);
         if (!f.cached) rendered++;
-        await writeFileAtomic(dest, f.png);
-        seen.set(svg, dest);
+        await writeFileAtomic(name(k), f.png);
+        opts.onProgress?.(++done, frames);
       }
-      opts.onProgress?.(k + 1, frames);
+    };
+    const workers = Math.max(1, Math.min(opts.parallel ?? availableParallelism(), unique.length));
+    await Promise.all(Array.from({ length: workers }, worker));
+    for (const [from, to] of copies) {
+      opts.signal?.throwIfAborted();
+      await copyFile(name(from), name(to));
+      opts.onProgress?.(++done, frames);
     }
-    return { dir: outDir, pattern: 'frame_%06d.png', frames, unique: seen.size, rendered };
+    await writeFileAtomic(join(outDir, SEQUENCE_DONE), `${frames}\n`);
+    return { dir: outDir, pattern: 'frame_%06d.png', frames, unique: unique.length, rendered };
   }
 }
+
+/** Written into a sequence's folder once every frame is there. */
+export const SEQUENCE_DONE = 'SEQUENCE_DONE';

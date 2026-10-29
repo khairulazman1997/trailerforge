@@ -36,6 +36,7 @@ import { detectCapabilities, probe, runOutputGate, type Capabilities } from '@tr
 import {
   FrameRenderer,
   RENDERER_VERSION,
+  SEQUENCE_DONE,
   encodeAlphaClip,
   renderVideo,
   writePoster,
@@ -274,8 +275,7 @@ async function renderGraphics(
     signal?.throwIfAborted();
     const meta = b.graphics.get(s.itemId)!;
     const dir = join(store.paths.cache, 'render-frames', meta.contentHash.slice(0, 24));
-    const last = join(dir, `frame_${String(meta.frames - 1).padStart(6, '0')}.png`);
-    if (!(await exists(last)))
+    if (!(await exists(join(dir, SEQUENCE_DONE))))
       await r.renderSequence(s.scene, b.timeline.frameRate, dir, signal ? { signal } : {});
     out.set(s.itemId, {
       pattern: join(dir, 'frame_%06d.png'),
@@ -589,6 +589,7 @@ async function renderBuild(store: ProjectStore, b: VersionBuild, o: RenderBuildO
     },
     {
       workRoot: join(store.paths.cache, 'render', o.workKey),
+      loudnessCache: join(store.paths.cache, 'render', 'loudness'),
       ...(o.signal ? { signal: o.signal } : {}),
       onProgress: (p) =>
         report({
@@ -686,24 +687,34 @@ export async function exportVersionOp(
     throw asOpError(err);
   }
   o.onProgress?.({ phase: 'checking', fraction: 0.97, message: 'Checking the file' });
-  const out = await runOutputGate(
-    tmpOut,
-    {
-      width: b.timeline.resolution.width,
-      height: b.timeline.resolution.height,
-      rate: b.timeline.frameRate,
-      frames: frames(b),
-      loudness: { lufs: b.resolved.loudness.lufs, truePeakDb: b.resolved.loudness.truePeakDb },
-      declaredFlashes: declaredFlashes(b.timeline).map((e) => e.at),
-    },
-    { cacheDir: join(store.paths.cache, 'quality'), ...(o.signal ? { signal: o.signal } : {}) },
-  );
+  // The poster is taken while the file is checked; it is delivered only with the file.
+  const posterTmp = `${tmpOut}.poster.png`;
+  const [out] = await Promise.all([
+    runOutputGate(
+      tmpOut,
+      {
+        width: b.timeline.resolution.width,
+        height: b.timeline.resolution.height,
+        rate: b.timeline.frameRate,
+        frames: frames(b),
+        loudness: { lufs: b.resolved.loudness.lufs, truePeakDb: b.resolved.loudness.truePeakDb },
+        declaredFlashes: declaredFlashes(b.timeline).map((e) => e.at),
+      },
+      { cacheDir: join(store.paths.cache, 'quality'), ...(o.signal ? { signal: o.signal } : {}) },
+    ),
+    writePoster(
+      tmpOut,
+      posterTime(timelineDuration(b.timeline) / FLICKS_PER_SECOND, v?.export?.posterSeconds),
+      posterTmp,
+    ),
+  ]);
   const outVerdict = gateVerdict(
     out.findings.map((f) => ({ ...f, ...(f.tier ? {} : { tier: 'hard' as const }) })),
     overrides,
   );
   if (!outVerdict.allowed) {
     await rm(tmpOut, { force: true });
+    await rm(posterTmp, { force: true });
     throw new OpError('gate-blocked', gateMessage('on the rendered file', outVerdict), {
       stage: 'output',
       verdict: outVerdict,
@@ -717,11 +728,8 @@ export async function exportVersionOp(
   await mkdir(dir, { recursive: true });
   await copyAtomic(tmpOut, file);
   const poster = file.replace(/\.[^.]+$/, '.png');
-  await writePoster(
-    file,
-    posterTime(timelineDuration(b.timeline) / FLICKS_PER_SECOND, v?.export?.posterSeconds),
-    poster,
-  );
+  await copyAtomic(posterTmp, poster);
+  await rm(posterTmp, { force: true });
   const used = [...planVerdict.overridden, ...outVerdict.overridden];
   const now = (o.now ?? (() => new Date()))();
   const all = [...planFound, ...out.findings] as GateFinding[];

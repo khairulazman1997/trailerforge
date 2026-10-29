@@ -94,6 +94,7 @@ describe('renderVideo', { timeout: 120_000 }, () => {
     await expect(
       renderVideo(spec(out), {
         workRoot,
+        parallel: 1,
         signal: ctl.signal,
         onProgress: (p) => p.segmentsDone === 1 && ctl.abort(),
       }),
@@ -115,6 +116,29 @@ describe('renderVideo', { timeout: 120_000 }, () => {
     const again = await renderVideo(spec(out), { workRoot });
     expect([again.reused, again.rendered]).toEqual([2, 1]);
     expect(again.sha256).toBe(clean.sha256);
+  });
+
+  it('renders the same bytes with 1, 2 or 4 workers, and reuses a cached loudness measurement', async () => {
+    const shas: string[] = [];
+    const loudnessCache = join(root, 'loudness');
+    for (const parallel of [1, 2, 4]) {
+      const r = await renderVideo(spec(join(root, 'out', `p${parallel}.mp4`)), {
+        workRoot: join(root, `work-p${parallel}`),
+        parallel,
+        loudnessCache,
+      });
+      expect(r.rendered).toBe(3);
+      shas.push(r.sha256);
+    }
+    expect(new Set(shas).size).toBe(1);
+    expect(readdirSync(loudnessCache).filter((f) => f.endsWith('.json'))).toHaveLength(1);
+    // A failing segment stops the others and leaves no temp files behind.
+    const broken = spec(join(root, 'out', 'broken.mp4'));
+    broken.sources = broken.sources.map(([id, m]) => [id, id === 'c' ? { ...m, path: join(root, 'missing.mp4') } : m]); // prettier-ignore
+    const workRoot = join(root, 'work-broken');
+    await expect(renderVideo(broken, { workRoot, parallel: 3 })).rejects.toThrow();
+    for (const d of readdirSync(workRoot))
+      expect(readdirSync(join(workRoot, d)).filter((f) => f.includes('.tmp'))).toEqual([]);
   });
 
   it('a render killed mid-way (SIGKILL) resumes to the same bytes as a clean one', async () => {
