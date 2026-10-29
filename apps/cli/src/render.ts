@@ -3,6 +3,7 @@ import {
   OpError,
   approveVersionOp,
   critiqueFactsOp,
+  healthOp,
   critiqueOp,
   exportVersionOp,
   handoffOp,
@@ -97,6 +98,30 @@ export async function qcCommand(ctx: CmdCtx, dir: string): Promise<number> {
     );
     return v.allowed ? 0 : 1;
   });
+}
+
+/**
+ * `tforge doctor`: is this computer ready? FFmpeg and what it can do, the analysis tools, disk
+ * space, AI help and the vision model. Reads only; exits 1 when something that stops the app fails.
+ */
+export async function doctorCommand(ctx: CmdCtx): Promise<number> {
+  try {
+    const r = await healthOp(ctx.engine);
+    const mark = { ok: 'ok  ', info: 'info', warn: 'warn', fail: 'FAIL' } as const;
+    ctx.emit(
+      [
+        ...r.checks.flatMap((c) => [
+          `${mark[c.status]}  ${c.title}: ${c.detail}`,
+          ...(c.status !== 'ok' && c.fix ? [`      → ${c.fix}`] : []),
+        ]),
+        r.ready ? 'Ready.' : 'Not ready: fix the FAIL lines above.',
+      ].join('\n'),
+      r,
+    );
+    return r.ready ? 0 : 1;
+  } catch (err) {
+    return fail(ctx, err);
+  }
 }
 
 /**

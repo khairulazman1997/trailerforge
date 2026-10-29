@@ -29,6 +29,7 @@ import {
   exportVersionOp,
   handoffOp,
   critiqueOp,
+  healthOp,
   qualityOp,
   renderDraftOp,
   reviewViewOp,
@@ -785,6 +786,20 @@ export function createMcpServer(opts: McpServerOptions): Server {
             }
           : null,
       };
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'health_check',
+      description:
+        "Is this computer ready to use TrailerForge? Checks FFmpeg (and the filters and encoders renders use), the analysis tools, free disk space, AI help and the optional vision model. Each check says what is wrong and what to do. Reads only; creating the analysis environment (a download) is the user's decision, made on the Setup screen.",
+      inputSchema: object({}),
+      annotations: ReadOnly,
+    },
+    async run() {
+      return healthOp(engine);
     },
   });
 

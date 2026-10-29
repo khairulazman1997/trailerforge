@@ -7,6 +7,7 @@ import { clearConnection } from './connection.js';
 import { ConnectPage } from './pages/Connect.js';
 import { HomePage } from './pages/Home.js';
 import { ProjectPage } from './pages/Project.js';
+import { SetupPage } from './pages/Setup.js';
 import { SettingsPage } from './pages/Settings.js';
 import { Link, projectPath, useRoute } from './router.js';
 import { busyTask, type AppStore, type ConnectionStatus } from './store.js';
@@ -98,6 +99,9 @@ function Shell({ store }: { store: AppStore }) {
               {view.project.name}
             </Link>
           )}
+          <Link to="/setup" aria-current={route.name === 'setup' ? 'page' : undefined}>
+            Setup
+          </Link>
           <Link to="/settings" aria-current={route.name === 'settings' ? 'page' : undefined}>
             Settings
           </Link>
@@ -144,6 +148,7 @@ function Shell({ store }: { store: AppStore }) {
       </header>
       {route.name === 'home' && <HomePage />}
       {route.name === 'settings' && <SettingsPage />}
+      {route.name === 'setup' && <SetupPage />}
       {route.name === 'project' && <ProjectPage id={route.id} tab={route.tab} />}
       {route.name === 'not-found' && (
         <main className="page">

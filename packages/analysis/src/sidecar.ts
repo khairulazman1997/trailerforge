@@ -46,30 +46,39 @@ export function defaultSidecarCommand(env: NodeJS.ProcessEnv = process.env): Sid
     }
     return { command: parts[0] as string, args: parts.slice(1) as string[] };
   }
+  const project = findSidecarProject();
+  if (!project)
+    throw new SidecarError(
+      'sidecar-missing',
+      'cannot find workers/analysis; set TFORGE_ANALYSIS_CMD',
+    );
+  return {
+    command: 'uv',
+    args: [
+      'run',
+      '--project',
+      project,
+      '--frozen',
+      // The installed app never builds the Python environment behind the user's back: it is made
+      // by the Setup screen after they agree (`TFORGE_SIDECAR_AUTO_SETUP=0`, set by the desktop app).
+      ...(env.TFORGE_SIDECAR_AUTO_SETUP === '0' ? ['--no-sync'] : []),
+      '--quiet',
+      'python',
+      '-m',
+      'tforge_analysis',
+    ],
+  };
+}
+
+/** The `workers/analysis` folder (with its `pyproject.toml`), looked for above this file. */
+export function findSidecarProject(): string | null {
   let dir = dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 8; i++) {
     const project = join(dir, 'workers', 'analysis');
-    if (existsSync(join(project, 'pyproject.toml'))) {
-      return {
-        command: 'uv',
-        args: [
-          'run',
-          '--project',
-          project,
-          '--frozen',
-          '--quiet',
-          'python',
-          '-m',
-          'tforge_analysis',
-        ],
-      };
-    }
+    if (existsSync(join(project, 'pyproject.toml'))) return project;
     dir = dirname(dir);
   }
-  throw new SidecarError(
-    'sidecar-missing',
-    'cannot find workers/analysis; set TFORGE_ANALYSIS_CMD',
-  );
+  return null;
 }
 
 export interface CallOptions {

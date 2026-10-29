@@ -64,6 +64,10 @@ Generating and rewriting show, before anything is sent, which AI provider will b
 
 The Settings page shows which AI providers are available and why not, takes an Anthropic API key (sent once to the local service, stored in an owner-only file under the home directory, never shown again; not encrypted, Electron will use the OS keychain), and edits which provider, model and effort each kind of request uses (saved to `llm.routes.json`, applied immediately). With the **Chat Handoff** provider, a dialog shows the request to copy into any chat and takes the reply back; an invalid reply produces a follow-up to paste into the same chat.
 
+### First run and Setup
+
+Open **Setup** (or run `tforge doctor`) to see whether this computer is ready: FFmpeg and the filters and encoders renders use (a missing one is named, with how to install a full build), the music and footage analysis tools, free disk space, AI help and the optional vision model. Checking only reads. If the analysis tools have not been set up, **Create the analysis environment…** shows what it downloads (about 900 MB of Python packages from PyPI, through `uv`, once), asks first, shows progress and can be cancelled; the step is written to the network log. A render that needs something this FFmpeg lacks stops before it starts and says which filter or encoder is missing.
+
 ### Desktop app (Electron)
 
 In the desktop app, **Browse…** buttons open the Windows file chooser to open a project, pick where a new one goes, link a game repo and add a watched folder. A web browser cannot learn where a chosen folder is, so there you type or paste the path.

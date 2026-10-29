@@ -224,6 +224,30 @@ export class Egress {
     }
   }
 
+  /**
+   * A setup step the user agreed to, run by a local tool that fetches things itself (`uv` creating
+   * the Python environment from PyPI). Logged like any request, as `EXEC`: purpose, tool, result.
+   */
+  async logSetup(r: {
+    purpose: string;
+    tool: string;
+    source: string;
+    ok: boolean;
+    error?: string;
+  }): Promise<void> {
+    await this.log({
+      at: (this.opts.now?.() ?? new Date()).toISOString(),
+      purpose: r.purpose,
+      method: 'EXEC',
+      host: r.source,
+      path: r.tool,
+      status: null,
+      bytes: 0,
+      ok: r.ok,
+      ...(r.error ? { error: r.error } : {}),
+    });
+  }
+
   private async log(rec: EgressRecord): Promise<void> {
     await mkdir(dirname(this.opts.logFile), { recursive: true });
     await appendDurable(this.opts.logFile, `${JSON.stringify(rec)}\n`);

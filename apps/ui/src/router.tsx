@@ -17,6 +17,7 @@ export type ProjectTab =
 export type Route =
   | { name: 'home' }
   | { name: 'settings' }
+  | { name: 'setup' }
   | { name: 'project'; id: string; tab: ProjectTab }
   | { name: 'not-found' };
 
@@ -38,6 +39,7 @@ export function matchRoute(path: string): Route {
   const parts = path.split('/').filter(Boolean);
   if (parts.length === 0) return { name: 'home' };
   if (parts.length === 1 && parts[0] === 'settings') return { name: 'settings' };
+  if (parts.length === 1 && parts[0] === 'setup') return { name: 'setup' };
   if (parts[0] === 'p' && parts[1] && parts.length <= 3) {
     const id = decodeURIComponent(parts[1]);
     if (parts.length === 2) return { name: 'project', id, tab: 'overview' };

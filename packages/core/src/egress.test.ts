@@ -170,3 +170,17 @@ describe('Egress for LLM requests', () => {
     expect(requestUserText(JSON.stringify({ messages: [{ role: 'user', content: [{ type: 'text', text: 'parts' }] }] }))).toBe('parts'); // prettier-ignore
   });
 });
+
+describe('Egress.logSetup', () => {
+  it('logs a setup step the user agreed to, with its source and result', async () => {
+    const e = egress();
+    await e.logSetup({ purpose: 'Create the analysis environment', tool: 'uv sync', source: 'pypi.org (via uv)', ok: true }); // prettier-ignore
+    await e.logSetup({ purpose: 'Create the analysis environment', tool: 'uv sync', source: 'pypi.org (via uv)', ok: false, error: 'no network' }); // prettier-ignore
+    const recs = await log();
+    expect(recs.map((r) => [r.method, r.host, r.path, r.ok, r.error ?? null])).toEqual([
+      ['EXEC', 'pypi.org (via uv)', 'uv sync', true, null],
+      ['EXEC', 'pypi.org (via uv)', 'uv sync', false, 'no network'],
+    ]);
+    expect(calls).toEqual([]);
+  });
+});

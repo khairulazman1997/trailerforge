@@ -127,6 +127,7 @@ describe('tool surface', () => {
         'match_accept',
         'take_ranking',
         'critique_run',
+        'health_check',
         'cut_generate',
         'core_timeline_trim',
         'core_takes_choose',

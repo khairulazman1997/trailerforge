@@ -32,7 +32,8 @@ import {
   type TakeSource,
 } from '@trailerforge/cut';
 import { checkScene, safeBox, timelineScenes, type TimelineScene } from '@trailerforge/graphics';
-import { detectCapabilities, probe, runOutputGate, type Capabilities } from '@trailerforge/media';
+import { probe, runOutputGate, type Capabilities } from '@trailerforge/media';
+import { requireRenderTools } from './health-ops.js';
 import {
   FrameRenderer,
   RENDERER_VERSION,
@@ -433,11 +434,8 @@ export interface PresetsView {
   hardwareDraftEncoder: string | null;
 }
 
-const caps = new WeakMap<Engine, Promise<Capabilities | null>>();
 async function capabilities(engine: Engine): Promise<Capabilities | null> {
-  let c = caps.get(engine);
-  if (!c) caps.set(engine, (c = detectCapabilities().catch(() => null)));
-  return c;
+  return engine.capabilities().catch(() => null);
 }
 
 /** Fast-quality arguments for the hardware H.264 encoders worth using for drafts. */
@@ -499,6 +497,12 @@ export interface DraftResult {
  * A 720p review draft (software H.264, or a working hardware encoder when one is detected, with
  * a software retry if it fails), cached by the version's content hash.
  */
+/** The audio encoders named in FFmpeg arguments (`-c:a aac`). */
+const codecsOf = (args: readonly string[]): string[] =>
+  args
+    .flatMap((a, i) => (a === '-c:a' || a === '-acodec' ? [args[i + 1] ?? ''] : []))
+    .filter(Boolean);
+
 export async function renderDraftOp(
   engine: Engine,
   store: ProjectStore,
@@ -507,6 +511,7 @@ export async function renderDraftOp(
 ): Promise<DraftResult> {
   const full = await buildVersion(engine, store, variantId);
   if (full.compileError) throw new OpError('usage', `cannot render a draft: ${full.compileError}`);
+  await requireRenderTools(engine, ['libx264', 'aac']);
   const b = await buildVersion(engine, store, variantId, { maxHeight: DRAFT_HEIGHT });
   const file = draftPath(store, variantId, full.contentHash);
   const c = o.hardware === false ? null : await capabilities(engine);
@@ -667,6 +672,10 @@ export async function exportVersionOp(
       verdict: planVerdict,
     });
 
+  await requireRenderTools(engine, [
+    b.resolved.encode.video.codec,
+    ...codecsOf(b.resolved.audioCodec),
+  ]);
   const work = join(store.paths.cache, 'render-out');
   const tmpOut = join(
     work,
@@ -821,6 +830,7 @@ export async function handoffOp(
 ): Promise<HandoffResult> {
   const formats = o.formats?.length ? o.formats : (['fcpxml', 'otio', 'edl'] as const);
   const b = await buildVersion(engine, store, variantId);
+  await requireRenderTools(engine, ['prores_ks']);
   const dir = join(store.paths.exports, 'handoff', keyOf(variantId));
   await mkdir(dir, { recursive: true });
   const frames = await renderGraphics(store, b, o.signal);

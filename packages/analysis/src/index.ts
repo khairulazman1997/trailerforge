@@ -5,3 +5,4 @@ export * from './schemas.js';
 export * from './sidecar.js';
 export * from './vision.js';
 export * from './vision-model.js';
+export * from './setup.js';

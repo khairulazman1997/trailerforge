@@ -4,6 +4,8 @@ import type { Project } from '@trailerforge/schema';
 // Wire types come from the engine; type-only, so nothing from it reaches the browser bundle.
 export type {
   BriefField,
+  HealthCheck,
+  HealthReport,
   CritiqueFactsView,
   CritiqueOutcome,
   BriefForm,
@@ -25,6 +27,7 @@ export type {
 } from '@trailerforge/engine';
 import type {
   CritiqueFactsView,
+  HealthReport,
   LlmPreview,
   LocalModelsView,
   PendingHandoff,
@@ -293,6 +296,14 @@ export class ServiceClient {
   /** Start the one-time model download (a task; progress arrives as `vision.progress` events). */
   downloadVision() {
     return this.request<TaskView>('POST', '/v1/vision/download', { consent: true });
+  }
+  /** Is this computer ready? FFmpeg, the analysis tools, disk space, AI and the vision model. */
+  health() {
+    return this.request<HealthReport>('GET', '/v1/health');
+  }
+  /** Create the analysis environment (a task; uv's lines arrive as `setup.progress` events). */
+  setupAnalysis() {
+    return this.request<TaskView>('POST', '/v1/health/analysis-setup', { consent: true });
   }
   handoffs() {
     return this.request<PendingHandoff[]>('GET', '/v1/handoffs');

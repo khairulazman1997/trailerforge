@@ -36,6 +36,12 @@ import {
   type KnowledgeEntity,
   type ProjectInput,
 } from '@trailerforge/schema';
+import {
+  detectCapabilities,
+  resolveTools,
+  type Capabilities,
+  type FfmpegTools,
+} from '@trailerforge/media';
 import { excludedTerms, gameTrailerPack } from '@trailerforge/pack-game-trailer';
 import { FilterRegistry } from '@trailerforge/effects';
 import { corePlugin } from './core-plugin.js';
@@ -53,6 +59,8 @@ export interface EngineOptions {
   featureFlags?: string[];
   jobConcurrency?: number;
   autosaveMs?: number;
+  /** The FFmpeg to check and use (tests point it at a fake one). Default: `TFORGE_FFMPEG_DIR` or PATH. */
+  ffmpegTools?: FfmpegTools;
   /** Replace the default LLM client (Anthropic API, then Claude Code) with your own. */
   llm?: LlmClient;
   /** Where API keys are kept. Default: a file only the current user can read, under `home`. */
@@ -222,6 +230,7 @@ export class Engine {
       opts.autosaveMs ?? 2000,
     );
     engine.ollama = providers['core/ollama'];
+    engine.tools = opts.ffmpegTools ?? resolveTools();
     await watched.start();
     return engine;
   }
@@ -237,6 +246,19 @@ export class Engine {
 
   /** The local model provider (Ollama), for the model list in settings. */
   ollama!: ReturnType<typeof createOllamaProvider>;
+
+  /** The FFmpeg and ffprobe in use. */
+  tools!: FfmpegTools;
+  private caps: Promise<Capabilities> | undefined;
+
+  /** What this FFmpeg build can do (read once; `forget` re-reads after the user installs another). */
+  capabilities(forget = false): Promise<Capabilities> {
+    if (forget || !this.caps) {
+      this.caps = detectCapabilities(this.tools);
+      this.caps.catch(() => (this.caps = undefined));
+    }
+    return this.caps;
+  }
 
   /** Where the local model server is expected to listen. */
   ollamaUrl(): string {

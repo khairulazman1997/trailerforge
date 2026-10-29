@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppState, useStore } from '../app-context.js';
 import { BrowseButton } from '../components/BrowseButton.js';
 import { joinPath } from '../desktop.js';
@@ -39,6 +39,10 @@ export function HomePage() {
   const [videoType, setVideoType] = useState('');
   const [busy, setBusy] = useState(false);
   const [recent, setRecent] = useState(readRecent);
+  const health = useAppState((s) => s.health);
+  useEffect(() => {
+    if (!health) void store.loadHealth();
+  }, [store, health]);
 
   const open = async (dir: string) => {
     setBusy(true);
@@ -54,6 +58,16 @@ export function HomePage() {
   return (
     <main className="page">
       <h1>Projects</h1>
+      {health && !health.ready && (
+        <p className="banner warn" role="status" data-testid="setup-banner">
+          Something needs attention before you start:{' '}
+          {health.checks
+            .filter((c) => c.status === 'fail')
+            .map((c) => c.title)
+            .join(', ')}
+          . <Link to="/setup">Open Setup</Link>
+        </p>
+      )}
       {order.length > 0 && (
         <section aria-labelledby="open-heading">
           <h2 id="open-heading">Open now</h2>

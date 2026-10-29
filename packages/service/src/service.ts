@@ -53,6 +53,8 @@ import {
   handoffOp,
   presetsViewOp,
   critiqueFactsOp,
+  healthOp,
+  setupSidecarOp,
   critiqueOp,
   qualityOp,
   renderDraftOp,
@@ -167,6 +169,7 @@ export function describeError(err: unknown): HttpError {
       'brief-incomplete': 422,
       'takes-attached': 409,
       'gate-blocked': 422,
+      'missing-tool': 422,
       failed: 502,
     }[err.code];
     return new HttpError(status, err.code, err.message, err.details);
@@ -378,6 +381,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     events.emit('settings.changed', { what });
 
   let visionTaskId: string | undefined;
+  let setupTaskId: string | undefined;
   // Read at each request: the port is only known once the server listens.
   const claudeSetup = (): ClaudeCodeSetup => ({
     app: { url: `http://127.0.0.1:${port}/mcp`, token: mcpToken },
@@ -614,6 +618,27 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           }),
         );
         visionTaskId = task.id;
+        return task;
+      },
+    ],
+    ['GET', /^\/v1\/health$/, async () => healthOp(engine)],
+    [
+      'POST',
+      /^\/v1\/health\/analysis-setup$/,
+      async ({ body, res }) => {
+        // Only an explicit `true` counts; the Setup screen shows the size and source first.
+        const { consent } = z.strictObject({ consent: z.literal(true) }).parse(await body());
+        const running = setupTaskId ? tasks.get(setupTaskId) : undefined;
+        res.statusCode = 202;
+        if (running?.status === 'running') return running;
+        const task = tasks.start('analysis-setup', APP_TASK, (signal) =>
+          setupSidecarOp(engine, {
+            consent,
+            signal,
+            onLine: (line) => events.emit('setup.progress', { taskId: task.id, line }),
+          }),
+        );
+        setupTaskId = task.id;
         return task;
       },
     ],

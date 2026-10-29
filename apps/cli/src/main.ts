@@ -20,6 +20,7 @@ import {
   handoffCommand,
   presetsCommand,
   critiqueCommand,
+  doctorCommand,
   qcCommand,
   reviewCommand,
 } from './render.js';
@@ -67,6 +68,7 @@ Usage:
   tforge effects                                          Installed transitions, effects, graphics templates and sounds
   tforge sfx show | tforge sfx folder <path|none>         Your folder of licensed or CC0 sound effects (nothing is uploaded)
   tforge presets                                          The export presets (YouTube, Steam, Vertical social, X, ProRes master)
+  tforge doctor                                           Is this computer ready? FFmpeg, analysis tools, disk space, AI help
   tforge critique <dir> [--version <id|master>] [--show]    Ask the AI for a critique of a version (text only); --show lists what would be sent
   tforge qc <dir> [--version <id|master>] [--override <check>=<reason>]...
                                                           The Quality Gate on a version's plan; exit 1 when it blocks an export
@@ -384,6 +386,8 @@ export async function main(
         return need(arg, '<dir>') ? await cutCommand(ctx, arg) : 2;
       case 'presets':
         return await presetsCommand(ctx);
+      case 'doctor':
+        return await doctorCommand(ctx);
       case 'critique':
         return need(arg, '<dir>') ? await critiqueCommand(ctx, arg) : 2;
       case 'qc':

@@ -17,6 +17,7 @@ import {
   type ServiceEventMessage,
   type TaskRequest,
   type TaskView,
+  type HealthReport,
   type LocalModelsView,
   type VisionView,
   type WatchedFoldersView,
@@ -137,6 +138,8 @@ export type ClientLike = Pick<
   | 'saveRoutes'
   | 'resetRoutes'
   | 'localModels'
+  | 'health'
+  | 'setupAnalysis'
   | 'useOfflineRoutes'
   | 'secrets'
   | 'setApiKey'
@@ -223,6 +226,10 @@ export interface AppState {
   /** The opt-in vision model: state and disclosure; null until a screen asks. */
   vision: VisionView | null;
   localModels: LocalModelsView | null;
+  /** The Setup screen's checks, once read. */
+  health: HealthReport | null;
+  /** Creating the analysis environment: the task and uv's latest lines. */
+  analysisSetup: { taskId: string; lines: string[] } | null;
   /** Download progress 0–1 and its task, while the model is downloading. */
   visionDownload: { taskId: string; fraction: number } | null;
   /** Whether Claude Code is connected to this app's tools; null until Settings asks. */
@@ -262,6 +269,8 @@ const initial: AppState = {
   settings: null,
   vision: null,
   localModels: null,
+  health: null,
+  analysisSetup: null,
   visionDownload: null,
   watched: null,
   claudeCode: null,
@@ -409,6 +418,18 @@ export class AppStore {
             notices: t.status === 'running' ? s.notices : notices,
           };
         });
+        if (t.kind === 'analysis-setup') {
+          if (t.status === 'running') {
+            this.set((s) => ({ analysisSetup: s.analysisSetup ?? { taskId: t.id, lines: [] } }));
+            break;
+          }
+          this.set({ analysisSetup: null });
+          await this.loadHealth();
+          if (t.status === 'succeeded') this.toast('info', 'The analysis tools are ready.');
+          else if (t.status === 'failed')
+            this.toast('error', `Setting up the analysis tools failed: ${t.error?.message ?? 'unknown error'}`); // prettier-ignore
+          break;
+        }
         if (t.kind === 'vision-download') {
           if (t.status === 'running') {
             this.set((s) => ({
@@ -471,6 +492,16 @@ export class AppStore {
         if (this.state.localModels) await this.loadLocalModels();
         if (this.state.watched) await this.loadWatched();
         break;
+      case 'setup.progress': {
+        const p = data as { taskId: string; line: string };
+        this.set((s) => ({
+          analysisSetup: {
+            taskId: p.taskId,
+            lines: [...(s.analysisSetup?.lines ?? []), p.line].slice(-8),
+          },
+        }));
+        break;
+      }
       case 'vision.progress': {
         const p = data as { taskId: string; fraction: number };
         this.set({ visionDownload: { taskId: p.taskId, fraction: p.fraction } });
@@ -718,6 +749,25 @@ export class AppStore {
   }
 
   // ---- vision and watched folders ----
+
+  /** Check this computer (FFmpeg, analysis tools, disk, AI). Reads only. */
+  async loadHealth(): Promise<void> {
+    const h = await this.run((c) => c.health());
+    if (h) this.set({ health: h });
+  }
+
+  /** Create the analysis environment; the caller has shown the size and source and been told yes. */
+  async startAnalysisSetup(): Promise<boolean> {
+    const t = await this.run((c) => c.setupAnalysis());
+    if (!t) return false;
+    this.set((s) => ({ analysisSetup: s.analysisSetup ?? { taskId: t.id, lines: [] } }));
+    return true;
+  }
+
+  async cancelAnalysisSetup(): Promise<void> {
+    const d = this.state.analysisSetup;
+    if (d) await this.run((c) => c.cancelTask(d.taskId));
+  }
 
   async loadVision(): Promise<void> {
     const v = await this.run((c) => c.vision());

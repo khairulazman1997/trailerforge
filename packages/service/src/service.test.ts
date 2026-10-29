@@ -1397,3 +1397,21 @@ describe('critique', () => {
     });
   });
 });
+
+describe('health', () => {
+  it('lists the setup checks; creating the analysis environment needs an explicit yes', async () => {
+    const h = await client.health();
+    expect(h.checks.map((c) => c.id)).toEqual(
+      expect.arrayContaining(['ffmpeg', 'analysis', 'disk', 'ai', 'vision']),
+    );
+    expect(h.sidecarSetup.approxMegabytes).toBeGreaterThan(100);
+    for (const body of [{}, { consent: false }, { consent: 'yes' }]) {
+      const r = await fetch(`${svc.url}/v1/health/analysis-setup`, {
+        method: 'POST',
+        headers: { ...auth(), 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(r.status).toBe(400);
+    }
+  });
+});

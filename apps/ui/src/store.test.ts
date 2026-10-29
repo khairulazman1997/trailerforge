@@ -230,6 +230,8 @@ class Fake {
       offlineModel: null,
     }),
     useOfflineRoutes: async () => ({}) as never,
+    health: async () => ({ checks: [], ready: true, sidecarSetup: {} }) as never,
+    setupAnalysis: async () => ({ id: 't', kind: 'analysis-setup', status: 'running' }) as never,
     critiqueFacts: async () => ({ variantId: null, summary: ['x'], wire: {}, excluded: 0 }),
     secrets: async () =>
       ({

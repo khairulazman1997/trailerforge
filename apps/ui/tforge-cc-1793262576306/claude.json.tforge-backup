@@ -1,0 +1,12 @@
+{
+  "userID": "u1",
+  "mcpServers": {
+    "trailerforge": {
+      "type": "http",
+      "url": "http://127.0.0.1:42997/mcp",
+      "headers": {
+        "Authorization": "Bearer 1HAspcmgrl6CQw0eGg1fkQjjtHhKLyFt91MIouZi5j0"
+      }
+    }
+  }
+}
