@@ -10,6 +10,7 @@ import {
   itemAt,
   pictureAt,
   timecode,
+  transformStyle,
 } from './cut-view.js';
 
 const RATE = { num: 30, den: 1 };
@@ -116,5 +117,39 @@ describe('cut view helpers', () => {
     expect(fitSourceIn(F, 2 * F, 6 * F)).toBe(F);
     expect(fitSourceIn(F, 2 * F, null)).toBe(0);
     expect(fitSourceIn(F, 9 * F, 6 * F)).toBe(0);
+  });
+});
+
+describe('transformStyle', () => {
+  const clip = (transform?: object) =>
+    Timeline.parse({
+      id: 'tl',
+      name: 'T',
+      frameRate: RATE,
+      resolution: { width: 1920, height: 1080 },
+      tracks: [{ id: 'v', kind: 'video', items: [{ id: 'c', kind: 'clip', start: F, duration: 2 * F, assetId: 'a', sourceIn: 0, ...(transform ? { transform } : {}) }] }],
+    }).tracks[0]!.items[0]!; // prettier-ignore
+
+  it('shows nothing for no transform or the identity', () => {
+    expect(transformStyle(clip(), F)).toBeUndefined();
+    expect(transformStyle(clip({}), F)).toBeUndefined();
+  });
+
+  it('scales about the anchor and moves it onto the position, in clip time', () => {
+    expect(transformStyle(clip({ position: [0.25, 0.25], scale: 0.5 }), F)).toEqual({
+      transform: 'translate(-25%, -25%) scale(0.5)',
+      transformOrigin: '50% 50%',
+      opacity: 1,
+    });
+    const fade = clip({
+      opacity: {
+        keyframes: [
+          { at: 0, value: 0 },
+          { at: F, value: 1 },
+        ],
+      },
+    });
+    expect(transformStyle(fade, 1.5 * F)?.opacity).toBeCloseTo(0.5);
+    expect(transformStyle(fade, 2.5 * F)).toBeUndefined();
   });
 });

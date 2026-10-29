@@ -50,7 +50,7 @@ import { sha256 } from './sha256.js';
  * (`timeline.extensions.core.crossTransitions`): it is then drawn on the picture track itself.
  */
 
-export const COMPILER_VERSION = 3;
+export const COMPILER_VERSION = 4;
 
 /** What the compiler needs to know about a recording (from the probe and the library). */
 export interface SourceMedia {
@@ -391,7 +391,7 @@ export function compileRender(input: CompileInput): RenderPlan {
     const fmtTail = `format=${fmt},setsar=1,settb=${rate.den}/${rate.num}`;
     let body: string;
     if (it.kind === 'clip' && input.sources.has(it.assetId)) {
-      body = clipChain(it, input.sources.get(it.assetId)!, lead, frames, rampOf(it));
+      body = clipChain(it, input.sources.get(it.assetId)!, lead, frames, fmt, rampOf(it));
     } else if ((it.kind === 'graphic' || it.kind === 'caption') && graphics.has(it.id)) {
       const g = graphics.get(it.id)!;
       const k = inputs.length;
@@ -549,6 +549,7 @@ export function compileRender(input: CompileInput): RenderPlan {
     src: SourceMedia,
     lead: number,
     frames: number,
+    fmt: string,
     ramp?: Ramp,
   ): string {
     const plainHead = (): string | { slate: string } => {
@@ -601,7 +602,8 @@ export function compileRender(input: CompileInput): RenderPlan {
     const geo = geometry(item, src, W, H, lead, fpf, warnings);
     const head = h;
     const k = inputs.length - 1;
-    if (!geo.fill) return `${head}${geo.crop},${geo.scale}`;
+    if (!geo.fill)
+      return placed(item, `${head}${geo.crop},${geo.scale}`, lead, frames, fmt, `x${k}`);
     const out = `f${k}`;
     const bw = Math.max(2, Math.round(W / 8));
     const bh = Math.max(2, Math.round(H / 8));
@@ -611,7 +613,119 @@ export function compileRender(input: CompileInput): RenderPlan {
       `[${out}a]scale=${bw}:${bh}:force_original_aspect_ratio=increase:flags=bilinear,crop=${bw}:${bh},format=${WORK_FMT},boxblur=${opts({ luma_radius: blur, luma_power: 2, chroma_radius: blur, chroma_power: 2 })},scale=${W}:${H}:flags=bicubic,format=${WORK_FMT}[${out}bg]`,
     );
     chains.push(`[${out}b]${geo.scale},format=${WORK_FMT}[${out}fg]`);
-    return `[${out}bg][${out}fg]overlay=x=${esc('(W-w)/2')}:y=${esc('(H-h)/2')}:format=yuv444p10`;
+    const filled = `[${out}bg][${out}fg]overlay=x=${esc('(W-w)/2')}:y=${esc('(H-h)/2')}:format=yuv444p10`;
+    return placed(item, filled, lead, frames, fmt, `x${k}`);
+  }
+
+  /**
+   * A clip's position, scale and opacity, applied to its fitted picture (`pic`, W×H): scaled
+   * about its anchor, placed so the anchor lands on the position, over black (picture track) or
+   * transparency (tracks above), then faded by its opacity. Animated values follow the same
+   * evaluator as the preview: position and scale as piecewise expressions of the frame number,
+   * opacity set frame by frame. Identity transforms leave the chain untouched.
+   */
+  function placed(
+    item: ClipItem,
+    pic: string,
+    lead: number,
+    frames: number,
+    fmt: string,
+    key: string,
+  ): string {
+    const t = item.transform;
+    if (!t) return pic;
+    if (JSON.stringify(t.rotation) !== '0')
+      warnings.push(`clip "${item.id}": rotation is not rendered`);
+    const path = (a: Animatable, dims: number) => animPath(a, dims, item.duration, lead, fpf);
+    const pos = path(t.position, 2);
+    const anchor = path(t.anchor, 2);
+    const scale = path(t.scale, 1);
+    const constant = (ps: Point[], v: number[]) =>
+      ps.every((p) => p.v.every((x, i) => Math.abs(x - v[i]!) < 1e-9));
+    const opacity = animPath(t.opacity, 1, item.duration, lead, fpf).map((p) => ({
+      f: p.f,
+      v: clamp(p.v[0]!, 0, 1),
+    }));
+    const opacityOne = opacity.every((p) => p.v >= 1);
+    if (
+      constant(pos, [0.5, 0.5]) &&
+      constant(anchor, [0.5, 0.5]) &&
+      constant(scale, [1]) &&
+      opacityOne
+    )
+      return pic;
+
+    const alpha = fmt === WORK_FMT_ALPHA;
+    const one = (ps: Point[], i: number) => ps.map((p) => ({ f: p.f, v: p.v[i]! }));
+    const still = (ps: Point[]) =>
+      ps.length === 1 || ps.every((p) => p.v.every((x, i) => x === ps[0]!.v[i]));
+    const scaleOpts = 'flags=lanczos+accurate_rnd+full_chroma_int';
+    let sized = pic;
+    let w = W;
+    let h = H;
+    if (still(scale)) {
+      const s = scale[0]!.v[0]!;
+      w = Math.max(1, Math.round(W * s));
+      h = Math.max(1, Math.round(H * s));
+      if (w !== W || h !== H) sized = `${pic},scale=${w}:${h}:${scaleOpts}`;
+    } else {
+      // Converted first: a format change after a size-changing scale would get FFmpeg's own
+      // fixed-size converter, which squeezes every frame back to the first size.
+      const s = piecewise(one(scale, 0));
+      sized = `${pic},format=${WORK_FMT},scale=${opts({
+        w: `max(1,round(${W}*(${s})))`,
+        h: `max(1,round(${H}*(${s})))`,
+        eval: 'frame',
+      })}:${scaleOpts}`;
+    }
+    chains.push(still(scale) ? `${sized},format=${WORK_FMT}[${key}s]` : `${sized}[${key}s]`);
+    const placeStill = still(pos) && still(anchor) && still(scale);
+    const tf = `round(t*${rate.num}/${rate.den})`;
+    const xy = placeStill
+      ? {
+          x: Math.round(pos[0]!.v[0]! * W - anchor[0]!.v[0]! * w),
+          y: Math.round(pos[0]!.v[1]! * H - anchor[0]!.v[1]! * h),
+          eval: 'init',
+        }
+      : {
+          // overlay's own frame counter starts at 1 in FFmpeg 6.1: the frame number from `t`.
+          x: `round((${piecewise(one(pos, 0), tf)})*W-(${piecewise(one(anchor, 0), tf)})*w)`,
+          y: `round((${piecewise(one(pos, 1), tf)})*H-(${piecewise(one(anchor, 1), tf)})*h)`,
+          eval: 'frame',
+        };
+    const canvas = color(alpha ? 'black@0' : 'black', frames, fmt);
+    const over = `overlay=${opts(xy)}:format=yuv444p10`;
+    if (opacityOne) {
+      chains.push(`${canvas}[${key}c]`);
+      return `[${key}c][${key}s]${over}`;
+    }
+    // Opacity: the placed picture (A) mixed with the empty canvas (B), on every plane over black,
+    // only on the alpha plane above the picture track (so colours keep their values).
+    chains.push(`${canvas},split=2[${key}c][${key}k]`);
+    chains.push(`[${key}c][${key}s]${over},format=${fmt}[${key}p]`);
+    const mix = (o: string) =>
+      alpha
+        ? { c0_expr: 'A', c1_expr: 'A', c2_expr: 'A', c3_expr: `A*${o}+B*(1-${o})` }
+        : { all_expr: `A*${o}+B*(1-${o})` };
+    if (opacity.length === 1 || opacity.every((p) => p.v === opacity[0]!.v)) {
+      const o = opacity[0]!.v;
+      const planes = alpha
+        ? { c0_opacity: 1, c1_opacity: 1, c2_opacity: 1, c3_opacity: o }
+        : { all_opacity: o };
+      return `[${key}p][${key}k]blend=${opts({ all_mode: 'normal', ...planes })}`;
+    }
+    // Animated: an expression of the frame number, evaluated only on frames below full opacity.
+    const below: [number, number][] = [];
+    for (let m = 0; m < frames; m++) {
+      if (valueAt(opacity, m) >= 1) continue;
+      const last = below.at(-1);
+      if (last && last[1] === m) last[1] = m + 1;
+      else below.push([m, m + 1]);
+    }
+    const when = below.map(([a, b]) => `between(n,${a},${b - 1})`).join('+') || '0';
+    // blend's `N` starts at 1 as well; `T` gives the frame number exactly.
+    const tb = `round(T*${rate.num}/${rate.den})`;
+    return `[${key}p][${key}k]blend=${opts({ ...mix(`(${piecewise(opacity, tb)})`), enable: when })}`;
   }
 
   function safeParams(
@@ -805,18 +919,6 @@ function geometry(
   warnings: string[],
 ): { crop: string; scale: string; fill: boolean } {
   const t = item.transform;
-  if (t) {
-    const moved =
-      JSON.stringify(t.position) !== '[0.5,0.5]' ||
-      JSON.stringify(t.anchor) !== '[0.5,0.5]' ||
-      t.scale !== 1 ||
-      t.rotation !== 0 ||
-      t.opacity !== 1;
-    if (moved)
-      warnings.push(
-        `clip "${item.id}": position, scale, rotation and opacity are not rendered yet`,
-      );
-  }
   const reframe = (item.extensions.core as { reframe?: { mode?: string } } | undefined)?.reframe;
   const fill = reframe?.mode === 'fill';
   let crop = '';
@@ -877,7 +979,18 @@ interface Point {
  * holds as steps, other easings sampled every few frames (the same evaluator as the preview).
  */
 export function cropPath(a: Animatable, duration: number, skip: number, fpf: number): Point[] {
-  const at = (f: number) => evaluateVector(a, Math.round((f + skip) * fpf), 4);
+  return animPath(a, 4, duration, skip, fpf);
+}
+
+/** Any animatable value sampled the way `cropPath` samples crop insets, `dims` numbers a point. */
+export function animPath(
+  a: Animatable,
+  dims: number,
+  duration: number,
+  skip: number,
+  fpf: number,
+): Point[] {
+  const at = (f: number) => evaluateVector(a, Math.round((f + skip) * fpf), dims);
   const frames = Math.max(1, Math.round(duration / fpf) - skip);
   if (typeof a === 'number' || Array.isArray(a)) return [{ f: 0, v: at(0) }];
   const ks = a.keyframes;
@@ -918,6 +1031,17 @@ export function piecewise(pts: readonly { f: number; v: number }[], x = 'n'): st
     expr = `if(lt(${x},${n(b.f)}),${seg},${expr})`;
   }
   return expr;
+}
+
+/** The value `piecewise(pts)` evaluates to at frame `x` (for deciding where it applies). */
+function valueAt(pts: readonly { f: number; v: number }[], x: number): number {
+  if (x < pts[0]!.f || pts.length === 1) return pts[0]!.v;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    if (x < b.f) return a.v + ((x - a.f) * (b.v - a.v)) / (b.f - a.f);
+  }
+  return pts.at(-1)!.v;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));

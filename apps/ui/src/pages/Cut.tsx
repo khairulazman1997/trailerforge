@@ -19,6 +19,7 @@ import {
   percent,
   pictureAt,
   timecode,
+  transformStyle,
 } from '../cut-view.js';
 import { Link, projectPath } from '../router.js';
 import { busyTask } from '../store.js';
@@ -580,6 +581,7 @@ function Player({ id }: { id: string }) {
           playsInline
           aria-label="Preview picture"
           hidden={item?.kind !== 'clip'}
+          style={transformStyle(item, t)}
         />
         {item?.kind !== 'clip' && (
           <p

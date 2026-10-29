@@ -85,6 +85,15 @@ function notesOf(it: TimelineItem): string[] {
     if (it.speed !== 1) out.push(`Speed ${it.speed}x`);
     if (it.transform && JSON.stringify(it.transform.crop) !== '[0,0,0,0]')
       out.push('Reframed (crop) in TrailerForge');
+    const t = it.transform;
+    if (
+      t &&
+      (JSON.stringify(t.position) !== '[0.5,0.5]' ||
+        JSON.stringify(t.anchor) !== '[0.5,0.5]' ||
+        JSON.stringify(t.scale) !== '1' ||
+        JSON.stringify(t.opacity) !== '1')
+    )
+      out.push('Position, scale or opacity set in TrailerForge');
   }
   return out;
 }

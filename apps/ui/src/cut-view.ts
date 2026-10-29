@@ -1,3 +1,4 @@
+import { evaluateNumber, evaluateVector } from '@trailerforge/graphics';
 import {
   FLICKS_PER_SECOND,
   flicksPerFrame,
@@ -8,6 +9,32 @@ import {
 } from '@trailerforge/schema';
 
 export const F = FLICKS_PER_SECOND;
+
+/**
+ * CSS for a clip's position, scale and opacity at `t` (timeline flicks), the way the renderer
+ * applies them: scaled about the anchor, which lands on the position (shares of the frame), then
+ * faded. Undefined when the clip has no transform to show. Rotation is not rendered, so not shown.
+ */
+export function transformStyle(
+  item: TimelineItem | undefined,
+  t: number,
+): { transform: string; transformOrigin: string; opacity: number } | undefined {
+  if (item?.kind !== 'clip' || !item.transform) return undefined;
+  const at = Math.round(t - item.start);
+  const tr = item.transform;
+  const [px, py] = evaluateVector(tr.position, at, 2) as [number, number];
+  const [ax, ay] = evaluateVector(tr.anchor, at, 2) as [number, number];
+  const s = evaluateNumber(tr.scale, at);
+  const opacity = Math.min(1, Math.max(0, evaluateNumber(tr.opacity, at)));
+  if (px === 0.5 && py === 0.5 && ax === 0.5 && ay === 0.5 && s === 1 && opacity === 1)
+    return undefined;
+  const pct = (v: number) => `${+(v * 100).toFixed(4)}%`;
+  return {
+    transform: `translate(${pct(px - ax)}, ${pct(py - ay)}) scale(${+s.toFixed(6)})`,
+    transformOrigin: `${pct(ax)} ${pct(ay)}`,
+    opacity,
+  };
+}
 
 /** `m:ss.ff` for a flick position at a frame rate. */
 export function timecode(flicks: number, rate: Rate): string {

@@ -345,3 +345,118 @@ describe('transitions, effects and graphics', { timeout: 120_000 }, () => {
     );
   });
 });
+
+describe('clip transforms', { timeout: 120_000 }, () => {
+  const RES = { width: 160, height: 90 };
+  const FB = 160 * 90 * 3; // yuv444p frame: Y plane first
+  const Y = (raw: Buffer, f: number, x: number, y: number) => raw[f * FB + y * 160 + x]!;
+  // From source frame 60 of the ramp: flat grey, luma 120 + 2 per frame.
+  const clip = (transform: object, extra: object = {}) => ({
+    id: 'c1', kind: 'clip', start: 0, duration: f30(16), assetId: 'r', sourceIn: f30(60), transform, ...extra,
+  }); // prettier-ignore
+  const sources = () =>
+    new Map([
+      ['r', ramp],
+      ['b', bars],
+    ]);
+  /** Columns of row `y` brighter than the black around the picture. */
+  const lit = (raw: Buffer, f: number, y = 45) => {
+    const xs = Array.from({ length: 160 }, (_, x) => x).filter((x) => Y(raw, f, x, y) > 40);
+    return { left: xs[0], width: xs.length };
+  };
+
+  it('places and scales a still picture about its anchor, over black', () => {
+    const { raw, plan } = render(
+      tl([clip({ position: [0.25, 0.25], scale: 0.5 })], RES),
+      sources(),
+    );
+    expect(plan.warnings).toEqual([]);
+    expect(Y(raw, 3, 20, 20)).toBeGreaterThan(100); // top-left quarter: the picture
+    expect(Y(raw, 3, 120, 70)).toBeLessThan(20); // elsewhere black
+    expect(lit(raw, 3, 20)).toEqual({ left: 0, width: 80 });
+  });
+
+  it('moves and grows frame by frame, exactly on the keyframes and between them', () => {
+    const moving = clip({
+      position: {
+        keyframes: [
+          { at: 0, value: [0.25, 0.5] },
+          { at: f30(10), value: [0.75, 0.5] },
+        ],
+      },
+      scale: 0.5,
+    });
+    const a = render(tl([moving], RES), sources()).raw;
+    for (const f of [0, 3, 5, 10, 14]) expect(lit(a, f).left).toBe(Math.round(8 * Math.min(f, 10)));
+    const growing = clip({
+      scale: {
+        keyframes: [
+          { at: 0, value: 0.5 },
+          { at: f30(10), value: 1 },
+        ],
+      },
+    });
+    const b = render(tl([growing], RES), sources()).raw;
+    for (const f of [0, 4, 10]) {
+      const w = Math.round(160 * (0.5 + 0.05 * Math.min(f, 10)));
+      expect(lit(b, f)).toEqual({ left: Math.round(80 - w / 2), width: w });
+    }
+  });
+
+  it('fades by its opacity; at full opacity the frames are untouched', () => {
+    const plain = render(tl([clip({})], RES), sources()).raw;
+    const half = render(tl([clip({ opacity: 0.5 })], RES), sources()).raw;
+    const mid = (f: number) => (Y(plain, f, 80, 45) + 16) / 2;
+    expect(Math.abs(Y(half, 2, 80, 45) - mid(2))).toBeLessThanOrEqual(1);
+    const fade = clip({
+      opacity: {
+        keyframes: [
+          { at: 0, value: 0 },
+          { at: f30(10), value: 1 },
+        ],
+      },
+    });
+    const { raw, plan } = render(tl([fade], RES), sources());
+    expect(plan.filtergraph).toContain('blend=');
+    expect(Y(raw, 0, 80, 45)).toBe(16);
+    expect(Math.abs(Y(raw, 5, 80, 45) - mid(5))).toBeLessThanOrEqual(1);
+    for (const f of [10, 15])
+      expect(raw.subarray(f * FB, (f + 1) * FB).equals(plain.subarray(f * FB, (f + 1) * FB))).toBe(
+        true,
+      );
+  });
+
+  it('above the picture track it is transparent around the picture; a range equals the full render', () => {
+    const t = Timeline.parse({
+      ...tl([], RES),
+      tracks: [
+        { id: 'trk_v', kind: 'video', items: [{ id: 'b1', kind: 'clip', start: 0, duration: f30(16), assetId: 'b', sourceIn: 0 }] },
+        { id: 'trk_v2', kind: 'video', items: [clip({
+          position: { keyframes: [{ at: 0, value: [0.25, 0.5] }, { at: f30(10), value: [0.75, 0.5] }] },
+          scale: 0.5,
+          opacity: { keyframes: [{ at: 0, value: 0.2 }, { at: f30(8), value: 1 }] },
+        })] },
+      ],
+    }); // prettier-ignore
+    const below = render(Timeline.parse({ ...t, tracks: [t.tracks[0]] }), sources()).raw;
+    const full = render(t, sources()).raw;
+    // Outside the picture: the bars below (within the 10-bit blend's rounding).
+    expect(Math.abs(Y(full, 3, 150, 5) - Y(below, 3, 150, 5))).toBeLessThanOrEqual(2);
+    // Inside, at full opacity: the grey clip.
+    expect(Y(full, 12, 100, 45)).toBe(120 + 2 * 12);
+    const part = render(t, sources(), { range: { start: 4, frames: 6 } }).raw;
+    expect(part.equals(full.subarray(4 * FB, 10 * FB))).toBe(true);
+  });
+
+  it('an identity transform changes nothing; rotation is warned as not rendered', () => {
+    const plain = compileRender({ timeline: tl([clip({})], RES), sources: sources(), encode: RAW });
+    const none = compileRender({
+      timeline: tl([{ ...clip({}), transform: undefined }], RES),
+      sources: sources(),
+      encode: RAW,
+    });
+    expect(plain.planHash).toBe(none.planHash);
+    const turned = compileRender({ timeline: tl([clip({ rotation: 10 })], RES), sources: sources(), encode: RAW }); // prettier-ignore
+    expect(turned.warnings).toEqual(['clip "c1": rotation is not rendered']);
+  });
+});
