@@ -294,6 +294,27 @@ let stdin = ''; process.stdin.on('data', d => stdin += d).on('end', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('hands the prompt to the app before starting the CLI; a refusal stops it', async () => {
+    const seen: string[] = [];
+    const provider = createClaudeCodeProvider({
+      bin: '/nonexistent/claude', // never started: the hand-off refuses first
+      handOff: async (text) => {
+        seen.push(text);
+        throw Object.assign(new Error('refused'), { name: 'EgressError', code: 'excluded' });
+      },
+    });
+    const req = {
+      task: 't',
+      system: 's',
+      prompt: 'make a plan',
+      schema: z.strictObject({ a: z.number() }),
+    };
+    await expect(provider.generate(req, new AbortController().signal)).rejects.toMatchObject({
+      code: 'excluded',
+    });
+    expect(seen).toEqual(['make a plan']);
+  });
+
   it('runs headless with tools off, prompt on stdin and a JSON schema', async () => {
     const fake = await fakeClaude([
       {

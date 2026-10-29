@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Egress, EgressError } from './egress.js';
+import { Egress, EgressError, findForbidden, requestUserText } from './egress.js';
 
 const body = Buffer.from('model bytes '.repeat(1000));
 const sha = createHash('sha256').update(body).digest('hex');
@@ -82,5 +82,91 @@ describe('Egress.download', () => {
     ).rejects.toMatchObject({
       code: 'network',
     });
+  });
+});
+
+describe('Egress for LLM requests', () => {
+  const api = (status = 200) =>
+    (async (url: string) => {
+      calls.push(String(url));
+      return new Response('{"ok":true}', { status, headers: { 'content-length': '11' } });
+    }) as unknown as typeof fetch;
+  const chat = (user: string) =>
+    JSON.stringify({
+      system: 'Write JSON. Use a key per field.',
+      messages: [
+        { role: 'user', content: user },
+        { role: 'assistant', content: 'Off we go' },
+      ],
+    });
+  const scope = { purpose: 'AI request "brief.suggest" (Anthropic API)', forbidden: ['Ash Warden', 'Key', 'Off'] }; // prettier-ignore
+
+  it('sends inside a purpose to an allowed host and logs size and purpose, never the text', async () => {
+    const e = egress(api());
+    const f = e.llmFetch({ provider: 'core/anthropic', hosts: ['api.anthropic.com'] });
+    const res = await e.scope(
+      scope,
+      () =>
+      f('https://api.anthropic.com/v1/messages', { method: 'POST', body: chat('a dark fantasy secret plot') }), // prettier-ignore
+    );
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(['https://api.anthropic.com/v1/messages']);
+    const [rec] = await log();
+    expect(rec).toMatchObject({ purpose: scope.purpose, method: 'POST', host: 'api.anthropic.com', path: '/v1/messages', status: 200, bytes: 11, ok: true }); // prettier-ignore
+    expect(rec!.bytesOut).toBe(Buffer.byteLength(chat('a dark fantasy secret plot')));
+    expect(JSON.stringify(rec)).not.toMatch(/secret plot|dark fantasy/);
+  });
+
+  it('refuses without a purpose, to another host, over plain HTTP, or naming an excluded entity', async () => {
+    const e = egress(api());
+    const f = e.llmFetch({ provider: 'core/anthropic', hosts: ['api.anthropic.com'] });
+    const post = (url: string, user = 'hello') => f(url, { method: 'POST', body: chat(user) });
+    await expect(post('https://api.anthropic.com/v1/messages')).rejects.toMatchObject({ code: 'unscoped' }); // prettier-ignore
+    await e.scope(scope, async () => {
+      await expect(post('https://evil.example/v1')).rejects.toMatchObject({ code: 'host-not-allowed' }); // prettier-ignore
+      await expect(post('http://api.anthropic.com/v1')).rejects.toMatchObject({
+        code: 'not-https',
+      });
+      await expect(post('https://api.anthropic.com/v1', 'the boss is THE ASH WARDEN')).rejects.toMatchObject({ code: 'excluded' }); // prettier-ignore
+      // Fixed app text and the model's own reply may contain short excluded words.
+      await expect(post('https://api.anthropic.com/v1', 'a monkey and a keyboard')).resolves.toBeDefined(); // prettier-ignore
+    });
+    expect(calls).toHaveLength(1);
+    const recs = await log();
+    expect(recs.map((r) => r.ok)).toEqual([false, false, false, false, true]);
+    expect(recs[3]!.error).toMatch(/keep out of AI requests/);
+    expect(JSON.stringify(recs)).not.toMatch(/ash warden/i);
+  });
+
+  it('a local model may use plain HTTP to this machine only', async () => {
+    const e = egress(api());
+    const f = e.llmFetch({ provider: 'core/ollama', hosts: [], localhost: true });
+    await e.scope(scope, async () => {
+      await f('http://127.0.0.1:11434/api/chat', { method: 'POST', body: chat('hi') });
+      await expect(f('http://10.0.0.5:11434/api/chat', { method: 'POST' })).rejects.toBeInstanceOf(EgressError); // prettier-ignore
+    });
+    expect(calls).toEqual(['http://127.0.0.1:11434/api/chat']);
+  });
+
+  it('hand-offs to a local tool are checked and logged the same way', async () => {
+    const e = egress();
+    await e.scope(scope, () => e.handOff({ provider: 'core/claude-code', tool: 'claude-code', text: 'plan the shots' })); // prettier-ignore
+    await expect(e.scope(scope, () => e.handOff({ provider: 'core/claude-code', tool: 'claude-code', text: 'show the Ash Warden' }))).rejects.toMatchObject({ code: 'excluded' }); // prettier-ignore
+    await expect(e.handOff({ provider: 'core/claude-code', tool: 'claude-code', text: 'x' })).rejects.toMatchObject({ code: 'unscoped' }); // prettier-ignore
+    const recs = await log();
+    expect(recs.map((r) => [r.method, r.host, r.ok, r.bytesOut])).toEqual([
+      ['EXEC', 'claude-code', true, 14],
+      ['EXEC', 'claude-code', false, 19],
+      ['EXEC', 'claude-code', false, 1],
+    ]);
+  });
+
+  it('finds whole words in any case and reads only the user turns', () => {
+    expect(findForbidden('Fight the ash-warden now', ['Ash Warden'])).toBeUndefined();
+    expect(findForbidden('Fight the Ash Warden.', ['ash warden'])).toBe('ash warden');
+    expect(findForbidden('keyboard', ['Key'])).toBeUndefined();
+    expect(requestUserText(chat('only this'))).toBe('only this');
+    expect(requestUserText('plain text body')).toBe('plain text body');
+    expect(requestUserText(JSON.stringify({ messages: [{ role: 'user', content: [{ type: 'text', text: 'parts' }] }] }))).toBe('parts'); // prettier-ignore
   });
 });

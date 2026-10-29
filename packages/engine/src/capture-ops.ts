@@ -176,7 +176,7 @@ export async function captureTipsOp(
   opts: TipsOptions = {},
 ): Promise<TipsOutcome> {
   requireStoryboard(store);
-  const r = await generateCaptureTips({ llm: engine.llm }, store.state, {
+  const r = await generateCaptureTips({ llm: engine.llmFor(store) }, store.state, {
     ...(opts.groupKeys ? { groupKeys: opts.groupKeys } : {}),
     ...(opts.force !== undefined ? { force: opts.force } : {}),
     ...(opts.overwriteEdited !== undefined ? { overwriteEdited: opts.overwriteEdited } : {}),

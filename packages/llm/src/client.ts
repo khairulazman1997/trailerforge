@@ -33,15 +33,34 @@ export interface LlmClientOptions {
   availabilityTtlMs?: number;
   approveSend?: (info: { task: string; provider: LlmProvider }) => boolean | Promise<boolean>;
   log?: (entry: LlmCallLog) => void;
+  /**
+   * Wraps every provider call (the app runs it inside `Egress.scope`, which states the purpose
+   * and carries the names the project keeps out of AI requests to the network boundary).
+   */
+  scope?: <R>(
+    info: { task: string; provider: LlmProvider; forbidden: readonly string[] },
+    run: () => Promise<R>,
+  ) => Promise<R>;
 }
 
 /** Routes each task to a provider, enforces the disclosure gate and logs every call. */
 export class LlmClient {
   private availability = new Map<string, { at: number; ok: Promise<boolean> }>();
   private routes: RoutesConfig;
+  private forbidden: readonly string[] = [];
 
   constructor(private readonly opts: LlmClientOptions) {
     this.routes = opts.routes;
+  }
+
+  /**
+   * The same client, with names that must never leave in a request (a project's exclusions):
+   * checked again at the network boundary on every call made through the view.
+   */
+  withForbidden(terms: readonly string[]): LlmClient {
+    const view = Object.create(this) as LlmClient;
+    Object.defineProperty(view, 'forbidden', { value: terms });
+    return view;
   }
 
   /** The routes in effect (task -> provider/model/effort, default, fallbacks). */
@@ -112,15 +131,19 @@ export class LlmClient {
     }
     const started = Date.now();
     try {
-      const result = await provider.generate(
-        {
-          task,
-          ...req,
-          ...(route.model ? { model: route.model } : {}),
-          ...(route.effort ? { effort: route.effort } : {}),
-        },
-        signal,
-      );
+      const call = () =>
+        provider.generate(
+          {
+            task,
+            ...req,
+            ...(route.model ? { model: route.model } : {}),
+            ...(route.effort ? { effort: route.effort } : {}),
+          },
+          signal,
+        );
+      const result = this.opts.scope
+        ? await this.opts.scope({ task, provider, forbidden: this.forbidden }, call)
+        : await call();
       this.opts.log?.({
         task,
         provider: provider.id,

@@ -15,6 +15,12 @@ export interface ClaudeCodeOptions {
   tools?: string[];
   /** Working directory of the CLI process (where its tools can see files). */
   cwd?: string;
+  /**
+   * Called with everything the CLI is about to be given (system prompt and prompt) before it is
+   * started; throwing stops the call. The app passes `Egress.handOff`, which logs it and checks
+   * it against the project's exclusions (the CLI reaches the network itself).
+   */
+  handOff?: (text: string) => Promise<void>;
 }
 
 interface CliResult {
@@ -70,6 +76,7 @@ export function createClaudeCodeProvider(opts: ClaudeCodeOptions = {}): LlmProvi
         async (prompt, attempt) => {
           // Each call is stateless, so a repair round repeats the request plus the issues.
           const input = attempt === 0 ? prompt : `${request.prompt}\n\n${prompt}`;
+          await opts.handOff?.(input);
           const out = JSON.parse(
             await run(bin, base, input, timeoutMs, signal, opts.cwd),
           ) as CliResult;

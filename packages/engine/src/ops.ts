@@ -26,6 +26,7 @@ import {
   type KnowledgeEntity,
   type KnowledgeSource,
 } from '@trailerforge/schema';
+import { createClaudeCodeProvider } from '@trailerforge/llm';
 import { buildCaptureHints, tipsInputs } from '@trailerforge/pack-game-trailer';
 import {
   TakesWouldBeLostError,
@@ -290,7 +291,7 @@ export async function suggestBriefAnswerOp(
   opts: { questionId: string; signal?: AbortSignal | undefined },
 ): Promise<BriefSuggestion> {
   const q = questionOf(engine, store, opts.questionId);
-  const r = await suggestAnswer(engine.llm, store.state, q, opts.signal);
+  const r = await suggestAnswer(engine.llmFor(store), store.state, q, opts.signal);
   return { questionId: q.id, value: r.value, reason: r.reason, provider: r.provider };
 }
 
@@ -368,7 +369,7 @@ export async function generateStoryboardOp(
   let generated;
   try {
     generated = await generateStoryboard(
-      { llm: engine.llm, filters: engine.filters() },
+      { llm: engine.llmFor(store), filters: engine.filters() },
       store.state,
       {
         template,
@@ -431,7 +432,7 @@ export async function regenerateSectionOp(
     throw new OpError('not-found', 'this project has no storyboard yet; generate one first');
   }
   const { payload, decisions } = await regenerateSection(
-    { llm: engine.llm, filters: engine.filters() },
+    { llm: engine.llmFor(store), filters: engine.filters() },
     store.state,
     {
       sectionId: opts.sectionId,
@@ -664,13 +665,24 @@ export async function scanKnowledgeOp(
     opts.onNotice?.(
       `Deep scan: Claude Code will read ${scan.files.length} text files from a temporary copy.`,
     );
-    const found = await deepScan({
-      scan,
-      consent: true,
-      gameName: store.state.name,
-      ...(opts.claudeBin ? { claudeBin: opts.claudeBin } : {}),
-      ...(opts.signal ? { signal: opts.signal } : {}),
-    });
+    // Claude Code reaches the network itself: the hand-off is logged by Egress, under a purpose.
+    const found = await engine.egress.scope({ purpose: 'Deep repo scan (Claude Code)' }, () =>
+      deepScan({
+        scan,
+        consent: true,
+        gameName: store.state.name,
+        ...(opts.claudeBin ? { claudeBin: opts.claudeBin } : {}),
+        ...(opts.signal ? { signal: opts.signal } : {}),
+        makeProvider: (sandbox) =>
+          createClaudeCodeProvider({
+            ...(opts.claudeBin ? { bin: opts.claudeBin } : {}),
+            tools: ['Read', 'Grep', 'Glob'],
+            cwd: sandbox,
+            handOff: (text) =>
+              engine.egress.handOff({ provider: 'core/claude-code', tool: 'claude-code', text }),
+          }),
+      }),
+    );
     opts.signal?.throwIfAborted();
     store.dispatch('core/knowledge.apply-scan', {
       sourceId: source.id,

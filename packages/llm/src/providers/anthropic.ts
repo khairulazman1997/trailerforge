@@ -59,6 +59,8 @@ export interface AnthropicProviderOptions {
    */
   apiKey?: string | (() => string | undefined);
   client?: AnthropicLike;
+  /** The network door for the SDK (the app passes `Egress.llmFetch`); default the global fetch. */
+  fetch?: typeof fetch;
   /** Used when the route names no model. */
   model?: string;
   /** Output cap per reply; storyboards are the largest task. Default 16000 (non-streaming safe). */
@@ -94,7 +96,10 @@ export function createAnthropicProvider(opts: AnthropicProviderOptions = {}): Ll
     if (!built || built.key !== key) {
       built = {
         key: key ?? '',
-        client: new Anthropic({ apiKey: key }) as unknown as AnthropicLike,
+        client: new Anthropic({
+          apiKey: key,
+          ...(opts.fetch ? { fetch: refusalsAsReplies(opts.fetch) } : {}),
+        }) as unknown as AnthropicLike,
       };
     }
     return built.client;
@@ -136,12 +141,13 @@ export function createAnthropicProvider(opts: AnthropicProviderOptions = {}): Ll
         }
         if (Object.keys(outputConfig).length > 0) params.output_config = outputConfig;
         const c = getClient();
-        const res = fallbacks
-          ? await c.beta.messages.create(
-              { ...params, betas: [FALLBACK_BETA], fallbacks },
-              { signal },
-            )
-          : await c.messages.create(params, { signal });
+        const res = await (
+          fallbacks
+            ? c.beta.messages.create({ ...params, betas: [FALLBACK_BETA], fallbacks }, { signal })
+            : c.messages.create(params, { signal })
+        ).catch((err: unknown) => {
+          throw egressRefusalOf(err) ?? err;
+        });
 
         usage.inputTokens += res.usage?.input_tokens ?? 0;
         usage.outputTokens += res.usage?.output_tokens ?? 0;
@@ -184,4 +190,38 @@ export function createAnthropicProvider(opts: AnthropicProviderOptions = {}): Ll
 function isSchemaRejection(err: unknown): boolean {
   if (!(err instanceof Anthropic.BadRequestError)) return false;
   return /output_config|json_schema|schema/i.test(err.message);
+}
+
+/** Body type of the reply that stands in for a request the network door refused. */
+const EGRESS_REFUSAL = 'trailerforge_egress_refusal';
+
+/**
+ * The SDK retries a fetch that throws (as a connection error). A request the app's network door
+ * refused (an `EgressError`: no purpose, a host not allowed, an excluded name) must not be retried,
+ * so it comes back as a 403 reply carrying the refusal; `egressRefusalOf` turns it back.
+ */
+function refusalsAsReplies(f: typeof fetch): typeof fetch {
+  return async (input, init) => {
+    try {
+      return await f(input, init);
+    } catch (err) {
+      const e = err as { name?: string; code?: string; message?: string };
+      if (e?.name !== 'EgressError' || e.code === 'network') throw err;
+      return new Response(
+        JSON.stringify({ type: 'error', error: { type: EGRESS_REFUSAL, code: e.code, message: e.message } }), // prettier-ignore
+        { status: 403, headers: { 'content-type': 'application/json' } },
+      );
+    }
+  };
+}
+
+/** The refusal behind an SDK error made by `refusalsAsReplies`, as an `EgressError`-shaped error. */
+function egressRefusalOf(err: unknown): Error | undefined {
+  const body = (err as { error?: { error?: { type?: string; code?: string; message?: string } } })
+    ?.error?.error;
+  if (body?.type !== EGRESS_REFUSAL) return undefined;
+  return Object.assign(new Error(body.message ?? 'refused by the network door'), {
+    name: 'EgressError',
+    code: body.code,
+  });
 }

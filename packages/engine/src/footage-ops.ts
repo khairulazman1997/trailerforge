@@ -528,7 +528,7 @@ export async function rankTakesOp(
           : null;
         if (analysis) facts.set(t.assetId, summarizeFootage(analysis));
       }
-  const result = await rankTakes({ llm: engine.llm }, store.state, {
+  const result = await rankTakes({ llm: engine.llmFor(store) }, store.state, {
     facts,
     ...(opts.overwriteChosen ? { overwriteChosen: true } : {}),
     ...(opts.signal ? { signal: opts.signal } : {}),

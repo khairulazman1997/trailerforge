@@ -29,8 +29,12 @@ import {
   type LlmClientOptions,
 } from '@trailerforge/llm';
 import { PluginHost, type Plugin, type PluginStatus } from '@trailerforge/plugin-api';
-import { PROJECT_SCHEMA_VERSION, type ProjectInput } from '@trailerforge/schema';
-import { gameTrailerPack } from '@trailerforge/pack-game-trailer';
+import {
+  PROJECT_SCHEMA_VERSION,
+  type KnowledgeEntity,
+  type ProjectInput,
+} from '@trailerforge/schema';
+import { excludedTerms, gameTrailerPack } from '@trailerforge/pack-game-trailer';
 import { FilterRegistry } from '@trailerforge/effects';
 import { corePlugin } from './core-plugin.js';
 import { HandoffHub } from './handoff.js';
@@ -153,8 +157,16 @@ export class Engine {
     const chat = createChatHandoffProvider(handoff);
     const providers = {
       // A key saved in settings wins; ANTHROPIC_API_KEY is the fallback.
-      'core/anthropic': createAnthropicProvider({ apiKey: () => secrets.get('anthropic-api-key') }),
-      'core/claude-code': createClaudeCodeProvider(opts.claudeCode),
+      // Both go out only through Egress: purpose stated, hosts allow-listed, exclusions checked.
+      'core/anthropic': createAnthropicProvider({
+        apiKey: () => secrets.get('anthropic-api-key'),
+        fetch: egress.llmFetch({ provider: 'core/anthropic', hosts: ['api.anthropic.com'] }),
+      }),
+      'core/claude-code': createClaudeCodeProvider({
+        ...opts.claudeCode,
+        handOff: (text) =>
+          egress.handOff({ provider: 'core/claude-code', tool: 'claude-code', text }),
+      }),
       // Only offered while something (the service) can show the prompt to a person.
       'core/chat-handoff': {
         ...chat,
@@ -171,6 +183,14 @@ export class Engine {
         providers: (id) => providers[id as keyof typeof providers],
         routes: await loadRoutesConfig(routesPath),
         ...(opts.approveSend ? { approveSend: opts.approveSend } : {}),
+        scope: (info, run) =>
+          egress.scope(
+            {
+              purpose: `AI request "${info.task}" (${info.provider.name})`,
+              forbidden: info.forbidden,
+            },
+            run,
+          ),
       });
     const engine = new Engine(
       home,
@@ -198,6 +218,14 @@ export class Engine {
   }
 
   /** Providers shown in settings and accepted in routes: the built-in ones plus any a route names. */
+  /**
+   * The LLM client for work on one project: every request it makes carries the project's
+   * "keep out of AI requests" names to the network boundary, which refuses a request naming one.
+   */
+  llmFor(store: { state: { knowledge: readonly KnowledgeEntity[] } }): LlmClient {
+    return this.llm.withForbidden(excludedTerms(store.state.knowledge));
+  }
+
   llmProviderIds(): string[] {
     const cfg = this.llm.routesConfig;
     return [

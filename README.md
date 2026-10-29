@@ -54,7 +54,7 @@ The Game knowledge tab scans your repo (secrets and ignored files are never read
 
 The Storyboard tab shows sections and slots with a length bar against the target. Edit titles and lengths in place, open a slot's details, add or delete shots, cards and sections, reorder with buttons or by dragging, lock sections so neither you nor the AI changes them, undo anything, and ask "Why?" to see the recorded reason behind each generated section.
 
-Generating and rewriting show, before anything is sent, which AI provider will be used, whether that leaves your computer, and exactly what goes with the request (brief fields, game facts by name, and a count of the ones you excluded). Sending to another service needs a tick, remembered for that browser tab only.
+Generating and rewriting show, before anything is sent, which AI provider will be used, whether that leaves your computer, and exactly what goes with the request (brief fields, game facts by name, and a count of the ones you excluded). Sending to another service needs a tick, remembered for that browser tab only. Every AI request goes out through the app's single network door: it is logged in `<home>/logs/egress.jsonl` with its purpose, host and size (never its text), may only go to the provider's own host (`api.anthropic.com`; a prompt handed to the Claude Code CLI is logged the same way), and is stopped before it leaves if your own words in it name a game fact you marked "keep out of AI requests".
 
 #### Settings
 
