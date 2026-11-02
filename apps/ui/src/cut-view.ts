@@ -193,3 +193,73 @@ export function applySourceEdit<T extends { duration: number; sourceIn: number; 
     };
   return { ...clip, duration: clip.duration + p.timelineDelta };
 }
+
+/** How a change of length reaches the rest of the track. */
+export type LengthMode = 'roll' | 'ripple';
+
+export type LengthPlan =
+  | { ok: true; type: 'core/timeline.roll' | 'core/timeline.trim'; payload: object }
+  | { ok: false; reason: string };
+
+/**
+ * The command that gives an item a new length (flicks, put on the frame grid), or why it cannot,
+ * or null when nothing changes. `roll` takes the time from (or gives it to) the item right after
+ * it, so later cuts stay on the beat; with nothing right after it, the end moves into the gap.
+ * `ripple` moves everything after it along.
+ */
+export function planLength(
+  tl: Pick<Timeline, 'id' | 'tracks' | 'frameRate'>,
+  itemId: string,
+  duration: number,
+  mode: LengthMode,
+): LengthPlan | null {
+  const fpf = flicksPerFrame(tl.frameRate);
+  const track = tl.tracks.find((t) => t.items.some((i) => i.id === itemId));
+  const item = track?.items.find((i) => i.id === itemId);
+  if (!track || !item) return { ok: false, reason: 'that item is gone' };
+  if (track.locked) return { ok: false, reason: 'its track is locked' };
+  const want = Math.round(duration / fpf) * fpf;
+  if (want < fpf) return { ok: false, reason: 'it needs at least one frame' };
+  const delta = want - item.duration;
+  if (delta === 0) return null;
+  const ref = { timelineId: tl.id, itemId };
+  const trim = (ripple: boolean): LengthPlan => ({
+    ok: true,
+    type: 'core/timeline.trim',
+    payload: { ...ref, edge: 'out', delta, ripple },
+  });
+  if (mode === 'ripple') return trim(true);
+  const end = itemEnd(item);
+  const name = (i: TimelineItem) => `"${i.label ?? kindLabel(i)}"`;
+  const next = track.items.find((i) => i.id !== itemId && i.start === end);
+  if (next) {
+    if (next.duration - delta < fpf)
+      return {
+        ok: false,
+        reason: `${name(next)} after it would be gone; it can be at most ${seconds(item.duration + next.duration - fpf)} long this way`,
+      };
+    if ('sourceIn' in next && next.sourceIn + delta * ('speed' in next ? next.speed : 1) < 0)
+      return {
+        ok: false,
+        reason: `${name(next)} after it has no earlier footage to fill the time; move everything after it along instead`,
+      };
+    return { ok: true, type: 'core/timeline.roll', payload: { ...ref, delta } };
+  }
+  const after = track.items
+    .filter((i) => i.id !== itemId && i.start >= end)
+    .sort((a, b) => a.start - b.start)[0];
+  if (after && end + delta > after.start)
+    return {
+      ok: false,
+      reason: `it would run into ${name(after)}; move everything after it along instead`,
+    };
+  return trim(false);
+}
+
+const seconds = (flicks: number) => `${+(flicks / F).toFixed(2)} s`;
+
+/** How long a clip runs past the end of its recording (its last frame holds), in flicks. */
+export function heldPastEnd(item: TimelineItem, recordingLength: number | null): number {
+  if (item.kind !== 'clip' || recordingLength === null) return 0;
+  return Math.max(0, item.sourceIn + item.duration * item.speed - recordingLength);
+}

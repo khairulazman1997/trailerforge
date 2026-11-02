@@ -226,6 +226,19 @@ describe('core/timeline commands', () => {
     expect(isUserEdited(it_('rc_a'))).toBe(false);
   });
 
+  it('rolls the cut into the next item, so nothing after it moves', () => {
+    store.dispatch('core/timeline.roll', { ...ref('rc_a'), delta: F / 2 });
+    expect(it_('rc_a')).toMatchObject({ start: 0, duration: 2.5 * F });
+    expect(it_('rc_b')).toMatchObject({ start: 2.5 * F, duration: 1.5 * F });
+    expect(isUserEdited(it_('rc_b'))).toBe(true);
+    store.undo();
+    expect(it_('rc_b')).toMatchObject({ start: 2 * F, duration: 2 * F });
+    expect(() => store.dispatch('core/timeline.roll', { ...ref('rc_a'), delta: 2 * F })).toThrow();
+    expect(() => store.dispatch('core/timeline.roll', { ...ref('rc_b'), delta: F })).toThrow(
+      /nothing starts/,
+    );
+  });
+
   it('re-cuts a clip from its recording in one step, keeping its start', () => {
     store.dispatch('core/timeline.set-source', {
       ...ref('rc_a'),

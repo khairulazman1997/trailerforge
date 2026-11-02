@@ -8,8 +8,10 @@ import {
   cutPointFor,
   deltaToBeat,
   fitSourceIn,
+  heldPastEnd,
   itemAt,
   pictureAt,
+  planLength,
   planSourceEdit,
   timecode,
   transformStyle,
@@ -202,5 +204,62 @@ describe('applySourceEdit', () => {
       sourceIn: 7 * FPF,
       duration: 30 * FPF,
     });
+  });
+});
+
+describe('planLength', () => {
+  const edit = Timeline.parse({
+    ...tl,
+    tracks: [
+      {
+        id: 'v',
+        kind: 'video',
+        items: [
+          { id: 'a', kind: 'clip', start: 0, duration: 2 * F, assetId: 'x', sourceIn: 0 },
+          { id: 'b', kind: 'clip', start: 2 * F, duration: 2 * F, assetId: 'y', sourceIn: F },
+          { id: 'c', kind: 'clip', start: 5 * F, duration: F, assetId: 'z', sourceIn: 0 },
+        ],
+      },
+    ],
+  });
+
+  it('takes the time from the shot right after it, on the frame grid', () => {
+    expect(planLength(edit, 'a', 2.5 * F + 1, 'roll')).toEqual({
+      ok: true,
+      type: 'core/timeline.roll',
+      payload: { timelineId: 'tl', itemId: 'a', delta: F / 2 },
+    });
+    expect(planLength(edit, 'a', 2 * F, 'roll')).toBeNull();
+  });
+
+  it('says why when the next shot would vanish or has no earlier footage', () => {
+    expect(planLength(edit, 'a', 4 * F, 'roll')).toMatchObject({ ok: false });
+    expect(planLength(edit, 'a', 3.5 * F, 'roll')).toMatchObject({ ok: true });
+    // Shorter: the next shot starts earlier and needs footage from before its start.
+    expect(planLength(edit, 'a', 0.5 * F, 'roll')).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining('no earlier footage'),
+    });
+  });
+
+  it('grows into a gap, refuses to run into the next item, and ripples on request', () => {
+    expect(planLength(edit, 'b', 2.5 * F, 'roll')).toMatchObject({
+      ok: true,
+      type: 'core/timeline.trim',
+      payload: { edge: 'out', delta: F / 2, ripple: false },
+    });
+    expect(planLength(edit, 'b', 4 * F, 'roll')).toMatchObject({ ok: false });
+    expect(planLength(edit, 'b', 4 * F, 'ripple')).toMatchObject({
+      ok: true,
+      payload: { delta: 2 * F, ripple: true },
+    });
+    expect(planLength(edit, 'a', 0, 'roll')).toMatchObject({ ok: false });
+  });
+
+  it('measures how long a clip outruns its recording', () => {
+    const a = edit.tracks[0]!.items[0]!;
+    expect(heldPastEnd(a, 1.5 * F)).toBe(F / 2);
+    expect(heldPastEnd(a, 10 * F)).toBe(0);
+    expect(heldPastEnd(a, null)).toBe(0);
   });
 });

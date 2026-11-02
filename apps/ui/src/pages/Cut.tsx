@@ -24,13 +24,16 @@ import {
   canTrim,
   deltaToBeat,
   fitSourceIn,
+  heldPastEnd,
   captionAt,
   kindLabel,
   percent,
   pictureAt,
+  planLength,
   planSourceEdit,
   timecode,
   transformStyle,
+  type LengthMode,
   type SourceEdit,
 } from '../cut-view.js';
 import { Link, projectPath } from '../router.js';
@@ -561,6 +564,15 @@ function Inspector({
         <p className="muted">No automatic decision recorded (you made this one).</p>
       )}
 
+      <LengthControl
+        key={item.id}
+        id={id}
+        item={item}
+        beats={beats}
+        held={heldPastEnd(item, item.kind === 'clip' ? lengthOf(item.assetId) : null)}
+      />
+
+      <h3>Trim</h3>
       <label className="field inline">
         <input
           type="checkbox"
@@ -1339,5 +1351,114 @@ function TrimDialog({
         moment. Click the strip to look at a frame. Nothing changes in the cut until Done.
       </p>
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The item's length: type it, or step to the previous or next beat. By default a longer shot
+ * takes its time from the shot after it, so everything later stays on the beat.
+ */
+function LengthControl({
+  id,
+  item,
+  beats,
+  held,
+}: {
+  id: string;
+  item: TimelineItem;
+  beats: readonly number[];
+  held: number;
+}) {
+  const store = useStore();
+  const view = useAppState((s) => s.projects[id])!;
+  const tl = view.project.timelines.find((t) => t.id === TIMELINE_ID)!;
+  const rate = tl.frameRate;
+  const [mode, setMode] = useState<LengthMode>('roll');
+  const [note, setNote] = useState('');
+  const locked = tl.tracks.some((t) => t.locked && t.items.some((i) => i.id === item.id));
+  const apply = (duration: number) => {
+    const plan = planLength(tl, item.id, duration, mode);
+    if (!plan) return setNote('');
+    if (!plan.ok) return setNote(`Can't make it ${(duration / F).toFixed(2)} s: ${plan.reason}.`);
+    setNote('');
+    void store.command(id, plan.type, plan.payload);
+  };
+  const toBeat = (direction: 'next' | 'previous') => {
+    const delta = deltaToBeat(itemEnd(item), beats, direction, rate);
+    if (delta !== null) apply(item.duration + delta);
+  };
+
+  return (
+    <div role="group" aria-label="Length" className="cut-length">
+      <h3>Length</h3>
+      <div className="row">
+        <label className="field inline">
+          <span>Seconds</span>
+          <input
+            key={item.duration}
+            type="number"
+            min={0}
+            step={0.1}
+            defaultValue={+(item.duration / F).toFixed(3)}
+            disabled={locked}
+            onBlur={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v) && e.target.value !== '') apply(Math.round(v * F));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={locked || deltaToBeat(itemEnd(item), beats, 'previous', rate) === null}
+          onClick={() => toBeat('previous')}
+        >
+          Shorter, to the previous beat
+        </button>
+        <button
+          type="button"
+          disabled={locked || deltaToBeat(itemEnd(item), beats, 'next', rate) === null}
+          onClick={() => toBeat('next')}
+        >
+          Longer, to the next beat
+        </button>
+      </div>
+      <fieldset className="cut-length-mode" disabled={locked}>
+        <legend>When the length changes</legend>
+        <label>
+          <input
+            type="radio"
+            name={`length-mode-${item.id}`}
+            checked={mode === 'roll'}
+            onChange={() => setMode('roll')}
+          />{' '}
+          Take the time from the shot after it (everything later stays on the beat)
+        </label>
+        <label>
+          <input
+            type="radio"
+            name={`length-mode-${item.id}`}
+            checked={mode === 'ripple'}
+            onChange={() => setMode('ripple')}
+          />{' '}
+          Move everything after it along
+        </label>
+      </fieldset>
+      {held > 0 && (
+        <p className="muted" data-testid="cut-held">
+          The recording ends {(held / F).toFixed(2)} s before this clip does: its last frame holds
+          still for that time. Pick an earlier start in the source, or another take, to fill it.
+        </p>
+      )}
+      {note && (
+        <p className="banner warn" role="status">
+          {note}
+        </p>
+      )}
+    </div>
   );
 }

@@ -158,6 +158,21 @@ test('choose music, analyse, build the cut, inspect, trim, swap, lock, rebuild, 
   await expect(parry).toHaveAttribute('aria-label', before!);
   await expect(used).toHaveText(usedBefore!);
 
+  // Longer: typed in seconds, it takes the time from the next item, so the end of the cut stays.
+  const length = page.getByRole('group', { name: 'Length' });
+  const seconds = length.getByLabel('Seconds');
+  const was = Number(await seconds.inputValue());
+  const lastEnd = async () =>
+    (await picture.getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')))).at(-1)?.split(' to ')[1]; // prettier-ignore
+  const endBefore = await lastEnd();
+  await seconds.fill(String(was + 0.5));
+  await seconds.press('Enter');
+  await expect(parry).not.toHaveAttribute('aria-label', before!);
+  await expect(length.getByLabel('Seconds')).toHaveValue(String(+(was + 0.5).toFixed(3)));
+  expect(await lastEnd()).toBe(endBefore);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(parry).toHaveAttribute('aria-label', before!);
+
   // Trim the end by a frame: the clip's timecode changes; undo puts it back.
   await page
     .getByRole('group', { name: 'Trim the end' })

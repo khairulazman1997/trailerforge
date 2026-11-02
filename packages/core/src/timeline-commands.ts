@@ -134,6 +134,34 @@ export const trimItem = defineCommand({
 });
 
 /**
+ * Move the cut between an item and the item right after it on its track (a roll edit): the item
+ * gets `delta` longer (negative = shorter) and the next one starts that much later, giving up the
+ * time from its start, so nothing else on the track moves.
+ */
+export const rollEdit = defineCommand({
+  type: 'core/timeline.roll',
+  payload: z.strictObject({ ...Ref, delta: z.int() }),
+  label: () => 'Roll cut',
+  apply: (d, { timelineId, itemId, delta }) => {
+    const { item, track } = find(d, timelineId, itemId, 'core/timeline.roll');
+    const end = item.start + item.duration;
+    const next = track.items.find((i) => i.id !== itemId && i.start === end);
+    if (!next) throw new CommandError('core/timeline.roll', 'nothing starts where this item ends');
+    item.duration += delta;
+    next.start += delta;
+    next.duration -= delta;
+    if ('sourceIn' in next) next.sourceIn += Math.round(delta * ('speed' in next ? next.speed : 1));
+    if (item.duration <= 0 || next.duration <= 0 || ('sourceIn' in next && next.sourceIn < 0)) {
+      throw new CommandError('core/timeline.roll', 'that goes past the start or end of an item');
+    }
+    markEdited(item);
+    markEdited(next);
+    pruneTransitions(track);
+  },
+  merge: { key: ({ timelineId, itemId }) => `${timelineId}/${itemId}/roll`, windowMs: 1000 },
+});
+
+/**
  * Choose which part of a clip's recording it uses, in one step: the new source start and the new
  * length (timeline flicks); the clip keeps its start. With `ripple`, the items after it on the
  * track move by the change in length.
@@ -432,6 +460,7 @@ export const timelineCommands = [
   setTimeline,
   trimItem,
   setSourceRange,
+  rollEdit,
   moveItem,
   swapTake,
   toPlaceholder,

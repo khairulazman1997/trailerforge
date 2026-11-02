@@ -1875,3 +1875,16 @@ main:focus {
   max-height: 55vh;
   cursor: pointer;
 }
+.cut-length-mode {
+  border: 0;
+  padding: 0;
+  margin: 0.25rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.cut-length-mode legend {
+  padding: 0;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
