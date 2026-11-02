@@ -1,4 +1,5 @@
-import { join } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { runTool } from './process.js';
 
 export interface FfmpegTools {
@@ -6,13 +7,61 @@ export interface FfmpegTools {
   ffprobe: string;
 }
 
-/** `TFORGE_FFMPEG_DIR` overrides PATH lookup (e.g. a user-chosen FFmpeg build). */
-export function resolveTools(env: NodeJS.ProcessEnv = process.env): FfmpegTools {
+/**
+ * `TFORGE_FFMPEG_DIR` overrides PATH lookup (e.g. a user-chosen FFmpeg build). On Windows, an
+ * `ffmpeg` on PATH that is a package manager's launcher (Chocolatey's or Scoop's shim) is replaced
+ * by the real program behind it: Chocolatey's shim crashes when several FFmpeg processes run at
+ * once, as renders do.
+ */
+export function resolveTools(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): FfmpegTools {
   const dir = env.TFORGE_FFMPEG_DIR;
-  const exe = process.platform === 'win32' ? '.exe' : '';
-  return dir
-    ? { ffmpeg: join(dir, `ffmpeg${exe}`), ffprobe: join(dir, `ffprobe${exe}`) }
+  const exe = platform === 'win32' ? '.exe' : '';
+  if (dir) return { ffmpeg: join(dir, `ffmpeg${exe}`), ffprobe: join(dir, `ffprobe${exe}`) };
+  const real = platform === 'win32' ? realBehindShim(env) : null;
+  return real
+    ? { ffmpeg: join(real, 'ffmpeg.exe'), ffprobe: join(real, 'ffprobe.exe') }
     : { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' };
+}
+
+const both = (d: string) => existsSync(join(d, 'ffmpeg.exe')) && existsSync(join(d, 'ffprobe.exe'));
+const subdirs = (d: string): string[] => {
+  try {
+    return readdirSync(d, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => join(d, e.name))
+      .sort();
+  } catch {
+    return [];
+  }
+};
+
+/** The folder of the real ffmpeg.exe when the first one on PATH is a known shim, else null. */
+export function realBehindShim(env: NodeJS.ProcessEnv): string | null {
+  const path = env.PATH ?? env.Path ?? '';
+  const found = path
+    .split(';')
+    .filter(Boolean)
+    .find((d) => existsSync(join(d, 'ffmpeg.exe')));
+  if (!found) return null;
+  const norm = found.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  if (norm.endsWith('/chocolatey/bin')) {
+    // <choco>/lib/<package>/tools/.../ffmpeg.exe, usually tools/ffmpeg/bin
+    for (const pkg of subdirs(join(dirname(found), 'lib'))) {
+      const tools = join(pkg, 'tools');
+      const hit = [tools, join(tools, 'bin'), ...subdirs(tools).flatMap((d) => [join(d, 'bin'), d])].find(both); // prettier-ignore
+      if (hit) return hit;
+    }
+  }
+  if (norm.endsWith('/scoop/shims')) {
+    const hit = subdirs(join(dirname(found), 'apps'))
+      .map((app) => join(app, 'current', 'bin'))
+      .find(both);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 export type HwEncoderFamily = 'nvenc' | 'videotoolbox' | 'qsv' | 'vaapi' | 'amf';

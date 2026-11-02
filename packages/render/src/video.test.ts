@@ -23,6 +23,7 @@ import {
   encodeAlphaClip,
   planSegments,
   renderVideo,
+  settleAll,
   writePoster,
   type RenderSpec,
 } from './video.js';
@@ -140,6 +141,23 @@ describe('renderVideo', { timeout: 120_000 }, () => {
     await expect(renderVideo(broken, { workRoot, parallel: 3 })).rejects.toThrow();
     for (const d of readdirSync(workRoot))
       expect(readdirSync(join(workRoot, d)).filter((f) => f.includes('.tmp'))).toEqual([]);
+  });
+
+  it('reports the failure that stopped a render, not a part it cancelled', async () => {
+    const stop = new AbortController();
+    // One part fails inside a nested group (which aborts `stop` first and settles later); another
+    // part is cancelled by that abort and fails sooner.
+    const cancelled = new Promise((_, reject) =>
+      stop.signal.addEventListener('abort', () => reject(new Error('cancelled'))),
+    );
+    const failing = (async () => {
+      stop.abort(new Error('segment 3 failed'));
+      await new Promise((r) => setTimeout(r, 20));
+      throw new Error('segment 3 failed');
+    })();
+    await expect(settleAll([failing, cancelled] as const, stop)).rejects.toThrow(
+      'segment 3 failed',
+    );
   });
 
   it('a render killed mid-way (SIGKILL) resumes to the same bytes as a clean one', async () => {

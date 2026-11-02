@@ -392,7 +392,7 @@ export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promis
  * Like `Promise.all`, but on the first failure it aborts `stop` and still waits for every task
  * to finish, so no FFmpeg process or temp file outlives the call; then it throws that failure.
  */
-async function settleAll<T extends readonly Promise<unknown>[]>(
+export async function settleAll<T extends readonly Promise<unknown>[]>(
   tasks: T,
   stop: AbortController,
 ): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
@@ -406,7 +406,9 @@ async function settleAll<T extends readonly Promise<unknown>[]>(
       }),
     ),
   );
-  if (first) throw first.err;
+  // The first failure aborted `stop`; tasks it stopped may fail sooner (as "cancelled"), so the
+  // abort's reason is the error to report.
+  if (first) throw stop.signal.aborted ? stop.signal.reason : first.err;
   return results as { -readonly [K in keyof T]: Awaited<T[K]> };
 }
 
