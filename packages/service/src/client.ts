@@ -123,7 +123,16 @@ export interface TaskView {
 }
 
 export type TaskRequest =
-  | { kind: 'generate'; options?: { duration?: number; template?: string; assume?: boolean } }
+  | {
+      kind: 'generate';
+      options?: {
+        duration?: number;
+        template?: string;
+        assume?: boolean;
+        /** Send the open comments on unlocked sections and resolve them (default true). */
+        useComments?: boolean;
+      };
+    }
   | {
       kind: 'regenerate-section';
       options: {

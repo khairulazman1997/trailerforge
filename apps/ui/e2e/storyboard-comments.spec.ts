@@ -88,4 +88,25 @@ test.describe.serial('comments on the storyboard, then a rewrite from them', () 
     expect(t.prompts.at(-1)!).not.toContain('Too calm');
     await expect(page.getByTestId('comments-sec_hook')).toHaveText('2 comments');
   });
+
+  test('generate again works from the open comments and resolves them', async ({ page }) => {
+    await page.goto(`${t.svc.url}/p/${id}/storyboard#token=${t.svc.token}`);
+    // Two open comments are left on the hook from the test before.
+    await expect(page.getByTestId('comments-sec_hook')).toHaveText('2 comments');
+    await page.getByRole('button', { name: 'Generate again…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Generate the storyboard again?' });
+    await expect(dialog.getByLabel(/Work from the 2 open comments/)).toBeChecked();
+    await expect(
+      dialog.getByRole('list', { name: 'Comments sent with the generation' }),
+    ).toContainText('Open faster');
+    const axe = await new AxeBuilder({ page }).include('dialog[open]').analyze();
+    expect(axe.violations).toEqual([]);
+    await dialog.getByRole('button', { name: 'Generate', exact: true }).click();
+
+    await expect(page.getByText(/working from 2 comments/)).toBeVisible();
+    const prompt = t.prompts.at(-1)!;
+    expect(prompt).toContain('on the whole section: Open faster');
+    expect(prompt).toContain('Too calm, add enemies');
+    await expect(page.getByTestId('comments-sec_hook')).toHaveCount(0);
+  });
 });

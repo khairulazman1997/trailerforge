@@ -135,6 +135,8 @@ const FLEXIBLE_STRUCTURE =
 
 export interface GenerateResult {
   storyboard: Storyboard;
+  /** Open comments the generation was asked to address (resolved, or gone with their section). */
+  addressedCommentIds: string[];
   decisions: DecisionRecord[];
   /** Suggestions that were dropped or simplified, for the user to see. */
   warnings: string[];
@@ -170,6 +172,11 @@ export async function generateStoryboard(
     signal?: AbortSignal;
     /** Replace unlocked sections even though some of their shots have recordings attached. */
     discardTakes?: boolean;
+    /**
+     * Send the open comments on unlocked sections, with an outline of the current storyboard so
+     * the model knows what they refer to (default true). They come back resolved.
+     */
+    useComments?: boolean;
   },
 ): Promise<GenerateResult> {
   const { template, targetDuration } = opts;
@@ -200,12 +207,24 @@ export async function generateStoryboard(
     ),
   }));
 
+  // Comments on locked sections stay open: those sections are not rewritten.
+  const comments =
+    opts.useComments === false || !existing
+      ? []
+      : existing.sections.filter((s) => !s.locked).flatMap((s) => openComments(existing, s.id));
+
   const ctx = promptContext(project);
   const system = await systemPrompt(project);
   const inst = installed(deps);
   const prompt = await loadPrompt(
     'storyboard.generate',
     {
+      comments:
+        existing && comments.length > 0 ? storyboardCommentLines(existing, comments) : '(none)',
+      current:
+        existing && comments.length > 0
+          ? existing.sections.map(numberedSection).join('\n')
+          : '(not needed)',
       videoType: opts.videoType?.trim() || template.name,
       structure: template.flexible ? FLEXIBLE_STRUCTURE : FIXED_STRUCTURE,
       targetDuration: String(targetDuration),
@@ -279,6 +298,18 @@ export async function generateStoryboard(
   });
 
   const at = (deps.now ?? (() => new Date()))();
+  // Addressed comments stay, resolved, where a new section has their section's id; the rest
+  // went with the sections they were on (their text is in the decision record, undo restores them).
+  // Their slot ids may now name unrelated slots, so they keep only the slot's old title.
+  const newSectionIds = new Set(storyboard.sections.map((s) => s.id));
+  storyboard.comments = comments
+    .filter((c) => newSectionIds.has(c.sectionId))
+    .map(({ slotId: _, ...c }) => ({
+      ...c,
+      resolved: true,
+      addressedAt: at.toISOString(),
+    }));
+  const addressedCommentIds = comments.map((c) => c.id);
   const decisions = [
     decision(at, {
       step: 'core/storyboard-generate',
@@ -300,13 +331,42 @@ export async function generateStoryboard(
         budget,
         requestedSeconds: converted.requestedSeconds,
         lockedSectionIds: locked.map(({ s }) => s.id),
+        comments: comments.map((c) => ({
+          id: c.id,
+          sectionId: c.sectionId,
+          slotId: c.slotId ?? null,
+          text: c.text,
+        })),
       },
       summary: gen.rationale,
       inputsHash: sha256(`${system}\n${prompt}`),
     }),
     ...suggestionDecisions(at, converted.suggestions, sha256(`${system}\n${prompt}`)),
   ];
-  return { storyboard, decisions, warnings: converted.warnings };
+  return { storyboard, decisions, warnings: converted.warnings, addressedCommentIds };
+}
+
+/** A section with numbered slots, so comments can point at "slot #2". */
+function numberedSection(s: Section): string {
+  const slots = s.slots
+    .map((x, i) => `${i + 1}. ${x.title || x.kind} (${x.kind}, ${x.duration.ideal}s)`)
+    .join('; ');
+  const flags = [s.role, `${sectionSeconds(s)}s`, s.locked ? 'locked' : ''].filter(Boolean);
+  return `- "${s.name}" (${flags.join(', ')}): ${slots || '(empty)'}`;
+}
+
+/** Comments across the storyboard, each naming its section (and slot) by name, never by id. */
+function storyboardCommentLines(sb: Storyboard, comments: readonly StoryboardComment[]): string {
+  return sb.sections
+    .flatMap((s) => {
+      const mine = comments.filter((c) => c.sectionId === s.id);
+      return mine.length === 0
+        ? []
+        : commentLines(s, mine)
+            .split('\n')
+            .map((line) => line.replace(/^- /, `- in "${s.name}", `));
+    })
+    .join('\n');
 }
 
 /** The section's comments as the model reads them: slots by position and title, never by id. */

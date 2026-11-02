@@ -266,6 +266,7 @@ const TaskRequest = z.discriminatedUnion('kind', [
         duration: z.number().positive().optional(),
         template: z.string().optional(),
         assume: z.boolean().optional(),
+        useComments: z.boolean().optional(),
       })
       .default({}),
   }),

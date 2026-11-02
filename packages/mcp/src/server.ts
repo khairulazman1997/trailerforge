@@ -348,11 +348,12 @@ export function createMcpServer(opts: McpServerOptions): Server {
     tool: {
       name: 'storyboard_generate',
       description:
-        'Generate the storyboard from the brief and game facts with the configured LLM provider (the brief and non-excluded facts are sent to it). Replaces every unlocked section; locked sections are kept. Requires a complete brief, or assume=true to proceed with logged assumptions.',
+        'Generate the storyboard from the brief and game facts with the configured LLM provider (the brief and non-excluded facts are sent to it). Replaces every unlocked section; locked sections are kept. Requires a complete brief, or assume=true to proceed with logged assumptions. Open storyboard comments on unlocked sections are sent with it and resolved unless useComments is false.',
       inputSchema: object({
         duration: { type: 'number', exclusiveMinimum: 0, description: 'Target length in seconds.' },
         template: { type: 'string' },
         assume: { type: 'boolean' },
+        useComments: { type: 'boolean' },
       }),
     },
     async run(args) {
@@ -361,6 +362,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
         duration: typeof args.duration === 'number' ? args.duration : undefined,
         template: typeof args.template === 'string' ? args.template : undefined,
         assume: args.assume === true,
+        useComments: typeof args.useComments === 'boolean' ? args.useComments : undefined,
       });
     },
   });

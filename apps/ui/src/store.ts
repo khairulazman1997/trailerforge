@@ -477,11 +477,16 @@ export class AppStore {
             nextStepFor(t.error?.code, t.projectId),
           );
         } else if (t.status === 'succeeded' && t.kind === 'generate') {
-          const r = t.result as { provider: string; slots: number; seconds: number } | undefined;
+          const r = t.result as
+            | { provider: string; slots: number; seconds: number; addressedCommentIds?: string[] }
+            | undefined;
+          const n = r?.addressedCommentIds?.length ?? 0;
           if (r)
             this.toast(
               'info',
-              `Storyboard written with ${r.provider}: ${r.slots} slots, ${r.seconds} s. Undo goes back to what you had.`,
+              `Storyboard written with ${r.provider}: ${r.slots} slots, ${r.seconds} s` +
+                (n > 0 ? `, working from ${n} comment${n === 1 ? '' : 's'}` : '') +
+                '. Undo goes back to what you had.',
             );
         } else if (t.status === 'succeeded' && t.kind === 'regenerate-section') {
           const r = t.result as { provider: string; section: { name: string } } | undefined;

@@ -55,6 +55,7 @@ export function GenerateDialog({
   const [template, setTemplate] = useState('');
   const [length, setLength] = useState(String(defaultLength));
   const [assume, setAssume] = useState(false);
+  const [useComments, setUseComments] = useState(true);
 
   useEffect(() => {
     if (open && videoTypeId) void store.loadBrief(id);
@@ -62,6 +63,12 @@ export function GenerateDialog({
 
   const sb = project.storyboard;
   const locked = sb?.sections.filter((s) => s.locked).length ?? 0;
+  // Comments on locked sections stay open: those sections are not rewritten.
+  const commented = (sb?.sections ?? [])
+    .filter((s) => !s.locked)
+    .map((s) => ({ section: s, comments: sectionComments(sb!, s.id).open }))
+    .filter((x) => x.comments.length > 0);
+  const commentCount = commented.reduce((n, x) => n + x.comments.length, 0);
   const edited =
     sb?.sections
       .filter((s) => !s.locked)
@@ -113,6 +120,7 @@ export function GenerateDialog({
             duration: seconds,
             ...(template ? { template } : {}),
             ...(assume ? { assume: true } : {}),
+            ...(commentCount > 0 ? { useComments } : {}),
           },
         });
         onClose();
@@ -166,6 +174,36 @@ export function GenerateDialog({
               : 'Lock a section to keep it. '}
             You can undo it.
           </p>
+        )}
+
+        {commentCount > 0 && (
+          <div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={useComments}
+                onChange={(e) => setUseComments(e.target.checked)}
+              />
+              <span>
+                Work from the {commentCount} open comment{commentCount === 1 ? '' : 's'} (they are
+                marked resolved)
+              </span>
+            </label>
+            {useComments && (
+              <ul className="comments" aria-label="Comments sent with the generation">
+                {commented.flatMap(({ section, comments }) =>
+                  comments.map((c) => (
+                    <li key={c.id}>
+                      <span className="chip">
+                        {section.name}: {commentWhere(section, c)}
+                      </span>
+                      <span className="grow">{c.text}</span>
+                    </li>
+                  )),
+                )}
+              </ul>
+            )}
+          </div>
         )}
 
         {missing.length > 0 && (

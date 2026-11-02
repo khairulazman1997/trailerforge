@@ -367,6 +367,8 @@ export interface GenerateOptions {
   signal?: AbortSignal | undefined;
   /** Replace unlocked shots even though recordings are attached (error `takes-attached` otherwise). */
   discardTakes?: boolean | undefined;
+  /** Send the open comments on unlocked sections and resolve them (default true). */
+  useComments?: boolean | undefined;
 }
 
 export interface GenerateOutcome {
@@ -377,6 +379,8 @@ export interface GenerateOutcome {
   rationale: string;
   /** Assumptions that were logged to let generation proceed. */
   assumptionsAdded: number;
+  /** Storyboard comments the new storyboard was asked to address. */
+  addressedCommentIds: string[];
 }
 
 export async function generateStoryboardOp(
@@ -424,6 +428,7 @@ export async function generateStoryboardOp(
         videoType: videoTypeText(store.state, vt),
         ...(opts.signal ? { signal: opts.signal } : {}),
         ...(opts.discardTakes ? { discardTakes: true } : {}),
+        ...(opts.useComments !== undefined ? { useComments: opts.useComments } : {}),
       },
     );
   } catch (err) {
@@ -432,7 +437,7 @@ export async function generateStoryboardOp(
     }
     throw err;
   }
-  const { storyboard, decisions } = generated;
+  const { storyboard, decisions, addressedCommentIds } = generated;
   opts.signal?.throwIfAborted();
   store.dispatch('core/storyboard.set', storyboard);
   await appendDecisions(store.paths.decisions, decisions);
@@ -455,6 +460,7 @@ export async function generateStoryboardOp(
     ),
     rationale: decisions[0]?.summary ?? '',
     assumptionsAdded,
+    addressedCommentIds,
   };
 }
 

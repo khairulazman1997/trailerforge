@@ -6,6 +6,12 @@ Write a storyboard for a {{videoType}} lasting {{targetDuration}} seconds. The s
 Locked sections (keep the story consistent with them):
 {{locked}}
 
+The user left comments on the current storyboard. Write the new storyboard so that it addresses every one of them; keep what they did not complain about where it still fits. A comment "on slot #N" refers to the slots numbered below. Comments:
+{{comments}}
+
+Current storyboard (what the comments are about):
+{{current}}
+
 Rules:
 
 - Every shot needs a captureInstruction the player can follow exactly: what to do, where, and what state the game must be in.

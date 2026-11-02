@@ -8,7 +8,8 @@ import { sampleProject } from '@trailerforge/schema/fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 import { storyboardCommands } from './commands.js';
 import { commentedSectionIds, openComments } from './comments.js';
-import { regenerateSection } from './generate.js';
+import { releaseTemplate } from '@trailerforge/pack-game-trailer';
+import { generateStoryboard, regenerateSection } from './generate.js';
 import { markUserEdited } from './user-edits.js';
 
 const NOW = () => new Date('2026-11-02T12:00:00Z');
@@ -25,8 +26,24 @@ const sectionReply = {
   },
 };
 
+const genReply = {
+  rationale: 'Opens on the arena, as asked.',
+  sections: [
+    { name: 'Hook', role: 'hook', slots: [{ kind: 'shot', title: 'Arena', seconds: 3 }] },
+    {
+      name: 'Escalation',
+      role: 'escalation',
+      slots: [{ kind: 'shot', title: 'Warden lands', seconds: 4 }],
+    },
+  ],
+  music: { direction: 'Drums' },
+};
+
 function setup() {
-  const mock = createMockProvider({ 'storyboard.regenerate-section': sectionReply });
+  const mock = createMockProvider({
+    'storyboard.regenerate-section': sectionReply,
+    'storyboard.generate': genReply,
+  });
   const llm = new LlmClient({
     providers: (id) => (id === 'core/mock' ? mock : undefined),
     routes: RoutesConfig.parse({ default: { provider: 'core/mock' }, fallbacks: [] }),
@@ -210,5 +227,63 @@ describe('rewriting a section from its comments', () => {
     expect(mock.calls[0]!.prompt).not.toContain('Faster');
     expect(payload.addressedCommentIds).toEqual([]);
     expect(payload.section.slots.map((s) => s.id)).toContain('shot_extra');
+  });
+});
+
+describe('generating the whole storyboard again from its comments', () => {
+  it('sends open comments on unlocked sections with the current outline and resolves them', async () => {
+    const { mock, deps } = setup();
+    const store = await openStore();
+    store.dispatch('core/storyboard.comment', {
+      id: 'sbc_a',
+      slotId: 'shot_boss',
+      text: 'Show the arena first',
+    });
+    store.dispatch('core/storyboard.comment', {
+      id: 'sbc_b',
+      sectionId: 'sec_hook',
+      text: 'Faster',
+    });
+    store.dispatch('core/storyboard.comment', { id: 'sbc_c', sectionId: 'sec_end', text: 'Date?' });
+
+    const { storyboard, addressedCommentIds, decisions } = await generateStoryboard(
+      deps,
+      store.state,
+      { template: releaseTemplate, targetDuration: 30 },
+    );
+    const prompt = mock.calls[0]!.prompt;
+    expect(prompt).toMatch(/- in "[^"]+", on slot #1 "[^"]*": Show the arena first/);
+    expect(prompt).toMatch(/- in "[^"]+", on the whole section: Faster/);
+    // The end slate is locked, so its comment is not for this generation.
+    expect(prompt).not.toContain('Date?');
+    expect(prompt).toMatch(/Current storyboard[^]*1\. /);
+    expect(prompt).not.toContain('shot_boss');
+    expect(addressedCommentIds).toEqual(['sbc_b', 'sbc_a']);
+    expect(decisions[0]!.reasons.comments).toHaveLength(2);
+
+    store.dispatch('core/storyboard.set', storyboard);
+    const after = comments(store);
+    // Addressed comments whose section id lives on are kept, resolved, without a slot.
+    for (const c of after.filter((x) => x.id !== 'sbc_c'))
+      expect(c).toMatchObject({ resolved: true, addressedAt: NOW().toISOString() });
+    expect(after.every((c) => c.id === 'sbc_c' || c.slotId === undefined)).toBe(true);
+    expect(after.find((c) => c.id === 'sbc_c')).toMatchObject({ resolved: false });
+    expect(parseProject(store.state).ok).toBe(true);
+
+    store.undo();
+    expect(comments(store).filter((c) => !c.resolved)).toHaveLength(3);
+  });
+
+  it('leaves comments out when asked to', async () => {
+    const { mock, deps } = setup();
+    const store = await openStore();
+    store.dispatch('core/storyboard.comment', { sectionId: 'sec_hook', text: 'Faster' });
+    const { addressedCommentIds } = await generateStoryboard(deps, store.state, {
+      template: releaseTemplate,
+      targetDuration: 30,
+      useComments: false,
+    });
+    expect(addressedCommentIds).toEqual([]);
+    expect(mock.calls[0]!.prompt).not.toContain('Faster');
   });
 });
