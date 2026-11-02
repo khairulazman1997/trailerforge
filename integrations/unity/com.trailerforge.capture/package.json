@@ -1,0 +1,15 @@
+{
+  "name": "com.trailerforge.capture",
+  "displayName": "TrailerForge Capture",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "Records the shots on a TrailerForge capture list, named with their shot codes, into a folder TrailerForge watches. Works through files only.",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
+  "keywords": [
+    "trailer",
+    "capture",
+    "recorder"
+  ]
+}

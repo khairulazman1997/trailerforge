@@ -11,3 +11,8 @@ packages/compile/src/__golden__
 apps/desktop/stage
 apps/desktop/release
 apps/desktop/vendor
+integrations/unity/TestProject/Library
+integrations/unity/TestProject/Logs
+integrations/unity/TestProject/Temp
+integrations/unity/TestProject/UserSettings
+integrations/unity/**/*.meta

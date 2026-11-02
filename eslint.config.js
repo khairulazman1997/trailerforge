@@ -29,7 +29,7 @@ export default tseslint.config(
   },
   {
     // Plain Node scripts.
-    files: ['apps/desktop/scripts/**/*.mjs'],
+    files: ['apps/desktop/scripts/**/*.mjs', 'scripts/**/*.mjs'],
     languageOptions: {
       globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly', fetch: 'readonly' },
     },
