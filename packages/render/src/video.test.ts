@@ -2,6 +2,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -273,7 +274,7 @@ describe('export presets, rendered', { timeout: 300_000 }, () => {
 describe('alpha clips for NLE handoff', { timeout: 60_000 }, () => {
   it('encodes PNG frames with alpha as ProRes 4444, the same bytes twice', async () => {
     const dir = join(root, 'card');
-    execFileSync('mkdir', ['-p', dir]);
+    mkdirSync(dir, { recursive: true });
     execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i',
       'color=c=red:s=80x90:r=24,format=rgba,pad=160:90:0:0:color=black@0', '-frames:v', '12',
       join(dir, 'frame_%06d.png')]); // prettier-ignore
