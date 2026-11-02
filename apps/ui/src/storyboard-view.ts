@@ -97,3 +97,27 @@ export function decisionsFor(
     .slice()
     .reverse();
 }
+
+type Comment = Storyboard['comments'][number];
+
+/** Comments on a section and its slots, open ones first, each group in the order made. */
+export function sectionComments(
+  sb: Pick<Storyboard, 'comments'>,
+  sectionId: string,
+): { open: Comment[]; resolved: Comment[] } {
+  const mine = sb.comments.filter((c) => c.sectionId === sectionId);
+  return { open: mine.filter((c) => !c.resolved), resolved: mine.filter((c) => c.resolved) };
+}
+
+/** Sections with open comments, in storyboard order. */
+export function commentedSections(sb: Pick<Storyboard, 'comments' | 'sections'>): Section[] {
+  return sb.sections.filter((s) => sb.comments.some((c) => c.sectionId === s.id && !c.resolved));
+}
+
+/** What a comment is on, in words: "Whole section", "#2 Boss reveal", or the removed slot's title. */
+export function commentWhere(section: Section, c: Comment): string {
+  const at = c.slotId ? section.slots.findIndex((x) => x.id === c.slotId) : -1;
+  if (at >= 0) return `#${at + 1} ${section.slots[at]!.title || section.slots[at]!.kind}`;
+  if (c.slotLabel) return `${c.slotLabel} (replaced)`;
+  return 'Whole section';
+}

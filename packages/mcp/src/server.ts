@@ -39,6 +39,7 @@ import {
   generateStoryboardOp,
   OpError,
   regenerateSectionOp,
+  refineStoryboardOp,
   scanKnowledgeOp,
   type Engine,
 } from '@trailerforge/engine';
@@ -378,6 +379,11 @@ export function createMcpServer(opts: McpServerOptions): Server {
             description: 'What to change, e.g. "more forest, less boss".',
           },
           keepEdited: { type: 'boolean' },
+          useComments: {
+            type: 'boolean',
+            description:
+              "Send the section's open storyboard comments and resolve them (default true).",
+          },
         },
         ['sectionId'],
       ),
@@ -388,6 +394,34 @@ export function createMcpServer(opts: McpServerOptions): Server {
       return regenerateSectionOp(engine, store, {
         sectionId: args.sectionId,
         instruction: typeof args.instruction === 'string' ? args.instruction : undefined,
+        keepEdited: typeof args.keepEdited === 'boolean' ? args.keepEdited : undefined,
+        useComments: typeof args.useComments === 'boolean' ? args.useComments : undefined,
+      });
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'storyboard_refine',
+      description:
+        'Rewrite every unlocked section that has open storyboard comments, working from those comments (one undo step per section; the comments are resolved). Commented slots are rewritten even if edited by hand, unless they have recordings. Sends the brief and non-excluded game facts to an LLM provider.',
+      inputSchema: object({
+        sectionIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Only these sections (default: every section with open comments).',
+        },
+        keepEdited: { type: 'boolean' },
+      }),
+    },
+    async run(args) {
+      const store = await project(args);
+      const ids = Array.isArray(args.sectionIds)
+        ? args.sectionIds.filter((x): x is string => typeof x === 'string')
+        : undefined;
+      return refineStoryboardOp(engine, store, {
+        sectionIds: ids,
         keepEdited: typeof args.keepEdited === 'boolean' ? args.keepEdited : undefined,
       });
     },

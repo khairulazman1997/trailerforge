@@ -1760,3 +1760,13 @@ kbd {
 main:focus {
   outline: none;
 }
+
+/* Storyboard comments */
+.section-comments {
+  margin-top: 0.5rem;
+  display: grid;
+  gap: 0.35rem;
+}
+.section-comments .comments {
+  margin: 0;
+}

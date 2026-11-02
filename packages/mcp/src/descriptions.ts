@@ -98,6 +98,12 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
   'core/storyboard.remove-vo-line': 'Delete a voice-over line.',
   'core/storyboard.update-music':
     'Edit the music plan: direction, tempo range (bpm) or track asset.',
+  'core/storyboard.comment':
+    'Leave a comment on a section (sectionId) or a slot (slotId) for the next AI rewrite; storyboard_refine works from the open ones. Works on locked sections too.',
+  'core/storyboard.edit-comment': 'Change the text of a storyboard comment.',
+  'core/storyboard.resolve-comment': 'Mark a storyboard comment as dealt with.',
+  'core/storyboard.reopen-comment': 'Reopen a resolved storyboard comment.',
+  'core/storyboard.delete-comment': 'Delete a storyboard comment.',
 };
 
 /**

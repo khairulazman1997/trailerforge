@@ -273,6 +273,25 @@ export type StoryboardVariant = z.infer<typeof StoryboardVariant>;
 export const Variant = StoryboardVariant;
 export type Variant = StoryboardVariant;
 
+/**
+ * A note the user left on a section or one of its slots, for the AI to act on when it rewrites
+ * the section (see `regenerateSection`). `slotLabel` keeps the slot's title from when the comment
+ * was made, so the note still reads after the slot is rewritten or removed (its `slotId` is then
+ * dropped). `addressedAt` is set when a rewrite took the comment into account; it is resolved then.
+ */
+export const StoryboardComment = z.strictObject({
+  id: Id,
+  sectionId: Id,
+  slotId: Id.optional(),
+  slotLabel: z.string().max(200).optional(),
+  text: z.string().trim().min(1).max(2000),
+  resolved: z.boolean().default(false),
+  createdAt: IsoDateTime,
+  editedAt: IsoDateTime.optional(),
+  addressedAt: IsoDateTime.optional(),
+});
+export type StoryboardComment = z.infer<typeof StoryboardComment>;
+
 export const StoryboardMeta = z.strictObject({
   videoTypeId: PluginRef,
   templateId: PluginRef.optional(),
@@ -296,6 +315,8 @@ export const Storyboard = z.strictObject({
     sfxCues: [],
   }),
   variants: z.array(StoryboardVariant).default([]),
+  /** Notes on sections and slots for the next AI rewrite. */
+  comments: z.array(StoryboardComment).default([]),
   extensions: Extensions.default({}),
 });
 export type Storyboard = z.infer<typeof Storyboard>;

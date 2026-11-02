@@ -37,6 +37,7 @@ import {
   TakesWouldBeLostError,
   generateStoryboard,
   regenerateSection,
+  commentedSectionIds,
   savedTemplate,
   savedVideoTypeDef,
 } from '@trailerforge/storyboard';
@@ -462,6 +463,8 @@ export interface RegenerateOutcome {
   section: { id: string; name: string; slots: string[] };
   /** Slots that were kept because the user edited or added them. */
   keptSlotIds: string[];
+  /** Comments the rewrite addressed (now resolved). */
+  addressedCommentIds: string[];
   rationale: string;
 }
 
@@ -472,6 +475,8 @@ export async function regenerateSectionOp(
     sectionId: string;
     instruction?: string | undefined;
     keepEdited?: boolean | undefined;
+    /** Send the section's open comments and resolve them (default true). */
+    useComments?: boolean | undefined;
     signal?: AbortSignal | undefined;
   },
 ): Promise<RegenerateOutcome> {
@@ -486,6 +491,7 @@ export async function regenerateSectionOp(
       ...(regenerateTypeText(engine, store) ?? {}),
       ...(opts.instruction ? { instruction: opts.instruction } : {}),
       ...(opts.keepEdited !== undefined ? { keepEdited: opts.keepEdited } : {}),
+      ...(opts.useComments !== undefined ? { useComments: opts.useComments } : {}),
       ...(opts.signal ? { signal: opts.signal } : {}),
     },
   );
@@ -500,8 +506,65 @@ export async function regenerateSectionOp(
       slots: payload.section.slots.map((s) => s.title || s.id),
     },
     keptSlotIds: (decisions[0]?.reasons.pinnedSlotIds as string[] | undefined) ?? [],
+    addressedCommentIds: payload.addressedCommentIds,
     rationale: decisions[0]?.summary ?? '',
   };
+}
+
+export interface RefineOutcome {
+  /** One rewrite per section that had open comments, in storyboard order. */
+  sections: RegenerateOutcome[];
+  /** Commented sections left alone, with why (locked, or nothing left to rewrite). */
+  skipped: { sectionId: string; name: string; reason: string }[];
+}
+
+/**
+ * Rewrite every section with open comments (or just `sectionIds`), each from its comments, one
+ * undo step per section. Locked sections are skipped; so is a section the rewrite refuses (e.g.
+ * every slot has recordings). Cancelling keeps the sections already rewritten.
+ */
+export async function refineStoryboardOp(
+  engine: Engine,
+  store: ProjectStore,
+  opts: {
+    sectionIds?: string[] | undefined;
+    keepEdited?: boolean | undefined;
+    signal?: AbortSignal | undefined;
+  } = {},
+): Promise<RefineOutcome> {
+  const sb = store.state.storyboard;
+  if (!sb) throw new OpError('not-found', 'this project has no storyboard yet; generate one first');
+  for (const id of opts.sectionIds ?? [])
+    if (!sb.sections.some((s) => s.id === id)) throw new OpError('not-found', `no section "${id}"`);
+  const wanted = commentedSectionIds(sb).filter(
+    (id) => !opts.sectionIds || opts.sectionIds.includes(id),
+  );
+  if (wanted.length === 0)
+    throw new OpError('usage', 'there are no open comments on the storyboard to work from');
+  const out: RefineOutcome = { sections: [], skipped: [] };
+  for (const sectionId of wanted) {
+    opts.signal?.throwIfAborted();
+    const section = store.state.storyboard?.sections.find((s) => s.id === sectionId);
+    if (!section) continue;
+    if (section.locked) {
+      out.skipped.push({ sectionId, name: section.name, reason: 'the section is locked' });
+      continue;
+    }
+    try {
+      out.sections.push(
+        await regenerateSectionOp(engine, store, {
+          sectionId,
+          keepEdited: opts.keepEdited,
+          signal: opts.signal,
+        }),
+      );
+    } catch (e) {
+      // RangeError: nothing left to rewrite in the section's time.
+      if (opts.signal?.aborted || !(e instanceof RangeError)) throw e;
+      out.skipped.push({ sectionId, name: section.name, reason: (e as Error).message });
+    }
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ LLM disclosure

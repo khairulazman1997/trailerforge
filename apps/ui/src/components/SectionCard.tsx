@@ -1,9 +1,10 @@
 import type { DragEvent } from 'react';
-import type { KnowledgeEntity, Section } from '@trailerforge/schema';
+import type { KnowledgeEntity, Section, Storyboard } from '@trailerforge/schema';
 import { stepTarget, type MoveTarget } from '../storyboard-view.js';
 import { EditableText } from './EditableText.js';
 import { Chunked } from './Chunked.js';
 import { SlotRow, type SlotPatch } from './SlotRow.js';
+import { StoryboardComments } from './StoryboardComments.js';
 
 export interface DropMark {
   sectionId: string;
@@ -38,6 +39,10 @@ export interface SectionCardProps {
   onDragOverRow: (sectionId: string, slotId: string, e: DragEvent<HTMLElement>) => void;
   onDragOverEnd: (sectionId: string, e: DragEvent<HTMLElement>) => void;
   onDrop: (e: DragEvent<HTMLElement>) => void;
+  comments: { open: Storyboard['comments']; resolved: Storyboard['comments'] };
+  onAddComment: (target: { slotId?: string }, text: string) => Promise<boolean>;
+  onResolveComment: (commentId: string, resolved: boolean) => void;
+  onDeleteComment: (commentId: string) => void;
 }
 
 /** A section of the storyboard: its slots, lock, and the controls to reshape it. */
@@ -70,6 +75,11 @@ export function SectionCard(p: SectionCardProps) {
           {p.seconds} s
         </span>
         {locked && <span className="chip warn">Locked</span>}
+        {p.comments.open.length > 0 && (
+          <span className="chip" data-testid={`comments-${s.id}`}>
+            {p.comments.open.length} comment{p.comments.open.length === 1 ? '' : 's'}
+          </span>
+        )}
         <span className="spacer" />
         <button type="button" className="ghost" onClick={p.onWhy} aria-label={`Why ${s.name}?`}>
           Why?
@@ -171,6 +181,17 @@ export function SectionCard(p: SectionCardProps) {
           </li>
         )}
       </ul>
+
+      <StoryboardComments
+        section={s}
+        open={p.comments.open}
+        resolved={p.comments.resolved}
+        busy={p.busy}
+        onAdd={p.onAddComment}
+        onResolve={p.onResolveComment}
+        onDelete={p.onDeleteComment}
+        {...(!readOnly ? { onRefine: p.onRewrite } : {})}
+      />
 
       {!readOnly && (
         <div className="row">

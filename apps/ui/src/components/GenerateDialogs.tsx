@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { LlmPreview } from '@trailerforge/service/client';
-import type { Section } from '@trailerforge/schema';
+import type { Section, Storyboard } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
 import { giveConsent, hasConsent } from '../consent.js';
-import { isHandEdited } from '../storyboard-view.js';
+import { commentWhere, isHandEdited, sectionComments } from '../storyboard-view.js';
 import { Link, projectPath } from '../router.js';
 import { ConfirmDialog } from './Dialog.js';
 import { Disclosure } from './Disclosure.js';
@@ -201,10 +201,13 @@ export function GenerateDialog({
 export function RewriteDialog({
   id,
   section,
+  comments,
   onClose,
 }: {
   id: string;
   section: Section | null;
+  /** The section's open comments; sent with the rewrite unless the user unticks them. */
+  comments: Storyboard['comments'];
   onClose: () => void;
 }) {
   const store = useStore();
@@ -212,8 +215,13 @@ export function RewriteDialog({
   const preview = usePreview(id, 'storyboard.regenerate-section', open);
   const [instruction, setInstruction] = useState('');
   const [keepEdited, setKeepEdited] = useState(true);
+  const [useComments, setUseComments] = useState(true);
 
-  const edited = section?.slots.filter(isHandEdited).length ?? 0;
+  // A hand-edited slot with a comment on it is rewritten anyway: the comment asks for a change.
+  const commented = new Set(
+    useComments ? comments.flatMap((c) => (c.slotId ? [c.slotId] : [])) : [],
+  );
+  const edited = section?.slots.filter((x) => isHandEdited(x) && !commented.has(x.id)).length ?? 0;
   const total = section?.slots.length ?? 0;
   const nothingToWrite = keepEdited && edited > 0 && edited === total;
   const consentNeeded = needsConsent(preview);
@@ -236,6 +244,7 @@ export function RewriteDialog({
           options: {
             sectionId: section.id,
             keepEdited,
+            useComments,
             ...(instruction.trim() ? { instruction: instruction.trim() } : {}),
           },
         });
@@ -244,8 +253,35 @@ export function RewriteDialog({
       }}
     >
       <div className="stack">
+        {section && comments.length > 0 && (
+          <>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={useComments}
+                onChange={(e) => setUseComments(e.target.checked)}
+              />
+              <span>
+                Work from the {comments.length} open comment{comments.length === 1 ? '' : 's'} (they
+                are marked resolved)
+              </span>
+            </label>
+            {useComments && (
+              <ul className="comments" aria-label="Comments sent with the rewrite">
+                {comments.map((c) => (
+                  <li key={c.id}>
+                    <span className="chip">{commentWhere(section, c)}</span>
+                    <span className="grow">{c.text}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
         <label>
-          What should change? (optional)
+          {comments.length > 0 && useComments
+            ? 'Anything else? (optional)'
+            : 'What should change? (optional)'}
           <textarea
             rows={3}
             value={instruction}
@@ -273,6 +309,80 @@ export function RewriteDialog({
         )}
         <p className="hint">
           The section keeps its place and its length. You can undo the rewrite.
+        </p>
+        <Disclosure preview={preview} />
+      </div>
+    </ConfirmDialog>
+  );
+}
+
+/** Rewrite every unlocked section with open comments, each from its own comments. */
+export function RefineDialog({
+  id,
+  open,
+  sections,
+  storyboard,
+  onClose,
+}: {
+  id: string;
+  open: boolean;
+  sections: Section[];
+  storyboard: Storyboard;
+  onClose: () => void;
+}) {
+  const store = useStore();
+  const preview = usePreview(id, 'storyboard.regenerate-section', open);
+  const [keepEdited, setKeepEdited] = useState(true);
+  const consentNeeded = needsConsent(preview);
+
+  return (
+    <ConfirmDialog
+      open={open}
+      title="Refine the storyboard from your comments"
+      confirmLabel={`Rewrite ${sections.length} section${sections.length === 1 ? '' : 's'}`}
+      confirmDisabled={!preview?.available || sections.length === 0}
+      {...(consentNeeded && preview?.provider
+        ? { acknowledge: `I understand this information is sent to ${preview.provider.name}.` }
+        : {})}
+      onCancel={onClose}
+      onConfirm={async () => {
+        if (!preview?.available || sections.length === 0) return;
+        if (preview.provider?.sendsDataOffDevice) giveConsent(preview.provider.id);
+        await store.startTask(id, {
+          kind: 'refine-storyboard',
+          options: { sectionIds: sections.map((s) => s.id), keepEdited },
+        });
+        onClose();
+      }}
+    >
+      <div className="stack">
+        <p>
+          Each section below is rewritten by the AI from its open comments, in the time it has now.
+          The comments are then marked resolved. Locked sections are left alone.
+        </p>
+        {sections.map((s) => (
+          <div key={s.id}>
+            <strong>{s.name}</strong>
+            <ul className="comments" aria-label={`Comments on ${s.name}`}>
+              {sectionComments(storyboard, s.id).open.map((c) => (
+                <li key={c.id}>
+                  <span className="chip">{commentWhere(s, c)}</span>
+                  <span className="grow">{c.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={keepEdited}
+            onChange={(e) => setKeepEdited(e.target.checked)}
+          />
+          <span>Keep slots I edited by hand, unless a comment is on them</span>
+        </label>
+        <p className="hint">
+          Shots with recordings are always kept. Each rewrite is one undo step.
         </p>
         <Disclosure preview={preview} />
       </div>

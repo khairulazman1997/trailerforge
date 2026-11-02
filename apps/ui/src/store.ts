@@ -487,6 +487,23 @@ export class AppStore {
           const r = t.result as { provider: string; section: { name: string } } | undefined;
           if (r)
             this.toast('info', `Rewrote “${r.section.name}” with ${r.provider}. Undo goes back.`);
+        } else if (t.status === 'succeeded' && t.kind === 'refine-storyboard') {
+          const r = t.result as
+            | {
+                sections: { section: { name: string } }[];
+                skipped: { name: string; reason: string }[];
+              }
+            | undefined;
+          if (r) {
+            const names = r.sections.map((x) => `“${x.section.name}”`).join(', ');
+            const skipped = r.skipped.map((x) => `“${x.name}” (${x.reason})`).join(', ');
+            this.toast(
+              'info',
+              `Rewrote ${names || 'nothing'} from your comments.` +
+                (skipped ? ` Skipped ${skipped}.` : '') +
+                ' Undo goes back one section at a time.',
+            );
+          }
         }
         break;
       }

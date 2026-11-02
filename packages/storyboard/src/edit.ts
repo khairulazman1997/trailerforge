@@ -165,6 +165,8 @@ export const moveSlot = defineCommand({
     const at = index ?? to.slots.length;
     if (at > to.slots.length) throw new RangeError(`index ${at} is past the end of "${to.name}"`);
     to.slots.splice(at, 0, slot!);
+    // A comment on the slot goes along with it.
+    for (const c of from.sb.comments) if (c.slotId === slotId) c.sectionId = to.id;
     bump(from.sb);
   },
 });
@@ -260,6 +262,7 @@ export const removeSection = defineCommand({
     cleanupRemovedSlots(d, gone);
     for (const part of sb.music.structure)
       part.sectionIds = part.sectionIds.filter((id) => id !== sectionId);
+    sb.comments = sb.comments.filter((c) => c.sectionId !== sectionId);
     bump(sb);
   },
 });

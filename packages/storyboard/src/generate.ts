@@ -12,9 +12,11 @@ import {
   type Project,
   type Section,
   type Slot,
+  type StoryboardComment,
   type VoLine,
 } from '@trailerforge/schema';
 import { SectionLockedError } from './commands.js';
+import { openComments } from './comments.js';
 import { userEditedFields } from './user-edits.js';
 import {
   convertSections,
@@ -307,12 +309,32 @@ export async function generateStoryboard(
   return { storyboard, decisions, warnings: converted.warnings };
 }
 
+/** The section's comments as the model reads them: slots by position and title, never by id. */
+function commentLines(section: Section, comments: readonly StoryboardComment[]): string {
+  if (comments.length === 0) return '(none)';
+  return comments
+    .map((c) => {
+      const at = c.slotId ? section.slots.findIndex((x) => x.id === c.slotId) : -1;
+      const slot = at >= 0 ? section.slots[at]! : undefined;
+      const where = slot
+        ? `on slot #${at + 1} "${slot.title || slot.kind}"`
+        : c.slotLabel
+          ? `on a slot that was "${c.slotLabel}"`
+          : 'on the whole section';
+      return `- ${where}: ${c.text.replace(/\s+/g, ' ')}`;
+    })
+    .join('\n');
+}
+
 export interface RegenerateSectionResult {
   payload: {
     sectionId: string;
     section: Section;
     voLines: VoLine[];
     sfxCues: Storyboard['music']['sfxCues'];
+    /** The open comments the rewrite was asked to address; the command resolves them. */
+    addressedCommentIds: string[];
+    addressedAt: string;
   };
   decisions: DecisionRecord[];
   warnings: string[];
@@ -335,6 +357,11 @@ export async function regenerateSection(
      * and the model writes only the rest, in the time that is left.
      */
     keepEdited?: boolean;
+    /**
+     * Send the section's open comments (default true). A slot with a comment is rewritten even
+     * when it was edited by hand (unless it has recordings), and the comments are resolved.
+     */
+    useComments?: boolean;
     signal?: AbortSignal;
   },
 ): Promise<RegenerateSectionResult> {
@@ -347,15 +374,18 @@ export async function regenerateSection(
   const free = round1(sb.meta.targetDuration - others.reduce((a, s) => a + sectionSeconds(s), 0));
   const total = sectionSeconds(target) || Math.max(free, 1);
 
+  const comments = opts.useComments === false ? [] : openComments(sb, target.id);
+  const commented = new Set(comments.flatMap((c) => (c.slotId ? [c.slotId] : [])));
   // Shots with recordings attached are always kept: regenerating must never drop footage.
   const pinned = target.slots
     .map((slot, index) => ({ slot, index }))
     .filter(
       ({ slot }) =>
-        hasTakes(slot) || (opts.keepEdited !== false && userEditedFields(slot).length > 0),
+        hasTakes(slot) ||
+        (opts.keepEdited !== false && !commented.has(slot.id) && userEditedFields(slot).length > 0),
     );
   if (pinned.length > 0 && pinned.length === target.slots.length) {
-    throw new Error(
+    throw new RangeError(
       `every slot in "${target.name}" was edited by hand or has recordings attached, so there is nothing to regenerate; ` +
         'delete the ones you do not want, or pass keepEdited: false to rewrite them all',
     );
@@ -383,7 +413,10 @@ export async function regenerateSection(
           )
           .join('\n') || '(none)',
       outline: sb.sections.map((s) => outlineSection(s, s === target)).join('\n'),
-      instruction: opts.instruction?.trim() || '(nothing specific; make it stronger)',
+      instruction:
+        opts.instruction?.trim() ||
+        (comments.length > 0 ? '(see the comments below)' : '(nothing specific; make it stronger)'),
+      comments: commentLines(target, comments),
       brief: ctx.brief,
       knowledge: ctx.knowledge,
       picks: inst.guide,
@@ -443,6 +476,7 @@ export async function regenerateSection(
         pinnedSlotIds: pinned.map(({ slot }) => slot.id),
         requestedSeconds: converted.requestedSeconds,
         instruction: opts.instruction ?? null,
+        comments: comments.map((c) => ({ id: c.id, slotId: c.slotId ?? null, text: c.text })),
         replacedSlotIds: [...oldSlotIds],
       },
       summary: value.rationale,
@@ -456,6 +490,8 @@ export async function regenerateSection(
       section,
       voLines: converted.voLines,
       sfxCues: converted.sfxCues,
+      addressedCommentIds: comments.map((c) => c.id),
+      addressedAt: at.toISOString(),
     },
     decisions,
     warnings: converted.warnings,

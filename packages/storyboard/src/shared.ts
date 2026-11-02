@@ -30,6 +30,8 @@ export function cleanupRemovedSlots(d: Draft<Project>, gone: ReadonlySet<string>
   sb.music.hitPoints = sb.music.hitPoints.filter((h) => !gone.has(h.slotId));
   sb.music.sfxCues = sb.music.sfxCues.filter((c) => !gone.has(c.slotId));
   for (const v of sb.variants) for (const id of gone) delete v.overrides[id];
+  // Comments on a removed slot stay on its section (they keep the slot's title).
+  for (const c of sb.comments) if (c.slotId && gone.has(c.slotId)) delete c.slotId;
   unlinkTimelineItems(d, gone);
 }
 

@@ -73,6 +73,7 @@ import {
   localModelsView,
   providerStatus,
   regenerateSectionOp,
+  refineStoryboardOp,
   resetRoutes,
   routesView,
   saveRoutes,
@@ -274,7 +275,17 @@ const TaskRequest = z.discriminatedUnion('kind', [
       sectionId: z.string().min(1),
       instruction: z.string().optional(),
       keepEdited: z.boolean().optional(),
+      useComments: z.boolean().optional(),
     }),
+  }),
+  z.strictObject({
+    kind: z.literal('refine-storyboard'),
+    options: z
+      .strictObject({
+        sectionIds: z.array(z.string().min(1)).optional(),
+        keepEdited: z.boolean().optional(),
+      })
+      .default({}),
   }),
   z.strictObject({
     kind: z.literal('rank-takes'),
@@ -1182,6 +1193,8 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await generateStoryboardOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'regenerate-section')
             out = await regenerateSectionOp(engine, store, { ...t.options, signal });
+          else if (t.kind === 'refine-storyboard')
+            out = await refineStoryboardOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'capture-tips')
             out = await captureTipsOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'rank-takes')

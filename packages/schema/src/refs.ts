@@ -123,6 +123,17 @@ export function validateProjectRefs(project: Project): RefIssue[] {
     });
   }
 
+  sb?.comments.forEach((c, i) => {
+    const p = `storyboard.comments[${i}]`;
+    claim(c.id, p);
+    if (!sectionIds.has(c.sectionId)) issue(p, `unknown section "${c.sectionId}"`);
+    if (c.slotId !== undefined) {
+      const home = sb.sections.find((s) => s.id === c.sectionId);
+      if (!home?.slots.some((x) => x.id === c.slotId))
+        issue(p, `slot "${c.slotId}" is not in section "${c.sectionId}"`);
+    }
+  });
+
   project.brief.referenceAssetIds.forEach((id) => {
     if (!assetIds.has(id)) issue('brief.referenceAssetIds', `unknown asset "${id}"`);
   });

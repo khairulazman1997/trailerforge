@@ -126,8 +126,16 @@ export type TaskRequest =
   | { kind: 'generate'; options?: { duration?: number; template?: string; assume?: boolean } }
   | {
       kind: 'regenerate-section';
-      options: { sectionId: string; instruction?: string; keepEdited?: boolean };
+      options: {
+        sectionId: string;
+        instruction?: string;
+        keepEdited?: boolean;
+        /** Send the section's open comments and resolve them (default true). */
+        useComments?: boolean;
+      };
     }
+  /** Rewrite every section with open storyboard comments (or just `sectionIds`) from them. */
+  | { kind: 'refine-storyboard'; options?: { sectionIds?: string[]; keepEdited?: boolean } }
   | { kind: 'rank-takes'; options?: { overwriteChosen?: boolean } }
   /** Ask the AI to critique a version (`variantId` null = the master cut); notes land on the Review tab. */
   | { kind: 'critique'; options: { variantId: string | null } }

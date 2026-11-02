@@ -9,6 +9,9 @@ Slots the user edited by hand stay exactly as they are, in the positions shown, 
 What the user wants changed:
 {{instruction}}
 
+Comments the user left on this section and its slots (slots numbered as in the current section). Address every one of them; a comment on a slot means that slot should change as the comment says:
+{{comments}}
+
 Rules:
 
 - Every shot needs a captureInstruction the player can follow exactly.

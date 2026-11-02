@@ -6,3 +6,4 @@ export * from './edit.js';
 export * from './user-edits.js';
 export * from './timing.js';
 export * from './saved-types.js';
+export * from './comments.js';

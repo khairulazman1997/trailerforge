@@ -2,7 +2,7 @@ import { useEffect, useState, type DragEvent } from 'react';
 import type { Section } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
 import { ConfirmDialog } from '../components/Dialog.js';
-import { GenerateDialog, RewriteDialog } from '../components/GenerateDialogs.js';
+import { GenerateDialog, RefineDialog, RewriteDialog } from '../components/GenerateDialogs.js';
 import { SaveTypeDialog } from '../components/SaveTypeDialog.js';
 import { SectionCard, type DropMark } from '../components/SectionCard.js';
 import type { SlotPatch } from '../components/SlotRow.js';
@@ -10,7 +10,14 @@ import { TimingBar } from '../components/TimingBar.js';
 import { WhyPanel } from '../components/WhyPanel.js';
 import { makeId } from '../ids.js';
 import { busyTask } from '../store.js';
-import { decisionsFor, dropTarget, storyboardTiming, type MoveTarget } from '../storyboard-view.js';
+import {
+  commentedSections,
+  decisionsFor,
+  dropTarget,
+  sectionComments,
+  storyboardTiming,
+  type MoveTarget,
+} from '../storyboard-view.js';
 
 export function StoryboardPage({ id }: { id: string }) {
   const store = useStore();
@@ -30,6 +37,7 @@ export function StoryboardPage({ id }: { id: string }) {
   const [generating, setGenerating] = useState(false);
   const [rewriting, setRewriting] = useState<Section | null>(null);
   const [savingType, setSavingType] = useState(0);
+  const [refining, setRefining] = useState(false);
 
   const revision = sb?.revision;
   const hasStoryboard = sb !== null;
@@ -72,6 +80,7 @@ export function StoryboardPage({ id }: { id: string }) {
   const timing = storyboardTiming(sb);
   const cmd = (type: string, payload: unknown) => store.command(id, type, payload);
   const slotCount = sb.sections.reduce((n, s) => n + s.slots.length, 0);
+  const refinable = commentedSections(sb).filter((s) => !s.locked);
   const sectionName = whySection
     ? (sb.sections.find((s) => s.id === whySection)?.name ?? null)
     : null;
@@ -134,6 +143,11 @@ export function StoryboardPage({ id }: { id: string }) {
       <div className="row">
         <h1>Storyboard</h1>
         <span className="spacer" />
+        {refinable.length > 0 && (
+          <button type="button" disabled={busy} onClick={() => setRefining(true)}>
+            Refine from comments ({refinable.length} section{refinable.length === 1 ? '' : 's'})…
+          </button>
+        )}
         <button type="button" disabled={busy} onClick={() => setGenerating(true)}>
           Generate again…
         </button>
@@ -225,6 +239,19 @@ export function StoryboardPage({ id }: { id: string }) {
             onDragOverRow={overRow}
             onDragOverEnd={overEnd}
             onDrop={drop}
+            comments={sectionComments(sb, section.id)}
+            onAddComment={(target, text) =>
+              cmd('core/storyboard.comment', { sectionId: section.id, ...target, text })
+            }
+            onResolveComment={(commentId, resolved) =>
+              void cmd(
+                resolved ? 'core/storyboard.resolve-comment' : 'core/storyboard.reopen-comment',
+                { commentId },
+              )
+            }
+            onDeleteComment={(commentId) =>
+              void cmd('core/storyboard.delete-comment', { commentId })
+            }
           />
         ))}
       </div>
@@ -261,7 +288,19 @@ export function StoryboardPage({ id }: { id: string }) {
         open={savingType > 0}
         onClose={() => setSavingType(0)}
       />
-      <RewriteDialog id={id} section={rewriting} onClose={() => setRewriting(null)} />
+      <RewriteDialog
+        id={id}
+        section={rewriting}
+        comments={rewriting ? sectionComments(sb, rewriting.id).open : []}
+        onClose={() => setRewriting(null)}
+      />
+      <RefineDialog
+        id={id}
+        open={refining}
+        sections={refinable}
+        storyboard={sb}
+        onClose={() => setRefining(false)}
+      />
 
       <ConfirmDialog
         open={!!removingSection}

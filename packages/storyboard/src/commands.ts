@@ -1,5 +1,14 @@
 import { defineCommand, type CommandDef } from '@trailerforge/core';
-import { Id, MusicPlan, Section, Storyboard, VoLine } from '@trailerforge/schema';
+import {
+  Id,
+  IsoDateTime,
+  MusicPlan,
+  Section,
+  Storyboard,
+  VoLine,
+  type StoryboardComment,
+} from '@trailerforge/schema';
+import { storyboardCommentCommands } from './comments.js';
 import { z } from 'zod';
 import { storyboardEditCommands } from './edit.js';
 import {
@@ -38,9 +47,26 @@ export const setStoryboard = defineCommand({
       d,
       new Set([...slotIdsOf(d.storyboard?.sections ?? [])].filter((id) => !next.has(id))),
     );
-    d.storyboard = sb;
+    d.storyboard = { ...sb, comments: carriedComments(d.storyboard?.comments ?? [], sb) };
   },
 });
+
+/**
+ * Comments survive a new storyboard while their section does (locked sections keep their ids);
+ * a comment whose slot is gone stays on the section. Comments the payload brings win.
+ */
+function carriedComments(old: readonly StoryboardComment[], sb: Storyboard): StoryboardComment[] {
+  const own = new Set(sb.comments.map((c) => c.id));
+  const kept = old
+    .filter((c) => !own.has(c.id) && sb.sections.some((s) => s.id === c.sectionId))
+    .map((c) => {
+      const home = sb.sections.find((s) => s.id === c.sectionId)!;
+      if (!c.slotId || home.slots.some((x) => x.id === c.slotId)) return { ...c };
+      const { slotId: _, ...rest } = c;
+      return rest;
+    });
+  return [...sb.comments, ...kept];
+}
 
 /**
  * Swap one unlocked section, keeping its id, and drop references to the slots it no longer has
@@ -56,9 +82,12 @@ export const replaceSection = defineCommand({
     voLines: z.array(VoLine).default([]),
     /** Sounds suggested for the new section's slots. */
     sfxCues: z.array(SfxCue).default([]),
+    /** Comments the rewrite took into account: resolved, stamped with `addressedAt`. */
+    addressedCommentIds: z.array(Id).default([]),
+    addressedAt: IsoDateTime.optional(),
   }),
   label: ({ section }) => `Regenerate ${section.name}`,
-  apply: (d, { sectionId, section, voLines, sfxCues }) => {
+  apply: (d, { sectionId, section, voLines, sfxCues, addressedCommentIds, addressedAt }) => {
     const sb = d.storyboard;
     const idx = sb?.sections.findIndex((s) => s.id === sectionId) ?? -1;
     if (!sb || idx < 0) throw new Error(`no section "${sectionId}"`);
@@ -71,6 +100,12 @@ export const replaceSection = defineCommand({
     cleanupRemovedSlots(d, gone);
     sb.voLines.push(...voLines);
     sb.music.sfxCues.push(...sfxCues);
+    const addressed = new Set(addressedCommentIds);
+    for (const c of sb.comments)
+      if (addressed.has(c.id) && c.sectionId === sectionId) {
+        c.resolved = true;
+        c.addressedAt = addressedAt ?? new Date().toISOString();
+      }
     sb.revision += 1;
   },
 });
@@ -92,4 +127,5 @@ export const storyboardCommands = [
   replaceSection,
   setSectionLocked,
   ...storyboardEditCommands,
+  ...storyboardCommentCommands,
 ] as unknown as readonly CommandDef<unknown>[];
