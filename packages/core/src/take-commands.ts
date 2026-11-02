@@ -6,6 +6,7 @@ import {
   ProjectAssetRef,
   Take,
   TakeMatch,
+  TakeOrigin,
   type Project,
   type ShotSlot,
 } from '@trailerforge/schema';
@@ -40,6 +41,7 @@ const AttachItem = z.strictObject({
   sourceIn: Flicks.optional(),
   sourceOut: Flicks.optional(),
   note: z.string().optional(),
+  origin: TakeOrigin.optional(),
   attachedAt: IsoDateTime.optional(),
 });
 type AttachItem = z.infer<typeof AttachItem>;
@@ -73,6 +75,7 @@ function attach(d: Draft<Project>, item: AttachItem, type: string, taken: Set<st
       ...(item.sourceIn !== undefined ? { sourceIn: item.sourceIn } : {}),
       ...(item.sourceOut !== undefined ? { sourceOut: item.sourceOut } : {}),
       ...(item.note ? { note: item.note } : {}),
+      ...(item.origin ? { origin: item.origin } : {}),
       attachedAt: item.attachedAt ?? new Date().toISOString(),
     }),
   );

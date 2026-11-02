@@ -1,4 +1,4 @@
-import type { Project, TakeMatch } from '@trailerforge/schema';
+import type { Project, TakeMatch, TakeOrigin } from '@trailerforge/schema';
 import { buildCapturePlan, type CaptureItem } from './capture.js';
 import { matchRecordingName, shotCodes } from './shot-codes.js';
 
@@ -24,6 +24,8 @@ export interface MatchRecording {
   /** When the file was last written (the end of the recording), ISO. */
   recordedAt?: string;
   durationSec?: number;
+  /** A shot code the recording declares outside its name (the Unity sidecar); used when the name has none. */
+  declaredCode?: string;
 }
 
 export type MatchSignal = 'code' | 'vision' | 'order' | 'length' | 'session';
@@ -148,7 +150,14 @@ export function suggestMatches(input: MatchInput): { matches: RecordingMatch[] }
   }
 
   const codes = shotCodes(project);
-  const parsed = recs.map((r) => matchRecordingName(r.name, codes));
+  const parsed = recs.map((r) => {
+    const p = matchRecordingName(r.name, codes);
+    if (r.declaredCode && p.slotIds.length === 0 && p.unknownCodes.length === 0) {
+      const d = matchRecordingName(r.declaredCode, codes);
+      return { ...d, take: p.take ?? d.take };
+    }
+    return p;
+  });
   const anchor = parsed.map((p) => {
     const inPlan = p.slotIds.filter((id) => shotIndex.has(id));
     return inPlan.length === 1 ? shotIndex.get(inPlan[0]!)! : -1;
@@ -406,8 +415,21 @@ function align(n: number, m: number, gain: (i: number, j: number) => number): nu
  */
 export function acceptMatchesPayload(
   matches: RecordingMatch[],
-  opts: { minConfidence?: 'certain' | 'high' | 'medium'; attachedAt?: string } = {},
-): { items: { slotId: string; assetId: string; matchedBy: TakeMatch; attachedAt?: string }[] } {
+  opts: {
+    minConfidence?: 'certain' | 'high' | 'medium';
+    attachedAt?: string;
+    /** assetId → how the recording was made, kept on the take. */
+    origins?: ReadonlyMap<string, TakeOrigin>;
+  } = {},
+): {
+  items: {
+    slotId: string;
+    assetId: string;
+    matchedBy: TakeMatch;
+    attachedAt?: string;
+    origin?: TakeOrigin;
+  }[];
+} {
   const order = ['low', 'medium', 'high', 'certain'];
   const min = order.indexOf(opts.minConfidence ?? 'high');
   const items = matches
@@ -426,6 +448,7 @@ export function acceptMatchesPayload(
         assetId: m.assetId,
         matchedBy,
         ...(opts.attachedAt ? { attachedAt: opts.attachedAt } : {}),
+        ...(opts.origins?.has(m.assetId) ? { origin: opts.origins.get(m.assetId)! } : {}),
       };
     });
   return { items };

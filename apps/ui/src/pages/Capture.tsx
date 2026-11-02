@@ -14,6 +14,7 @@ import { CaptureItemRow, type ImportedTake } from '../components/CaptureItemRow.
 import { CaptureTipsBlock, type TipsStatus } from '../components/CaptureTipsBlock.js';
 import { CaptureTipsDialog } from '../components/CaptureTipsDialog.js';
 import { ExportPanel } from '../components/ExportPanel.js';
+import { UnityPanel } from '../components/UnityPanel.js';
 import { RecordingPanel } from '../components/RecordingPanel.js';
 import {
   formatSeconds,
@@ -331,6 +332,7 @@ export function CapturePage({ id }: { id: string }) {
         </section>
       )}
       <ExportPanel id={id} disabled={disabled} />
+      <UnityPanel id={id} />
     </>
   );
 }

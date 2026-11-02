@@ -11,3 +11,4 @@ export * from './pack-ext.js';
 export * from './recording.js';
 export * from './shot-codes.js';
 export * from './matching.js';
+export * from './unity-capture.js';

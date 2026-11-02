@@ -21,6 +21,7 @@ export * from './recording.js';
 export * from './shot-codes.js';
 export * from './take-ranking.js';
 export * from './matching.js';
+export * from './unity-capture.js';
 export * from './recording-commands.js';
 export * from './templates.js';
 export * from './unity.js';

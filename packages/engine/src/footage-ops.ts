@@ -1,5 +1,6 @@
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { extname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   FOOTAGE_JOB,
   MUSIC_JOB,
@@ -22,8 +23,11 @@ import {
 import { assetCachePaths, mediaWarnings, type MediaWarning } from '@trailerforge/ingest';
 import {
   acceptMatchesPayload,
+  parseUnityTake,
   rankTakes,
   suggestMatches,
+  unitySidecarPath,
+  unityTakeLabel,
   type MatchRecording,
   type RecordingMatch,
   type TakeFacts,
@@ -33,6 +37,7 @@ import {
   type LibraryAsset,
   type Project,
   type ShotSlot,
+  type TakeOrigin,
 } from '@trailerforge/schema';
 import type { Engine } from './engine.js';
 import { OpError } from './ops.js';
@@ -255,18 +260,46 @@ export async function analyzeOp(
 
 // ---- matching --------------------------------------------------------------------------------
 
-function recordings(engine: Engine, project: Project, assetIds?: string[]): MatchRecording[] {
+/** The Unity package's sidecar next to a recording (`<take>.tfshot.json`), if there is a readable one. */
+async function unitySidecar(asset: LibraryAsset) {
+  const path = asset.uri.startsWith('file://') ? fileURLToPath(asset.uri) : asset.uri;
+  try {
+    const parsed = parseUnityTake(await readFile(unitySidecarPath(path), 'utf8'));
+    return parsed.ok ? parsed.take : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function recordings(
+  engine: Engine,
+  project: Project,
+  assetIds?: string[],
+): Promise<{ recs: MatchRecording[]; origins: Map<string, TakeOrigin> }> {
   const wanted = assetIds ? new Set(assetIds) : null;
   const music = project.storyboard?.music.trackAssetId;
-  return engine.library
-    .list()
-    .filter((a) => a.kind === 'video' && a.id !== music && (!wanted || wanted.has(a.id)))
-    .map((a) => ({
+  const origins = new Map<string, TakeOrigin>();
+  const recs: MatchRecording[] = [];
+  for (const a of engine.library.list()) {
+    if (a.kind !== 'video' || a.id === music || (wanted && !wanted.has(a.id))) continue;
+    const unity = await unitySidecar(a);
+    if (unity) {
+      origins.set(a.id, {
+        app: 'unity',
+        level: unity.level,
+        label: unityTakeLabel(unity),
+        ...(unity.performanceId ? { performanceId: unity.performanceId } : {}),
+      });
+    }
+    recs.push({
       assetId: a.id,
       name: a.originalName,
       ...(a.fileModifiedAt ? { recordedAt: a.fileModifiedAt } : {}),
       ...(a.media ? { durationSec: a.media.duration } : {}),
-    }));
+      ...(unity?.code ? { declaredCode: unity.code } : {}),
+    });
+  }
+  return { recs, origins };
 }
 
 /**
@@ -279,9 +312,23 @@ export async function matchSuggestOp(
   store: ProjectStore,
   opts: { assetIds?: string[] | undefined; signal?: AbortSignal | undefined } = {},
 ): Promise<{ matches: RecordingMatch[]; recordings: MatchRecording[]; usedVision: boolean }> {
+  const { origins: _origins, ...result } = await suggestWithOrigins(engine, store, opts);
+  return result;
+}
+
+async function suggestWithOrigins(
+  engine: Engine,
+  store: ProjectStore,
+  opts: { assetIds?: string[] | undefined; signal?: AbortSignal | undefined },
+): Promise<{
+  matches: RecordingMatch[];
+  recordings: MatchRecording[];
+  origins: Map<string, TakeOrigin>;
+  usedVision: boolean;
+}> {
   requireStoryboard(store);
   await engine.library.reload();
-  const recs = recordings(engine, store.state, opts.assetIds);
+  const { recs, origins } = await recordings(engine, store.state, opts.assetIds);
   const vision = await visionScoresFor(engine, store, recs, opts.signal);
   return {
     matches: suggestMatches({
@@ -290,6 +337,7 @@ export async function matchSuggestOp(
       ...(vision ? { vision } : {}),
     }).matches,
     recordings: recs,
+    origins,
     usedVision: vision !== undefined,
   };
 }
@@ -303,7 +351,7 @@ export async function matchAcceptOp(
     assetIds?: string[] | undefined;
   } = {},
 ): Promise<{ attached: { slotId: string; assetId: string; matchedBy: string }[] }> {
-  const { matches } = await matchSuggestOp(
+  const { matches, origins } = await suggestWithOrigins(
     engine,
     store,
     opts.assetIds ? { assetIds: opts.assetIds } : {},
@@ -311,6 +359,7 @@ export async function matchAcceptOp(
   const payload = acceptMatchesPayload(matches, {
     minConfidence: opts.minConfidence ?? 'high',
     attachedAt: new Date().toISOString(),
+    origins,
   });
   if (payload.items.length > 0) store.dispatch('core/takes.attach-many', payload);
   return { attached: payload.items };

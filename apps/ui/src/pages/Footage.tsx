@@ -316,6 +316,7 @@ export function FootagePage({ id }: { id: string }) {
                       <li key={t.id} className={t.rejected ? 'rejected' : ''}>
                         <span>{names.get(t.assetId) ?? t.assetId}</span>{' '}
                         <span className="chip">{t.matchedBy}</span>
+                        {t.origin && <span className="chip">{t.origin.label}</span>}
                         {x.chosenTakeId === t.id && (
                           <span className="chip ok">used in the cut</span>
                         )}

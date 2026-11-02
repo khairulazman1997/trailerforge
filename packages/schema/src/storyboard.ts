@@ -63,6 +63,18 @@ const SlotBase = {
 export const TakeMatch = z.enum(['code', 'suggestion', 'vision', 'manual']);
 export type TakeMatch = z.infer<typeof TakeMatch>;
 
+/** Where a take came from when a program other than the user's recorder made it (the Unity package). */
+export const TakeOrigin = z.strictObject({
+  app: z.literal('unity'),
+  /** live | camera | replay */
+  level: z.string(),
+  /** How it was made, such as "Unity live · main camera · HUD off · 1280×720 @ 30". */
+  label: z.string(),
+  /** The recorded performance a replay take was rendered from. */
+  performanceId: z.string().optional(),
+});
+export type TakeOrigin = z.infer<typeof TakeOrigin>;
+
 /**
  * A recording attached to a shot. Only the user's decisions live here; probe data, analysis and
  * match scores are regenerable cache keyed by the asset's hash. The Game Trailer pack's manual
@@ -80,6 +92,7 @@ export const Take = z
     sourceIn: Flicks.optional(),
     sourceOut: Flicks.optional(),
     note: z.string().default(''),
+    origin: TakeOrigin.optional(),
     attachedAt: IsoDateTime,
   })
   .refine(

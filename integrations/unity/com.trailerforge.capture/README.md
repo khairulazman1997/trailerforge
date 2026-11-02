@@ -25,6 +25,8 @@ Takes are named `TF-XXXXX_take01.mov`, `TF-XXXXX_take02.mov`… and get a `TF-XX
 - **HUD:** from the pack (the shot's setting, else the pack's), or always on / off. With the HUD off, screen-space overlay UI is not captured and the "UI" layer is hidden from the camera for the take.
 - **Frame rate:** Unity Recorder only records movies at a constant frame rate. The game is held to that rate: on a fast machine this is real time; if the machine cannot keep up, the game runs slower while you play, but the footage stays smooth.
 
+In TrailerForge, a take with a sidecar is attached to its shot by the code inside the sidecar even if you rename the file, and is labelled with how it was recorded (camera, HUD, size). The Capture tab has a **Record in Unity** panel with the pack path and a button to watch the recordings folder.
+
 A capture pack of another format or version is refused with a message instead of being guessed at.
 
 ## Tests
