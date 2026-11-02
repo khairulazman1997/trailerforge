@@ -104,16 +104,17 @@ Estimated cost: ~50–80k extra output tokens (~+3–5% overall).
 
 Opus for schemas, interfaces, algorithms, determinism, crash recovery, hard debugging. Sonnet for UI, wiring, fixtures, docs, template content.
 
-| Milestone              | Lead          |
-| ---------------------- | ------------- |
-| M1 Foundations         | Opus (~70%)   |
-| M2 Intake + storyboard | Mixed         |
-| M3 Capture Pack        | Sonnet (~80%) |
-| M4 Ingest + auto-cut   | Opus (~75%)   |
-| M5 Variants + graphics | Mixed         |
-| M6 Review + render     | Mixed         |
-| M7 Polish              | Sonnet (~65%) |
-| M8 Planner scaffold    | Sonnet (~85%) |
+| Milestone               | Lead              |
+| ----------------------- | ----------------- |
+| M1 Foundations          | Opus (~70%)       |
+| M2 Intake + storyboard  | Mixed             |
+| M3 Capture Pack         | Sonnet (~80%)     |
+| M4 Ingest + auto-cut    | Opus (~75%)       |
+| M5 Variants + graphics  | Mixed             |
+| M6 Review + render      | Mixed             |
+| M7 Polish               | Sonnet (~65%)     |
+| M8 Planner scaffold     | Sonnet (~85%)     |
+| M9 Unity auto-recording | Mixed (~55% Opus) |
 
 ### In-app defaults (`llm.routes.json`, user-editable)
 
@@ -144,6 +145,7 @@ Opus for schemas, interfaces, algorithms, determinism, crash recovery, hard debu
 | M6        | 230–320k      | 21–35M          |
 | M7        | 120–200k      | 12–20M          |
 | M8        | 50–80k        | 4–8M            |
+| M9        | 150–230k      | 14–22M          |
 
 Plan: pause after M1 tasks 1.1–1.2 to read actual plan usage % and extrapolate.
 
@@ -362,6 +364,74 @@ Rough budget: 7.1–7.3, 7.5, 7.7 and 7.13 on Opus, the rest on Sonnet (about 50
 
 **M7 status (2026-10-29):** 7.1–7.13 done and green here (`pnpm check`, `pnpm test:e2e`). Still open, on the user's Windows PC: `pnpm check`, `pnpm test:e2e`, and the installer smoke checklist in `docs/NEXT_SESSION.md`. Nothing on Windows has been verified by Claude.
 
+## Milestone 9 — Unity auto-recording
+
+Brings automatic recording levels 1–4 from "Potential extensions" into TrailerForge. Levels 5 and 6 stay there. M8 (Planner scaffold) keeps its number and is not started. The work is a Unity Editor package, "TrailerForge Capture" (`integrations/unity/com.trailerforge.capture`). It reads the exported `capture-pack.json` and writes recordings named with their shot codes into a folder TrailerForge watches; TrailerForge imports them and matches them by code (M4). The four levels:
+
+1. **One-click record per shot.** The pack's recording settings are applied, the file is named with the shot code, the recording stops after the shot's length, and the shot is ticked off.
+2. **Set-up hooks.** The game's own debug steps run before a take: load a save, spawn, god mode, time of day.
+3. **Camera-only shots.** A Timeline (with Cinemachine if the game uses it) drives the camera and plays hands-free.
+4. **Play once, film many times.** The scene's motion is recorded while the user plays, then re-rendered from other cameras, with the HUD on or off, in slow motion, or in 4K at a locked frame rate.
+
+Principles carried over:
+
+- Files only, nothing over the network.
+- TrailerForge never writes into the game repo.
+- Every take TrailerForge receives is a normal recording that the M4 flow imports.
+- Nothing in the game project is needed for levels 1, 3 and 4. Level 2 uses hooks the game opts into.
+
+Not M9:
+
+- Scripted shots against a "trailer mode" API (level 5).
+- AI play (level 6).
+- A live link to the app.
+- Other engines.
+- Installing the package from the app.
+
+Design decisions (scope, link, install and testing confirmed 2026-11-02; the rest are recommended defaults):
+
+1. **Scope: levels 1–4** (confirmed).
+2. **Files only** (confirmed). The package reads `exports/capture/capture-pack.json` (path chosen once in Unity) and writes takes into an output folder the user also adds as a watched folder in TrailerForge. A take is written under a temporary name and renamed when it finishes, so the watcher never imports a half-written file. Next to each take goes a small `<take>.tfshot.json` with: shot code, take number, pass (camera, HUD, speed, resolution, frame rate), performance id, and the package version.
+3. **Installed by hand** (confirmed): Package Manager → Add package from disk. The package's settings and per-shot set-ups are Unity assets the user creates in their own project (`Assets/TrailerForge/`); performances go to `<UnityProject>/TrailerForge/Performances/`, outside `Assets` so Unity does not import them.
+4. **Testing on a fixture project** (confirmed): `integrations/unity/TestProject` (Unity 2022.3 LTS) references the package by `file:`. `pnpm test:unity` (`scripts/unity-test.mjs`; finds Unity through `TFORGE_UNITY` or the Hub install) runs the EditMode and PlayMode tests in batch mode with graphics. It is not part of `pnpm check`, which stays fast and Unity-free. The user checks the package in their real game at the end.
+5. **Unity side.** Unity 2022.3 LTS or newer; Unity Recorder 4.0.x, Newtonsoft JSON (`com.unity.nuget.newtonsoft-json`) and Timeline as dependencies. There is no Cinemachine dependency: a Cinemachine Brain moves the ordinary camera, which is what gets recorded.
+6. **Output format.** ProRes 422 HQ `.mov` where Recorder offers it (Windows, macOS), otherwise H.264 MP4 at high quality. Resolution and frame rate come from the pack's recording settings and can be changed per pass.
+7. **Frame timing.** Live play (level 1) records in real time with a frame-rate cap, so the game stays playable. Camera-only shots and re-renders (levels 3, 4) have no player input, so they run at a **locked frame rate** (`Time.captureFramerate`): smooth 4K/60 even on a slow machine.
+8. **HUD off.** Per take, either a camera culling mask without the UI layers, or disable screen-space canvases. Both are set in the package settings and checked before a take.
+9. **Performance capture (level 4).**
+   - What is recorded each frame: the transforms of everything with a renderer, including skinned bones; active and enabled changes; camera transform and field of view; particle play and stop events with their random seed; audio source play events.
+   - Format: a compact, versioned binary `.tfperf`, with objects identified by their hierarchy path.
+   - Objects spawned at runtime come back as stand-ins built from their mesh and material assets (capture runs in the Editor, so the asset ids are known). An optional `TrailerForgeCapture.Spawned(prefab, instance)` call gives an exact replay; spawned particle effects without it are listed as a warning.
+10. **Replay (level 4).**
+    - Gameplay is frozen: rigidbodies kinematic; Animators, NavMeshAgents and CharacterControllers off; transforms written last each frame; input ignored.
+    - Slow motion interpolates between samples (position lerp, rotation slerp) and simulates particles at the slowed time.
+    - A pass picks: the recorded game camera, a scene camera the user places, or a Cinemachine camera. Each pass becomes its own take.
+    - Effects that read wall-clock time or random numbers outside the recorded seeds can differ; the replay window says so.
+
+Task breakdown:
+
+| #   | Task                                                                                                                                                                                                                                                                                                                                                          | Model  | Acceptance                                                                                                                                                                                                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 9.1 | **Package scaffold and shot list**: UPM package (Runtime + Editor asmdefs, dependencies), fixture project, `pnpm test:unity` runner, capture pack reader (C#, lenient about unknown fields, refuses another `format`/major `version`), "TrailerForge Capture" window: groups, codes, instructions, setup hints, takes so far (counted from the output folder) | Sonnet | EditMode tests read the pack golden files from `pack-game-trailer/src/__golden__`; the runner finds Unity here and reports results as JUnit; window opens in the fixture                                                                      |
+| 9.2 | **One-click recording (level 1)**: `RecorderController` set up from the pack (resolution, frame rate, format), take numbering, stop after `recordSeconds` or by hand, HUD off, temp name + rename, `.tfshot.json` sidecar                                                                                                                                     | Opus   | PlayMode test records 2 s at 1280×720/30 in the fixture: file present only after the rename, exact frame count (ffprobe from the runner), sidecar valid; a cancelled take leaves nothing                                                      |
+| 9.3 | **TrailerForge side of Unity takes**: `tfshot` schema (pack-game-trailer `unity-capture.ts`, browser-safe), ingest reads sidecars (take label from the pass, certain match by code, performance id kept on the take), watcher skips temp names; Capture tab panel "Record in Unity" (pack path, output folder = a watched folder, link to the README)         | Sonnet | Engine test: synthetic take + sidecar → attached take with its label; temp files ignored; a sidecar with a foreign code is reported, not attached; Playwright for the panel, axe clean                                                        |
+| 9.4 | **Set-up hooks (level 2)**: `[TrailerForgeSetup]` static methods (simple arguments, may return `IEnumerator` to wait), found with `TypeCache`; per-shot set-up asset (scene, start point, steps with arguments); the pack's debug-command and save-file hints shown as suggestions; a failing step stops the take with its message                            | Sonnet | PlayMode test: set-up loads a scene, moves the player, sets a flag, then records; a failing step leaves no file and shows the message                                                                                                         |
+| 9.5 | **Camera-only shots (level 3)**: `TrailerForgeShot` component (shot code → PlayableDirector, optional camera), locked frame rate, length = the Timeline's duration (or the shot's), "Record all camera-only shots" queue                                                                                                                                      | Sonnet | PlayMode test: a 3 s Timeline shot at locked 60 fps gives 180 frames; the queue records two shots in order                                                                                                                                    |
+| 9.6 | **Performance capture (level 4a)**: capture while playing, the `.tfperf` format (writer, reader, version check), spawned-object stand-ins and the `Spawned` hook, size report                                                                                                                                                                                 | Opus   | EditMode round-trip of every record type; PlayMode capture of a scripted 5 s fixture scene; file size within the budget set in the task (about 1 MB per 1000 objects per minute)                                                              |
+| 9.7 | **Replay and re-render (level 4b)**: frozen replay, interpolation for slow motion, passes (camera, HUD, speed, resolution, frame rate), one take + sidecar per pass with the performance id                                                                                                                                                                   | Opus   | Replayed state equals the captured state at every sample (within 1e-4); slow motion at 0.5× hits every sample exactly and interpolates between; two passes from one performance give two takes; gameplay scripts cannot move replayed objects |
+| 9.8 | **Capture window polish**: one place per shot for Record / Set up / Capture performance / Render passes; a pass queue for overnight renders with progress and cancel; HUD-off and output-folder checks with fixes                                                                                                                                             | Sonnet | Editor tests for the queue (order, cancel, resume after a failed pass); window reviewed in the fixture                                                                                                                                        |
+| 9.9 | **Hardening and docs**: whole flow (TrailerForge exports the pack → Unity batch mode records levels 1, 3 and 4 in the fixture into a folder → the engine's watcher imports, matches by code and builds a rough cut); README "Recording from Unity"; the user's checklist for their own game in `docs/NEXT_SESSION.md`                                         | Opus   | Whole flow green here with `pnpm test:unity`; `pnpm check` green; README and checklist written                                                                                                                                                |
+
+Rough budget: 9.2, 9.6, 9.7 and 9.9 on Opus (about 55% by tokens); 150–230k output tokens over 4–5 session windows. Suggested sessions:
+
+- (1) 9.1 Sonnet, 20–30k
+- (2) 9.2 Opus + 9.3 Sonnet, 35–50k
+- (3) 9.4–9.5 Sonnet, 30–45k
+- (4) 9.6–9.7 Opus, 45–70k
+- (5) 9.8 Sonnet + 9.9 Opus, 25–40k
+
+A session short of budget stops at a task boundary. Unity batch-mode runs are slow (minutes each), so tests run per task, not per edit.
+
 ## Potential extensions (not scheduled, not in any milestone)
 
 Ideas recorded so they are not lost. None of these is planned work; do not build them or design around them without the user asking.
@@ -369,4 +439,4 @@ Ideas recorded so they are not lost. None of these is planned work; do not build
 - **Built-in recording / OBS control** (parked 2026-10-23): a plugin that drives a recorder (for example OBS over its WebSocket API) so a capture checklist item can start, stop and name a recording, and the file attaches to its slot. Today "capture" means the checklist only (M3); the user records in their own tool and M4 imports the files. If ever built, it must stay local-only, be opt-in, and use the same plugin API and typed commands as everything else.
 - **Seamless drag-and-drop timeline editing** (requested 2026-10-24, after the tool has full functionality, e.g. M7 polish): drag shots along and between tracks on the Cut timeline, with snapping to beats, bars and neighbouring cuts, live preview while dragging, and ripple or overwrite behaviour. M4's Cut UI (4.13) uses buttons and keyboard trims only. Every drag must still land as one typed, undoable `core/timeline.*` command, in integer flicks, with a keyboard path kept for accessibility.
 - **Deeper offline repo scan** (requested 2026-10-25, a future extension): get closer to the Claude Code deep scan without sending code off the computer, as a mix of (a) a **local model** provider (for example Ollama on the user's NVIDIA GPU) with a local deep scan that reads the repo in chunks and builds the same knowledge entities, exclusions airtight since nothing leaves the machine, quality below Claude and slower; and (b) **smarter Unity rules**: enemy/boss/ability classes from C# base classes and `[CreateAssetMenu]` types, enum lists (`EnemyType`), Animator states, Input System actions, on-screen UI text, Addressables groups. Roughly 3 Opus tasks. Until then: deep scan once, then offline rescans (they never mark deep-scan findings stale).
-- **Automatic recording from Unity** (requested 2026-10-25, a future extension; Unity only, other engines keep the parked OBS idea): a Unity Editor package ("TrailerForge Capture") that works through files only: it reads the exported `capture-pack.json` and writes recordings named with their shot codes to a watched folder, which TrailerForge imports and matches by code. Recording uses Unity Recorder (resolution and frame rate from the recording settings, lossless or high bitrate, optional fixed-timestep capture for smooth footage, a HUD-free camera or layer). Levels of automation: (1) one-click record per shot (settings, naming, length, tick-off); (2) automatic set-up through the game's debug commands or hooks (load save, spawn, god mode, time of day); (3) hands-free camera-only shots with Cinemachine/Timeline; (4) **play once, film many times, the first to build**: record the scene's motion while the user plays, then re-render it from other cameras, HUD on and off, slow motion, 4K at a locked frame rate (particles, some physics and shader effects need extra handling); (5) scripted shots written by TrailerForge from the storyboard against a "trailer mode" API the game exposes (spawn, teleport, set state, AI-driven player), rendered overnight with several takes; (6) an AI agent playing the game, realistic only for slow games such as city builders. AI-driven play looks robotic, so it suits wide and background shots more than skilled-play hero moments; levels 2 and 5 need work in the game project itself. A live link (shots ticking off in the app while recording) could come later over the app's local connection.
+- **Automatic recording from Unity** (requested 2026-10-25; levels 1–4 scheduled as M9 on 2026-11-02, levels 5–6 stay here; Unity only, other engines keep the parked OBS idea): a Unity Editor package ("TrailerForge Capture") that works through files only: it reads the exported `capture-pack.json` and writes recordings named with their shot codes to a watched folder, which TrailerForge imports and matches by code. Recording uses Unity Recorder (resolution and frame rate from the recording settings, lossless or high bitrate, optional fixed-timestep capture for smooth footage, a HUD-free camera or layer). Levels of automation: (1) one-click record per shot (settings, naming, length, tick-off); (2) automatic set-up through the game's debug commands or hooks (load save, spawn, god mode, time of day); (3) hands-free camera-only shots with Cinemachine/Timeline; (4) **play once, film many times, the first to build**: record the scene's motion while the user plays, then re-render it from other cameras, HUD on and off, slow motion, 4K at a locked frame rate (particles, some physics and shader effects need extra handling); (5) scripted shots written by TrailerForge from the storyboard against a "trailer mode" API the game exposes (spawn, teleport, set state, AI-driven player), rendered overnight with several takes; (6) an AI agent playing the game, realistic only for slow games such as city builders. AI-driven play looks robotic, so it suits wide and background shots more than skilled-play hero moments; levels 2 and 5 need work in the game project itself. A live link (shots ticking off in the app while recording) could come later over the app's local connection.
