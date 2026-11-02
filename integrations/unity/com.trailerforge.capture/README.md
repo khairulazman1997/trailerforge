@@ -25,6 +25,22 @@ Takes are named `TF-XXXXX_take01.mov`, `TF-XXXXX_take02.mov`… and get a `TF-XX
 - **HUD:** from the pack (the shot's setting, else the pack's), or always on / off. With the HUD off, screen-space overlay UI is not captured and the "UI" layer is hidden from the camera for the take.
 - **Frame rate:** Unity Recorder only records movies at a constant frame rate. The game is held to that rate: on a fast machine this is real time; if the machine cannot keep up, the game runs slower while you play, but the footage stays smooth.
 
+## Set the shot up first
+
+Give a shot a **set-up** (Capture window → open the shot → **Create** next to Set-up; it is saved under `Assets/TrailerForge/Setups`). It can load a scene, put the object tagged **Player** at a start point, and run steps your game provides. Mark static methods of your game:
+
+```csharp
+[TrailerForgeSetup] public static void LoadSave(string slot) { ... }
+[TrailerForgeSetup] public static void SpawnBoss(string name, int phase = 1) { ... }
+[TrailerForgeSetup] public static IEnumerator WaitForFight() { yield return new WaitForSecondsRealtime(2); }
+```
+
+Arguments are typed in the set-up as text (string, int, float, bool, enums). A step may wait by returning an `IEnumerator` (yield `null`, `WaitForSecondsRealtime`, another enumerator). If a step fails, the take stops with the step number and message and nothing is saved. The pack's debug commands and save files are listed on each shot as hints for what to write.
+
+## Camera-only shots
+
+For flyovers and establishing shots, add **TrailerForge → Shot** (`TrailerForgeShot`) to the object with the shot's Timeline (`PlayableDirector`), type the shot code, and optionally pick the camera that films it (Cinemachine users: leave it empty and the main camera, driven by the Cinemachine Brain, is recorded). In Play Mode, press **Record** on the shot, or **Record all camera-only shots** to record every one in the open scenes one after another. These run at a **locked frame rate**: every frame advances the game by exactly 1/fps, so the footage is smooth at any resolution even on a slow machine.
+
 In TrailerForge, a take with a sidecar is attached to its shot by the code inside the sidecar even if you rename the file, and is labelled with how it was recorded (camera, HUD, size). The Capture tab has a **Record in Unity** panel with the pack path and a button to watch the recordings folder.
 
 A capture pack of another format or version is refused with a message instead of being guessed at.

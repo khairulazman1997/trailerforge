@@ -1,7 +1,8 @@
 {
   "dependencies": {
     "com.trailerforge.capture": "file:../../com.trailerforge.capture",
-    "com.unity.test-framework": "1.1.33"
+    "com.unity.test-framework": "1.1.33",
+    "com.unity.timeline": "1.7.6"
   },
   "testables": ["com.trailerforge.capture"]
 }

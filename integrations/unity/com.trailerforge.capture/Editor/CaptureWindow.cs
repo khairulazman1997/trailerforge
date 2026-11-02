@@ -28,6 +28,8 @@ namespace TrailerForge.Capture.Editor
         HudChoice hud;
         bool manual;
         string cameraTag;
+        ShotQueue queue;
+        static bool Busy => TakeRun.Current != null && TakeRun.Current.State == TakeState.Recording;
         string lastResult;
         MessageType lastResultType;
 
@@ -47,7 +49,7 @@ namespace TrailerForge.Capture.Editor
 
         void Update()
         {
-            if (ShotRecorder.Current != null && ShotRecorder.Current.State == TakeState.Recording) Repaint();
+            if (Busy || (queue != null && queue.Running)) Repaint();
         }
 
         void Reload()
@@ -67,6 +69,7 @@ namespace TrailerForge.Capture.Editor
             DrawSetup();
             DrawRecordOptions();
             DrawTakeStatus();
+            DrawQueue();
             if (error != null) EditorGUILayout.HelpBox(error, MessageType.Error);
             if (pack == null)
             {
@@ -129,19 +132,31 @@ namespace TrailerForge.Capture.Editor
                 EditorPrefs.SetString(CameraKey, cameraTag);
             }
             if (!EditorApplication.isPlaying)
-                EditorGUILayout.HelpBox("Enter Play Mode, set the shot up, then press Record on it.", MessageType.None);
+                EditorGUILayout.HelpBox("Enter Play Mode, set the shot up (or give it a set-up asset), then press Record on it.", MessageType.None);
+            else if (pack != null && FindObjectsOfType<TrailerForgeShot>().Length > 0)
+                using (new EditorGUI.DisabledScope(Busy || (queue != null && queue.Running) || string.IsNullOrEmpty(outputFolder)))
+                    if (GUILayout.Button("Record all camera-only shots")) RecordAllCameraShots();
         }
 
         void DrawTakeStatus()
         {
-            var rec = ShotRecorder.Current;
+            var rec = TakeRun.Current;
             if (rec != null && rec.State == TakeState.Recording)
             {
+                if (rec.SettingUp)
+                {
+                    using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                    {
+                        EditorGUILayout.LabelField($"Setting up {rec.Request.Code}…", EditorStyles.boldLabel);
+                        if (GUILayout.Button("Cancel", GUILayout.Width(60))) rec.Cancel();
+                    }
+                    return;
+                }
                 var target = rec.Request.FrameTarget;
                 var seconds = (double)rec.FramesRecorded / rec.Request.Fps;
                 var text = target > 0
-                    ? $"Recording {rec.Request.Code} take {rec.Take}: {seconds:0.0} of {rec.Request.Seconds:0.#} s"
-                    : $"Recording {rec.Request.Code} take {rec.Take}: {seconds:0.0} s";
+                    ? $"Recording {rec.Request.Code}: {seconds:0.0} of {rec.Request.Seconds:0.#} s"
+                    : $"Recording {rec.Request.Code}: {seconds:0.0} s";
                 using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
                 {
                     EditorGUILayout.LabelField(text, EditorStyles.boldLabel);
@@ -164,9 +179,10 @@ namespace TrailerForge.Capture.Editor
             if (hud != HudChoice.FromPack) request.Hud = hud == HudChoice.On;
             if (manual) request.Seconds = 0;
             request.CameraTag = cameraTag ?? "";
+            var shot = FindShot(item.code);
             try
             {
-                var rec = ShotRecorder.Start(request);
+                var rec = TakeRun.Start(request, FindSetup(item.code), shot);
                 rec.Done += OnTakeDone;
                 lastResult = null;
             }
@@ -177,7 +193,65 @@ namespace TrailerForge.Capture.Editor
             }
         }
 
-        void OnTakeDone(ShotRecorder rec)
+        static TrailerForgeShot FindShot(string code) =>
+            FindObjectsOfType<TrailerForgeShot>().FirstOrDefault(s => s.NormalizedCode == (code ?? "").ToUpperInvariant());
+
+        static ShotSetup FindSetup(string code) =>
+            AssetDatabase.FindAssets("t:ShotSetup")
+                .Select(g => AssetDatabase.LoadAssetAtPath<ShotSetup>(AssetDatabase.GUIDToAssetPath(g)))
+                .FirstOrDefault(s => s != null && string.Equals(s.code?.Trim(), code, System.StringComparison.OrdinalIgnoreCase));
+
+        static void CreateSetup(PackItem item)
+        {
+            const string dir = "Assets/TrailerForge/Setups";
+            System.IO.Directory.CreateDirectory(dir);
+            var setup = CreateInstance<ShotSetup>();
+            setup.code = item.code;
+            AssetDatabase.CreateAsset(setup, $"{dir}/{item.code}.asset");
+            AssetDatabase.SaveAssets();
+            Selection.activeObject = setup;
+        }
+
+        void RecordAllCameraShots()
+        {
+            var q = new ShotQueue();
+            foreach (var item in pack.Items)
+            {
+                var shot = FindShot(item.code);
+                if (shot == null) continue;
+                var req = TakeRequest.FromPack(pack, item, outputFolder);
+                req.Format = format;
+                if (hud != HudChoice.FromPack) req.Hud = hud == HudChoice.On;
+                q.Add(req, shot, FindSetup(item.code));
+            }
+            if (q.Entries.Count == 0)
+            {
+                lastResult = "No TrailerForgeShot in the open scenes matches a shot code of this pack.";
+                lastResultType = MessageType.Warning;
+                return;
+            }
+            queue = q;
+            q.Changed += _ => { takes = TakeCounter.Count(outputFolder); Repaint(); };
+            q.Start();
+        }
+
+        void DrawQueue()
+        {
+            if (queue == null) return;
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField(queue.Running ? $"Camera shots: {Mathf.Max(queue.Index, 0) + 1} of {queue.Entries.Count}" : "Camera shots", EditorStyles.boldLabel);
+                foreach (var e in queue.Entries)
+                {
+                    var state = e.Run == null ? "waiting" : e.Run.State == TakeState.Recording ? "recording" : e.Run.State.ToString().ToLowerInvariant();
+                    EditorGUILayout.LabelField($"{e.Request.Code}  {state}" + (e.Run?.Error != null ? " — " + e.Run.Error : ""), EditorStyles.miniLabel);
+                }
+                if (queue.LastError != null) EditorGUILayout.HelpBox(queue.LastError, MessageType.Error);
+                if (queue.Running && GUILayout.Button("Cancel the rest")) queue.Cancel();
+            }
+        }
+
+        void OnTakeDone(TakeRun rec)
         {
             switch (rec.State)
             {
@@ -230,7 +304,7 @@ namespace TrailerForge.Capture.Editor
             using (new EditorGUILayout.HorizontalScope())
             {
                 now = EditorGUILayout.Foldout(isOpen, label, true);
-                var busy = ShotRecorder.Current != null && ShotRecorder.Current.State == TakeState.Recording;
+                var busy = Busy || (queue != null && queue.Running);
                 using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || busy || string.IsNullOrEmpty(outputFolder)))
                     if (GUILayout.Button(new GUIContent("Record", "Record a take of this shot"), GUILayout.Width(64))) Record(item);
             }
@@ -243,6 +317,13 @@ namespace TrailerForge.Capture.Editor
                 if (item.setup.Length > 0) EditorGUILayout.LabelField("Set up: " + item.setup, EditorStyles.wordWrappedLabel);
                 EditorGUILayout.LabelField($"Record about {item.recordSeconds} s (cut {item.cutSeconds.min}–{item.cutSeconds.max} s) · HUD {item.hud}");
                 if (item.notes.Length > 0) EditorGUILayout.LabelField("Notes: " + item.notes, EditorStyles.wordWrappedLabel);
+                var setup = FindSetup(item.code);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.ObjectField("Set-up", setup, typeof(ShotSetup), false);
+                    if (setup == null && GUILayout.Button("Create", GUILayout.Width(60))) CreateSetup(item);
+                }
+                if (FindShot(item.code) != null) EditorGUILayout.LabelField("Camera-only shot: a TrailerForgeShot in the scene plays it.", EditorStyles.miniLabel);
             }
         }
     }

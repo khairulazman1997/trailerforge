@@ -2,7 +2,7 @@
 //   node scripts/unity-test.mjs [--platform EditMode|PlayMode] [--filter <name>] [--nographics]
 // Finds Unity through TFORGE_UNITY (the Unity executable) or the newest 2022.3 install of Unity Hub.
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -56,6 +56,8 @@ if (!unity) {
 const platform = arg('--platform') ?? 'EditMode';
 mkdirSync(outDir, { recursive: true });
 const results = join(outDir, `${platform}.xml`);
+// never report an earlier run when this one fails before writing results
+rmSync(results, { force: true });
 const args = [
   '-batchmode',
   ...(process.argv.includes('--nographics') ? ['-nographics'] : []),

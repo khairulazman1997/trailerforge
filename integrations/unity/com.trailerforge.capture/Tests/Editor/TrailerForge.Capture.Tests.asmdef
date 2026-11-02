@@ -8,7 +8,8 @@
     "UnityEditor.TestRunner",
     "Unity.Recorder.Editor",
     "Unity.Recorder",
-    "Unity.Recorder.Base"
+    "Unity.Recorder.Base",
+    "Unity.Timeline"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

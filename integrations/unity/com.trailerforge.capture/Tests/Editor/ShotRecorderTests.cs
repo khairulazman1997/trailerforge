@@ -133,7 +133,7 @@ namespace TrailerForge.Capture.Tests
         }
 
         /// <summary>"width,height,frames" of the first video stream, counted by decoding.</summary>
-        static string Probe(string file)
+        internal static string Probe(string file)
         {
             var dirEnv = Environment.GetEnvironmentVariable("TFORGE_FFMPEG_DIR");
             var exe = string.IsNullOrEmpty(dirEnv) ? "ffprobe" : Path.Combine(dirEnv, "ffprobe");
