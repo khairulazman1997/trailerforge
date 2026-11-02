@@ -554,9 +554,26 @@ namespace TrailerForge.Capture.Editor
             else if (Running) { Running = false; Changed?.Invoke(this); }
         }
 
+        /// <summary>Runs again what did not finish (failed, cancelled or never started); finished passes are kept.</summary>
+        public void Resume()
+        {
+            if (Running) return;
+            var first = Entries.FindIndex(e => e.Run == null || e.Run.State != TakeState.Finished);
+            if (first < 0) return;
+            foreach (var e in Entries) if (e.Run?.State != TakeState.Finished) { e.Run = null; e.StartError = null; }
+            Index = first - 1;
+            Running = true;
+            Cancelled = false;
+            Next();
+        }
+
+        public int FinishedCount => Entries.Count(e => e.Run?.State == TakeState.Finished);
+        public bool CanResume => !Running && Entries.Any(e => e.Run?.State != TakeState.Finished);
+
         void Next()
         {
             Index++;
+            while (Index < Entries.Count && Entries[Index].Run?.State == TakeState.Finished) Index++;
             if (Cancelled || Index >= Entries.Count) { Running = false; Changed?.Invoke(this); return; }
             var e = Entries[Index];
             try

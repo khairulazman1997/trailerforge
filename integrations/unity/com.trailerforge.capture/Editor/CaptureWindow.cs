@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -38,6 +39,7 @@ namespace TrailerForge.Capture.Editor
         static readonly float[] Speeds = { 1, 0.5f, 0.25f };
         static readonly string[] SpeedNames = { "1×", "0.5×", "0.25×" };
         static readonly string[] SizeNames = { "Pack size", "2560×1440", "3840×2160" };
+        ReplayQueue replayQueue;
         static bool Replaying => ReplayRun.Current != null && ReplayRun.Current.State == TakeState.Recording;
 
         [MenuItem("Window/TrailerForge/Capture")]
@@ -56,7 +58,7 @@ namespace TrailerForge.Capture.Editor
 
         void Update()
         {
-            if (Busy || Capturing || Replaying || (queue != null && queue.Running)) Repaint();
+            if (Busy || Capturing || Replaying || (queue != null && queue.Running) || (replayQueue != null && replayQueue.Running)) Repaint();
         }
 
         void Reload()
@@ -76,7 +78,9 @@ namespace TrailerForge.Capture.Editor
             DrawSetup();
             DrawRecordOptions();
             DrawTakeStatus();
+            DrawChecks();
             DrawQueue();
+            DrawReplayQueue();
             if (error != null) EditorGUILayout.HelpBox(error, MessageType.Error);
             if (pack == null)
             {
@@ -114,9 +118,22 @@ namespace TrailerForge.Capture.Editor
                 }
                 if (GUILayout.Button("Refresh", GUILayout.Width(60))) takes = TakeCounter.Count(outputFolder);
             }
-            if (string.IsNullOrEmpty(outputFolder))
-                EditorGUILayout.HelpBox("Pick the folder TrailerForge watches, so recordings are imported by shot code.", MessageType.Warning);
         }
+
+        void DrawChecks()
+        {
+            DrawProblem(CaptureChecks.OutputFolder(outputFolder), MessageType.Warning, () => takes = TakeCounter.Count(outputFolder));
+            if (EditorApplication.isPlaying) DrawProblem(CaptureChecks.Hud(hud == HudChoice.On || (hud == HudChoice.FromPack && pack != null && pack.recording.settings.hud == "on")), MessageType.Warning, null);
+        }
+
+        static void DrawProblem(CaptureChecks.Problem problem, MessageType type, System.Action after)
+        {
+            if (problem == null) return;
+            EditorGUILayout.HelpBox(problem.Message, type);
+            if (problem.Fix != null && GUILayout.Button(problem.FixLabel, GUILayout.Width(120))) { problem.Fix(); after?.Invoke(); }
+        }
+
+        static bool AnyRunning(ShotQueue q, ReplayQueue r) => (q != null && q.Running) || (r != null && r.Running);
 
         void DrawRecordOptions()
         {
@@ -141,8 +158,11 @@ namespace TrailerForge.Capture.Editor
             if (!EditorApplication.isPlaying)
                 EditorGUILayout.HelpBox("Enter Play Mode, set the shot up (or give it a set-up asset), then press Record on it.", MessageType.None);
             else if (pack != null && FindObjectsOfType<TrailerForgeShot>().Length > 0)
-                using (new EditorGUI.DisabledScope(Busy || (queue != null && queue.Running) || string.IsNullOrEmpty(outputFolder)))
+                using (new EditorGUI.DisabledScope(Busy || Replaying || AnyRunning(queue, replayQueue) || string.IsNullOrEmpty(outputFolder)))
                     if (GUILayout.Button("Record all camera-only shots")) RecordAllCameraShots();
+            if (EditorApplication.isPlaying && pack != null && Directory.Exists(PerformanceCapture.DefaultFolder) && Directory.GetFiles(PerformanceCapture.DefaultFolder, "*" + PerformanceFormat.Extension).Length > 0)
+                using (new EditorGUI.DisabledScope(Busy || Capturing || Replaying || AnyRunning(queue, replayQueue) || string.IsNullOrEmpty(outputFolder)))
+                    if (GUILayout.Button(new GUIContent("Render all captured performances", "One pass per performance file with the camera, speed and size chosen on any shot; good for leaving running overnight"))) RenderAllPerformances();
         }
 
         static bool Capturing => PerformanceCapture.Current != null && PerformanceCapture.Current.State == CaptureState.Capturing;
@@ -316,7 +336,70 @@ namespace TrailerForge.Capture.Editor
                     EditorGUILayout.LabelField($"{e.Request.Code}  {state}" + (e.Run?.Error != null ? " — " + e.Run.Error : ""), EditorStyles.miniLabel);
                 }
                 if (queue.LastError != null) EditorGUILayout.HelpBox(queue.LastError, MessageType.Error);
-                if (queue.Running && GUILayout.Button("Cancel the rest")) queue.Cancel();
+                EditorGUI.ProgressBar(EditorGUILayout.GetControlRect(false, 6), queue.Entries.Count == 0 ? 0 : (float)queue.FinishedCount / queue.Entries.Count, "");
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (queue.Running && GUILayout.Button("Cancel the rest")) queue.Cancel();
+                    if (queue.CanResume && !Busy && !Replaying && GUILayout.Button("Run the rest again")) queue.Resume();
+                }
+            }
+        }
+
+        void RenderAllPerformances()
+        {
+            var q = new ReplayQueue();
+            foreach (var item in pack.Items)
+            {
+                foreach (var f in Directory.GetFiles(PerformanceCapture.DefaultFolder, item.code + "_perf*" + PerformanceFormat.Extension).OrderBy(x => x))
+                {
+                    try
+                    {
+                        var request = TakeRequest.FromPack(pack, item, outputFolder);
+                        q.Add(PerformanceReader.ReadFile(f), ReplayPassFor(request), request);
+                    }
+                    catch (System.Exception e)
+                    {
+                        lastResult = Path.GetFileName(f) + ": " + e.Message;
+                        lastResultType = MessageType.Warning;
+                    }
+                }
+            }
+            if (q.Entries.Count == 0) return;
+            replayQueue = q;
+            q.Changed += _ => { takes = TakeCounter.Count(outputFolder); Repaint(); };
+            q.Start();
+        }
+
+        ReplayPass ReplayPassFor(TakeRequest request) => new ReplayPass
+        {
+            Camera = replayCamera,
+            CameraTag = cameraTag ?? "",
+            Hud = hud == HudChoice.FromPack ? request.Hud : hud == HudChoice.On,
+            Speed = Speeds[replaySpeed],
+            Width = replaySize == 0 ? request.Width : replaySize == 1 ? 2560 : 3840,
+            Height = replaySize == 0 ? request.Height : replaySize == 1 ? 1440 : 2160,
+            Fps = request.Fps,
+            Format = format,
+        };
+
+        void DrawReplayQueue()
+        {
+            if (replayQueue == null) return;
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField(replayQueue.Running ? $"Renders: {Mathf.Max(replayQueue.Index, 0) + 1} of {replayQueue.Entries.Count}" : $"Renders: {replayQueue.FinishedCount} of {replayQueue.Entries.Count} done", EditorStyles.boldLabel);
+                foreach (var e in replayQueue.Entries)
+                {
+                    var state = e.StartError != null ? "could not start — " + e.StartError : e.Run == null ? "waiting" : e.Run.State == TakeState.Recording ? "rendering" : e.Run.State.ToString().ToLowerInvariant();
+                    if (e.Run?.Error != null) state += " — " + e.Run.Error;
+                    EditorGUILayout.LabelField($"{e.Request.Code}  {e.Pass.CameraLabel}, {e.Pass.Speed:0.##}×  {state}", EditorStyles.miniLabel);
+                }
+                EditorGUI.ProgressBar(EditorGUILayout.GetControlRect(false, 6), replayQueue.Entries.Count == 0 ? 0 : (float)replayQueue.FinishedCount / replayQueue.Entries.Count, "");
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (replayQueue.Running && GUILayout.Button("Cancel the rest")) replayQueue.Cancel();
+                    if (replayQueue.CanResume && !Busy && !Replaying && GUILayout.Button("Run the rest again")) replayQueue.Resume();
+                }
             }
         }
 
@@ -360,7 +443,7 @@ namespace TrailerForge.Capture.Editor
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     EditorGUILayout.LabelField(System.IO.Path.GetFileName(f), EditorStyles.miniLabel);
-                    using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || Busy || Capturing || Replaying || string.IsNullOrEmpty(outputFolder)))
+                    using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || Busy || Capturing || Replaying || AnyRunning(queue, replayQueue) || string.IsNullOrEmpty(outputFolder)))
                         if (GUILayout.Button(new GUIContent("Render", "Film this performance again with the settings above (reloads the scene)"), GUILayout.Width(64)))
                             Replay(item, f);
                 }
@@ -449,7 +532,7 @@ namespace TrailerForge.Capture.Editor
             using (new EditorGUILayout.HorizontalScope())
             {
                 now = EditorGUILayout.Foldout(isOpen, label, true);
-                var busy = Busy || (queue != null && queue.Running);
+                var busy = Busy || Replaying || AnyRunning(queue, replayQueue);
                 using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || busy || Capturing || string.IsNullOrEmpty(outputFolder)))
                     if (GUILayout.Button(new GUIContent("Record", "Record a take of this shot"), GUILayout.Width(64))) Record(item);
                 using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || busy || Capturing))

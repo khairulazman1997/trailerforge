@@ -62,7 +62,9 @@ In Play Mode, open the shot in the Capture window: each captured performance has
 
 Pick the speed (1×, 0.5× or 0.25×; slow motion falls between recorded frames and is interpolated) and the size (the pack's, 1440p or 4K). The HUD and format options above apply too. Each render is a new take of the shot with its sidecar, so TrailerForge imports it like any other.
 
-The scene is loaded fresh and the game is frozen while it plays back: physics, Animators, NavMesh agents and your own scripts are turned off, so nothing but the performance moves. Sound is replayed only at 1×. Play Mode stays frozen after a render; leave and enter Play Mode again to play normally.
+The scene is loaded fresh and the game is frozen while it plays back: physics, Animators, NavMesh agents and your own scripts are turned off, so nothing but the performance moves. Sound is replayed only at 1×. To leave a pile of renders running (overnight, say), press **Render all captured performances**: one pass per performance file with the camera, speed and size chosen above. A pass that fails does not stop the rest; fix the cause and press **Run the rest again** to redo only what did not finish. The window also warns before you record if the recordings folder is missing or cannot be written (with a one-click fix) and, with the HUD off, if camera-drawn canvases are not on the "UI" layer and would still show.
+
+Play Mode stays frozen after a render; leave and enter Play Mode again to play normally.
 
 In TrailerForge, a take with a sidecar is attached to its shot by the code inside the sidecar even if you rename the file, and is labelled with how it was recorded (camera, HUD, size). The Capture tab has a **Record in Unity** panel with the pack path and a button to watch the recordings folder.
 

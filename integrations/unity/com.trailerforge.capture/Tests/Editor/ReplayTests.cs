@@ -243,5 +243,76 @@ namespace TrailerForge.Capture.Tests
             Assert.AreEqual(TakeState.Cancelled, run.State);
             Assert.IsFalse(Directory.GetFiles(dir).Any(f => f.Contains("_take")));
         }
+
+        static IEnumerator Drain(ReplayQueue queue)
+        {
+            for (var i = 0; queue.Running && i < 4000; i++) yield return null;
+            // the queue starts the next pass one editor tick after the last one ends
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator AFailedPassDoesNotStopTheQueueAndResumeRunsOnlyWhatDidNotFinish()
+        {
+            yield return new EnterPlayMode();
+            var perfs = new List<Performance>();
+            yield return Capture(perfDir, perfs);
+            var perf = perfs[0];
+
+            var bad = Pass(1);
+            bad.Camera = ReplayCamera.Tagged;
+            bad.CameraTag = "NoSuchCamera";
+            var queue = new ReplayQueue();
+            queue.Add(perf, Pass(1), Request());
+            queue.Add(perf, bad, Request());
+            queue.Add(perf, Pass(1), Request());
+            queue.Start();
+            yield return Drain(queue);
+
+            CollectionAssert.AreEqual(new[] { TakeState.Finished, TakeState.Failed, TakeState.Finished }, queue.Entries.Select(e => e.Run.State).ToArray());
+            Assert.AreEqual(2, queue.FinishedCount);
+            Assert.IsTrue(queue.CanResume);
+            var kept = queue.Entries[0].Run;
+
+            // fix the pass, then run only the one that failed
+            bad.Camera = ReplayCamera.Recorded;
+            queue.Resume();
+            yield return Drain(queue);
+            yield return new ExitPlayMode();
+
+            Assert.AreSame(kept, queue.Entries[0].Run, "a finished pass is not run again");
+            Assert.AreEqual(3, queue.FinishedCount);
+            Assert.IsFalse(queue.CanResume);
+            // take numbers: pass 1 = take01, pass 3 = take02, the repaired pass 2 = take03
+            Assert.AreEqual(1, queue.Entries[0].Run.Recorder.Take);
+            Assert.AreEqual(2, queue.Entries[2].Run.Recorder.Take);
+            Assert.AreEqual(3, queue.Entries[1].Run.Recorder.Take);
+            Assert.AreEqual(3, Directory.GetFiles(dir, "*.mp4").Length);
+        }
+
+        [UnityTest]
+        public IEnumerator CancellingTheQueueStopsTheRestAndResumeFinishesThem()
+        {
+            yield return new EnterPlayMode();
+            var perfs = new List<Performance>();
+            yield return Capture(perfDir, perfs);
+            var queue = new ReplayQueue();
+            for (var i = 0; i < 3; i++) queue.Add(perfs[0], Pass(1), Request());
+            queue.Start();
+            for (var i = 0; i < 20; i++) yield return null;
+            queue.Cancel();
+            yield return Drain(queue);
+
+            Assert.IsFalse(queue.Running);
+            Assert.AreEqual(TakeState.Cancelled, queue.Entries[0].Run.State);
+            Assert.IsNull(queue.Entries[1].Run, "the rest never started");
+            Assert.AreEqual(0, Directory.GetFiles(dir, "*.mp4").Length);
+
+            queue.Resume();
+            yield return Drain(queue);
+            yield return new ExitPlayMode();
+            Assert.AreEqual(3, queue.FinishedCount);
+            Assert.AreEqual(3, Directory.GetFiles(dir, "*.mp4").Length);
+        }
     }
 }
