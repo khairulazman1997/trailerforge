@@ -6,7 +6,9 @@ import {
   PluginRef,
   Flicks,
   PlaceholderItem,
+  refitFadeOut,
   Timeline,
+  type Animatable,
   type Project,
   type TimelineItem,
   type Track,
@@ -129,6 +131,33 @@ export const trimItem = defineCommand({
   merge: {
     key: ({ timelineId, itemId, edge, ripple }) =>
       `${timelineId}/${itemId}/${edge}${ripple ? '/ripple' : ''}`,
+    windowMs: 1000,
+  },
+});
+
+/**
+ * Give an audio clip a new length (flicks) and carry its fade-out to the new end, in one step:
+ * the music can run longer (using more of the song) or stop earlier. `fade` sets the fade-out's
+ * length (flicks, 0 = none); without it the clip keeps the fade it had.
+ */
+export const setAudioLength = defineCommand({
+  type: 'core/timeline.set-audio-length',
+  payload: z.strictObject({
+    ...Ref,
+    duration: z.int().positive(),
+    fade: z.int().min(0).optional(),
+  }),
+  label: () => 'Change sound length',
+  apply: (d, { timelineId, itemId, duration, fade }) => {
+    const { item, track } = find(d, timelineId, itemId, 'core/timeline.set-audio-length');
+    if (track.kind !== 'audio' || item.kind !== 'clip')
+      throw new CommandError('core/timeline.set-audio-length', 'only clips on sound tracks');
+    item.gainDb = refitFadeOut(item.gainDb as Animatable, item.duration, duration, fade);
+    item.duration = duration;
+    markEdited(item);
+  },
+  merge: {
+    key: ({ timelineId, itemId }) => `${timelineId}/${itemId}/audio-length`,
     windowMs: 1000,
   },
 });
@@ -461,6 +490,7 @@ export const timelineCommands = [
   trimItem,
   setSourceRange,
   rollEdit,
+  setAudioLength,
   moveItem,
   swapTake,
   toPlaceholder,

@@ -2,6 +2,7 @@ import {
   FLICKS_PER_SECOND,
   Project,
   flicksPerFrame,
+  refitFadeOut,
   type ShotSlot,
   type Timeline,
 } from '@trailerforge/schema';
@@ -115,6 +116,23 @@ describe('mergeRoughCut', () => {
     const a = items(timeline)[0]!;
     expect(a.extensions.core).toMatchObject({ clipAudio });
     expect(a.kind === 'clip' && a.gainDb).toBe(-6);
+  });
+
+  it('keeps a music length changed by hand, with the fade moved to its end', () => {
+    const inp = input();
+    const first = buildRoughCut(inp).timeline;
+    const was = first.tracks.find((k) => k.id === 'trk_music')!.items[0]!;
+    const longer = edit(first, 'rc_music', (i) => ({
+      duration: i.duration + 2 * F,
+      gainDb: refitFadeOut(i.kind === 'clip' ? i.gainDb : 0, i.duration, i.duration + 2 * F),
+    }));
+    const { timeline } = mergeRoughCut(longer, buildRoughCut(inp).timeline, inp.sources);
+    const music = timeline.tracks.find((k) => k.id === 'trk_music')!.items[0]!;
+    expect(music.duration).toBe(was.duration + 2 * F);
+    expect(music).toMatchObject({ gainDb: { keyframes: expect.any(Array) } });
+    const ks = (music as { gainDb: { keyframes: { at: number; value: unknown }[] } }).gainDb
+      .keyframes;
+    expect(ks.at(-1)).toMatchObject({ at: music.duration, value: -60 });
   });
 
   it('keeps locked tracks exactly as they were', () => {

@@ -220,10 +220,24 @@ test('choose music, analyse, build the cut, inspect, trim, swap, lock, rebuild, 
     .click();
   await expect(parry).not.toHaveAttribute('aria-label', preEdit!); // wait for the trim to land
   const edited = await parry.getAttribute('aria-label');
+  // More of the song: the music runs a bar past the picture, and a rebuild keeps that.
+  const musicItem = page
+    .getByRole('group', { name: 'Music track' })
+    .getByRole('button', { name: /^Music, clip,/ });
+  const musicBefore = await musicItem.getAttribute('aria-label');
+  await musicItem.click();
+  const musicLength = page.getByRole('group', { name: 'Music length' });
+  await musicLength.getByRole('button', { name: 'Longer by a bar' }).click();
+  await expect(musicItem).not.toHaveAttribute('aria-label', musicBefore!);
+  await expect(musicLength.getByTestId('music-past-picture')).toBeVisible();
+  const musicLonger = await musicItem.getAttribute('aria-label');
   await page.getByRole('button', { name: 'Rebuild the cut' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Rebuild' }).click();
   await expect(page.getByTestId('cut-status')).toBeVisible();
   await expect(parry).toHaveAttribute('aria-label', edited!);
+  await expect(musicItem).toHaveAttribute('aria-label', musicLonger!);
+  await musicLength.getByRole('button', { name: 'End with the picture' }).click();
+  await expect(musicItem).toHaveAttribute('aria-label', musicBefore!);
 
   // Play: the clock follows the music.
   const time = page.getByTestId('cut-time');

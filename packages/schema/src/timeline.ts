@@ -220,3 +220,43 @@ export function timelineDuration(tl: Pick<Timeline, 'tracks'>): number {
   for (const track of tl.tracks) for (const item of track.items) end = Math.max(end, itemEnd(item));
   return end;
 }
+
+/** The level a fade-out falls to at the end of a clip (dB). */
+export const FADE_FLOOR_DB = -60;
+
+/**
+ * A clip's gain with its fade-out (the last two keyframes, falling to the floor at the clip's
+ * end) moved to a new length. Keyframes the new fade or end would cover are dropped; `fade`
+ * (flicks) replaces the fade's length, 0 removes it. Gain without a fade-out keeps its shape.
+ */
+export function refitFadeOut(
+  gain: Animatable,
+  oldDuration: number,
+  newDuration: number,
+  fade?: number,
+): Animatable {
+  const ks = typeof gain === 'object' && !Array.isArray(gain) ? gain.keyframes : null;
+  const last = ks?.at(-1);
+  const hasFade =
+    !!ks && ks.length >= 2 && last!.at >= oldDuration - 1 && (last!.value as number) <= -40;
+  const rest = ks ? (hasFade ? ks.slice(0, -2) : ks) : [];
+  const level = hasFade
+    ? (ks.at(-2)!.value as number)
+    : typeof gain === 'number'
+      ? gain
+      : ks
+        ? (ks.at(-1)!.value as number)
+        : 0;
+  const f = Math.min(fade ?? (hasFade ? last!.at - ks.at(-2)!.at : 0), newDuration);
+  if (!ks && f <= 0) return gain;
+  const keep = rest.filter((k) => (f > 0 ? k.at < newDuration - f : k.at <= newDuration));
+  const tail =
+    f > 0
+      ? [
+          { at: newDuration - f, value: level, easing: 'linear' as const },
+          { at: newDuration, value: FADE_FLOOR_DB, easing: 'linear' as const },
+        ]
+      : [];
+  const all = [...keep, ...tail];
+  return all.length ? { keyframes: all } : level;
+}

@@ -226,6 +226,30 @@ describe('core/timeline commands', () => {
     expect(isUserEdited(it_('rc_a'))).toBe(false);
   });
 
+  it('lengthens the music and carries its fade-out to the new end', () => {
+    store.dispatch('core/timeline.set-track-locked', {
+      timelineId: 'tl_rough',
+      trackId: 'trk_music',
+      locked: false,
+    });
+    const music = () => tl().tracks.find((t) => t.id === 'trk_music')!.items[0]!;
+    const was = music().duration;
+    store.dispatch('core/timeline.set-audio-length', {
+      timelineId: 'tl_rough',
+      itemId: music().id,
+      duration: was + 2 * F,
+      fade: F,
+    });
+    expect(music().duration).toBe(was + 2 * F);
+    expect(music()).toMatchObject({
+      gainDb: { keyframes: [{ at: was + F }, { at: was + 2 * F, value: -60 }] },
+    });
+    expect(isUserEdited(music())).toBe(true);
+    expect(() =>
+      store.dispatch('core/timeline.set-audio-length', { ...ref('rc_a'), duration: F }),
+    ).toThrow(/sound tracks/);
+  });
+
   it('rolls the cut into the next item, so nothing after it moves', () => {
     store.dispatch('core/timeline.roll', { ...ref('rc_a'), delta: F / 2 });
     expect(it_('rc_a')).toMatchObject({ start: 0, duration: 2.5 * F });

@@ -1,4 +1,4 @@
-import { Timeline, type TimelineItem, type Transition } from '@trailerforge/schema';
+import { Timeline, refitFadeOut, type TimelineItem, type Transition } from '@trailerforge/schema';
 import type { TakeSource } from './rough-cut.js';
 
 /**
@@ -94,6 +94,7 @@ export function mergeRoughCut(
 
   const tracks = generated.tracks.map((t) => {
     if (locked.has(t.id)) return prevTracks.get(t.id)!;
+    if (t.kind === 'audio') return keepSoundLengths(t, prevTracks.get(t.id));
     if (!PICTURE.has(t.kind)) return t;
     const items = out.filter((o) => o.trackId === t.id).map((o) => o.item);
     return {
@@ -144,4 +145,36 @@ export function mergeRoughCut(
       }
     : generated.extensions;
   return { timeline: Timeline.parse({ ...generated, tracks, extensions }), kept, warnings };
+}
+
+/**
+ * A sound clip whose length was changed by hand (the music running longer or shorter) keeps that
+ * length, with its fade-out moved to its end, when it is the same recording as before.
+ */
+function keepSoundLengths(
+  track: Timeline['tracks'][number],
+  previous?: Timeline['tracks'][number],
+) {
+  if (!previous) return track;
+  return {
+    ...track,
+    items: track.items.map((item) => {
+      const prev = previous.items.find((p) => p.id === item.id);
+      if (
+        !prev ||
+        !edited(prev) ||
+        item.kind !== 'clip' ||
+        prev.kind !== 'clip' ||
+        prev.assetId !== item.assetId ||
+        prev.duration === item.duration
+      )
+        return item;
+      return {
+        ...item,
+        duration: prev.duration,
+        gainDb: refitFadeOut(item.gainDb, item.duration, prev.duration),
+        extensions: { ...item.extensions, core: prev.extensions.core },
+      };
+    }),
+  };
 }

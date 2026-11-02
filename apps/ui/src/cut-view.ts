@@ -263,3 +263,48 @@ export function heldPastEnd(item: TimelineItem, recordingLength: number | null):
   if (item.kind !== 'clip' || recordingLength === null) return 0;
   return Math.max(0, item.sourceIn + item.duration * item.speed - recordingLength);
 }
+
+/** The length of a clip's fade-out (its last two gain keyframes falling to the floor), or 0. */
+export function fadeOutOf(item: TimelineItem): number {
+  if (item.kind !== 'clip') return 0;
+  const g = item.gainDb;
+  if (typeof g !== 'object' || Array.isArray(g) || g.keyframes.length < 2) return 0;
+  const last = g.keyframes.at(-1)!;
+  const prev = g.keyframes.at(-2)!;
+  return last.at >= item.duration - 1 && (last.value as number) <= -40 ? last.at - prev.at : 0;
+}
+
+/**
+ * Lengths for the music clip (flicks, null when there is none that way): one bar shorter or
+ * longer (ending on a bar of the song), up to the end of the song, and where the picture ends.
+ */
+export function musicLengthPlan(
+  tl: Pick<Timeline, 'tracks' | 'frameRate'>,
+  item: { start: number; duration: number; sourceIn: number },
+  bars: readonly number[],
+  songLength: number | null,
+): { shorter: number | null; longer: number | null; toSongEnd: number | null; pictureEnd: number } {
+  const fpf = flicksPerFrame(tl.frameRate);
+  const songEnd = item.sourceIn + item.duration;
+  const max = songLength === null ? Infinity : songLength - item.sourceIn;
+  const prevBar = [...bars].reverse().find((b) => b < songEnd - fpf / 2 && b > item.sourceIn);
+  const nextBar = bars.find((b) => b > songEnd + fpf / 2);
+  const longer =
+    nextBar !== undefined
+      ? Math.min(max, nextBar - item.sourceIn)
+      : Number.isFinite(max) && max > item.duration
+        ? max
+        : null;
+  const pictureEnd = Math.max(
+    0,
+    ...tl.tracks
+      .filter((t) => t.kind === 'video' || t.kind === 'graphics')
+      .flatMap((t) => t.items.map(itemEnd)),
+  );
+  return {
+    shorter: prevBar === undefined ? null : prevBar - item.sourceIn,
+    longer: longer !== null && longer > item.duration ? longer : null,
+    toSongEnd: Number.isFinite(max) ? max : null,
+    pictureEnd,
+  };
+}

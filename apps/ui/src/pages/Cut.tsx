@@ -24,7 +24,9 @@ import {
   canTrim,
   deltaToBeat,
   fitSourceIn,
+  fadeOutOf,
   heldPastEnd,
+  musicLengthPlan,
   captionAt,
   kindLabel,
   percent,
@@ -188,6 +190,7 @@ export function CutPage({ id }: { id: string }) {
               trackName={sel.track.name || sel.track.id}
               decisions={decisions}
               beats={grid?.beats ?? []}
+              bars={grid?.bars ?? []}
               onGone={() => setSelected(null)}
             />
           )}
@@ -498,6 +501,7 @@ function Inspector({
   trackName,
   decisions,
   beats,
+  bars,
   onGone,
 }: {
   id: string;
@@ -506,6 +510,7 @@ function Inspector({
   trackName: string;
   decisions: readonly DecisionRecord[];
   beats: readonly number[];
+  bars: readonly number[];
   onGone: () => void;
 }) {
   const store = useStore();
@@ -522,6 +527,10 @@ function Inspector({
   const takes = shot?.kind === 'shot' ? shot.takes.filter((t) => !t.rejected) : [];
   const name = (assetId: string) =>
     snap?.status.footage.find((f) => f.assetId === assetId)?.name ?? assetId;
+  const songLength = (assetId: string) => {
+    const d = snap?.status.music.find((m) => m.assetId === assetId)?.durationSec;
+    return d === undefined || d === null ? null : Math.round(d * F);
+  };
   const lengthOf = (assetId: string) => {
     const d = snap?.status.footage.find((f) => f.assetId === assetId)?.durationSec;
     return d === undefined || d === null ? null : Math.round(d * F);
@@ -564,13 +573,23 @@ function Inspector({
         <p className="muted">No automatic decision recorded (you made this one).</p>
       )}
 
-      <LengthControl
-        key={item.id}
-        id={id}
-        item={item}
-        beats={beats}
-        held={heldPastEnd(item, item.kind === 'clip' ? lengthOf(item.assetId) : null)}
-      />
+      {item.kind === 'clip' && item.id.startsWith('rc_music') ? (
+        <MusicLength
+          id={id}
+          item={item}
+          bars={bars}
+          songLength={songLength(item.assetId)}
+          locked={locked}
+        />
+      ) : (
+        <LengthControl
+          key={item.id}
+          id={id}
+          item={item}
+          beats={beats}
+          held={heldPastEnd(item, item.kind === 'clip' ? lengthOf(item.assetId) : null)}
+        />
+      )}
 
       <h3>Trim</h3>
       <label className="field inline">
@@ -1459,6 +1478,115 @@ function LengthControl({
           {note}
         </p>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+
+/** How long the music runs: by the bar, to the end of the song, or back to the picture's end. */
+function MusicLength({
+  id,
+  item,
+  bars,
+  songLength,
+  locked,
+}: {
+  id: string;
+  item: Clip;
+  bars: readonly number[];
+  songLength: number | null;
+  locked: boolean;
+}) {
+  const store = useStore();
+  const view = useAppState((s) => s.projects[id])!;
+  const tl = view.project.timelines.find((t) => t.id === TIMELINE_ID)!;
+  const rate = tl.frameRate;
+  const fpf = flicksPerFrame(rate);
+  const plan = musicLengthPlan(tl, item, bars, songLength);
+  const fade = fadeOutOf(item);
+  const set = (duration: number | null, fadeLen?: number) => {
+    if (duration === null) return;
+    const d = Math.max(fpf, Math.round(duration / fpf) * fpf);
+    void store.command(id, 'core/timeline.set-audio-length', {
+      timelineId: tl.id,
+      itemId: item.id,
+      duration: songLength === null ? d : Math.min(d, songLength - item.sourceIn),
+      ...(fadeLen === undefined ? {} : { fade: Math.round(fadeLen / fpf) * fpf }),
+    });
+  };
+  const seconds = (f: number) => (f / F).toFixed(2);
+  const numberField = (label: string, value: number, onValue: (flicks: number) => void) => (
+    <label className="field inline">
+      <span>{label}</span>
+      <input
+        key={value}
+        type="number"
+        min={0}
+        step={0.5}
+        defaultValue={seconds(value)}
+        disabled={locked}
+        onBlur={(e) => {
+          const v = Number(e.target.value);
+          if (e.target.value === '' || !Number.isFinite(v) || v < 0) return;
+          if (Math.round(v * F) !== value) onValue(Math.round(v * F));
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+      />
+    </label>
+  );
+
+  return (
+    <div role="group" aria-label="Music length" className="cut-length">
+      <h3>Music length</h3>
+      <p data-testid="music-use">
+        Uses {timecode(item.sourceIn, rate)} to {timecode(item.sourceIn + item.duration, rate)} of
+        the song{songLength !== null && ` (${timecode(songLength, rate)} long)`}. The picture ends
+        at {timecode(plan.pictureEnd, rate)}.
+      </p>
+      <div className="row">
+        <button
+          type="button"
+          disabled={locked || plan.shorter === null}
+          onClick={() => set(plan.shorter)}
+        >
+          Shorter by a bar
+        </button>
+        <button
+          type="button"
+          disabled={locked || plan.longer === null}
+          onClick={() => set(plan.longer)}
+        >
+          Longer by a bar
+        </button>
+        <button
+          type="button"
+          disabled={locked || plan.toSongEnd === null || plan.toSongEnd === item.duration}
+          onClick={() => set(plan.toSongEnd)}
+        >
+          To the end of the song
+        </button>
+        <button
+          type="button"
+          disabled={locked || plan.pictureEnd - item.start === item.duration}
+          onClick={() => set(plan.pictureEnd - item.start)}
+        >
+          End with the picture
+        </button>
+      </div>
+      <div className="row">
+        {numberField('Music seconds', item.duration, (v) => set(v))}
+        {numberField('Fade-out seconds', fade, (v) => set(item.duration, v))}
+      </div>
+      {item.start + item.duration > plan.pictureEnd && (
+        <p className="muted" data-testid="music-past-picture">
+          The music runs {seconds(item.start + item.duration - plan.pictureEnd)} s past the last
+          picture, over black. Make the last shot or card longer (Length) to fill it.
+        </p>
+      )}
+      <p className="muted">Rebuilding the cut keeps the music length you set here.</p>
     </div>
   );
 }

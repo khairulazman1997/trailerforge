@@ -7,9 +7,11 @@ import {
   captionAt,
   cutPointFor,
   deltaToBeat,
+  fadeOutOf,
   fitSourceIn,
   heldPastEnd,
   itemAt,
+  musicLengthPlan,
   pictureAt,
   planLength,
   planSourceEdit,
@@ -261,5 +263,44 @@ describe('planLength', () => {
     expect(heldPastEnd(a, 1.5 * F)).toBe(F / 2);
     expect(heldPastEnd(a, 10 * F)).toBe(0);
     expect(heldPastEnd(a, null)).toBe(0);
+  });
+});
+
+describe('music length', () => {
+  const music = {
+    id: 'rc_music',
+    kind: 'clip' as const,
+    start: 0,
+    duration: 8 * F,
+    assetId: 'song',
+    sourceIn: 0,
+    speed: 1,
+    effects: [],
+    muted: false,
+    extensions: {},
+    gainDb: {
+      keyframes: [
+        { at: 6 * F, value: 0, easing: 'linear' as const },
+        { at: 8 * F, value: -60, easing: 'linear' as const },
+      ],
+    },
+  };
+  const bars = [0, 2 * F, 4 * F, 6 * F, 8 * F, 10 * F, 12 * F];
+
+  it('reads the fade-out length', () => {
+    expect(fadeOutOf(music)).toBe(2 * F);
+    expect(fadeOutOf({ ...music, gainDb: 0 })).toBe(0);
+  });
+
+  it('steps a bar either way, stops at the end of the song, and knows where the picture ends', () => {
+    expect(musicLengthPlan(tl, music, bars, 11 * F)).toEqual({
+      shorter: 6 * F,
+      longer: 10 * F,
+      toSongEnd: 11 * F,
+      pictureEnd: 8 * F,
+    });
+    expect(musicLengthPlan(tl, { ...music, duration: 10 * F }, bars, 11 * F).longer).toBe(11 * F);
+    expect(musicLengthPlan(tl, { ...music, duration: 11 * F }, bars, 11 * F).longer).toBeNull();
+    expect(musicLengthPlan(tl, music, bars, null).toSongEnd).toBeNull();
   });
 });

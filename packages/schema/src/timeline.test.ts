@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { secondsToFlicks as s } from './time.js';
-import { Animatable, Timeline, Track, timelineDuration } from './timeline.js';
+import { Animatable, Timeline, Track, refitFadeOut, timelineDuration } from './timeline.js';
 
 const clip = (id: string, start: number, duration: number) => ({
   id,
@@ -119,5 +119,47 @@ describe('Timeline', () => {
     });
     expect(timelineDuration(tl)).toBe(s(5));
     expect(tl.sampleRate).toBe(48_000);
+  });
+});
+
+describe('refitFadeOut', () => {
+  const F = 705_600_000;
+  const fade = {
+    keyframes: [
+      { at: F, value: 0, easing: 'linear' as const },
+      { at: 2 * F, value: -6, easing: 'linear' as const },
+      { at: 8 * F, value: 0, easing: 'linear' as const },
+      { at: 10 * F, value: -60, easing: 'linear' as const },
+    ],
+  };
+  it('moves the fade-out to the new end and keeps the keyframes before it', () => {
+    expect(refitFadeOut(fade, 10 * F, 20 * F)).toEqual({
+      keyframes: [
+        { at: F, value: 0, easing: 'linear' },
+        { at: 2 * F, value: -6, easing: 'linear' },
+        { at: 18 * F, value: 0, easing: 'linear' },
+        { at: 20 * F, value: -60, easing: 'linear' },
+      ],
+    });
+  });
+  it('drops keyframes a shorter clip or a longer fade covers, and can drop the fade', () => {
+    expect(refitFadeOut(fade, 10 * F, 4 * F, 3 * F)).toEqual({
+      keyframes: [
+        { at: 1 * F, value: 0, easing: 'linear' },
+        { at: 4 * F, value: -60, easing: 'linear' },
+      ],
+    });
+    expect(refitFadeOut(fade, 10 * F, 12 * F, 0)).toEqual({
+      keyframes: fade.keyframes.slice(0, 2),
+    });
+  });
+  it('adds a fade to a static level only when asked', () => {
+    expect(refitFadeOut(-3, 10 * F, 12 * F)).toBe(-3);
+    expect(refitFadeOut(-3, 10 * F, 12 * F, F)).toEqual({
+      keyframes: [
+        { at: 11 * F, value: -3, easing: 'linear' },
+        { at: 12 * F, value: -60, easing: 'linear' },
+      ],
+    });
   });
 });
