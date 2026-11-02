@@ -40,6 +40,22 @@ A project has one tab per step. Each tab says what it needs when an earlier step
 
 **Settings** holds AI providers and models, local models, watched folders, the optional AI vision model, and the connection for Claude Code (which can then work on the open project with you, through the same undoable commands). **Setup** is the health check above.
 
+### Recording from Unity
+
+If your game is made in Unity (2022.3 or newer), the TrailerForge Capture package records the shots for you, named with their shot codes, so they attach without any matching by hand. Nothing goes over the network, and TrailerForge never writes into your game project.
+
+1. **Install the package**: in Unity, Window → Package Manager → + → Add package from disk, and pick `integrations/unity/com.trailerforge.capture/package.json` from this repository. Unity Recorder, Timeline and Newtonsoft JSON come with it.
+2. **Export the capture pack**: Capture tab → Export → JSON. It is written to `<project>/exports/capture/capture-pack.json`.
+3. **Connect the two**: in Unity, Window → TrailerForge → Capture. Choose the pack, then a recordings folder. On the Capture tab's "Record in Unity" panel, watch that same folder.
+4. **Record**, in Play Mode, any of four ways:
+   - **Record** a shot while you play it (level 1). It stops after the shot's length.
+   - Give the shot a **set-up asset** (level 2): a scene to load, where to put the player, and your own `[TrailerForgeSetup]` debug steps (load a save, god mode, time of day). They run before the take.
+   - Add a **TrailerForgeShot** with a Timeline (level 3) and the shot plays hands-free at a locked frame rate. **Record all camera-only shots** films every one in a row.
+   - **Capture** a shot while you play it (level 4). Only the motion is saved, not video. Then **Render** it again from another camera, without the HUD, in slow motion or at 4K. **Render all captured performances** queues every capture, and **Run the rest again** redoes only what failed.
+5. Back in TrailerForge, the takes appear on the Footage tab. Each is attached to its shot with a note of how it was made (for example "Unity replay · recorded camera · 0.5× speed"). Build the cut as usual.
+
+Takes are written into a hidden `.tfpartial` folder first and moved into place when they finish, so TrailerForge never imports half a file. Each take has a small `.tfshot.json` file next to it that says which shot it is, even if you rename the recording. The package's own README (`integrations/unity/com.trailerforge.capture/README.md`) has the details.
+
 ### Privacy: what leaves your computer
 
 - **Never:** your footage, frames, sound, game source code, file names or paths. Rendering, analysis, matching, checking and review all run on your computer. Nothing is uploaded to any platform.

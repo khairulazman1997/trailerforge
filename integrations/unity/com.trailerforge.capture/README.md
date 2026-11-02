@@ -73,3 +73,5 @@ A capture pack of another format or version is refused with a message instead of
 ## Tests
 
 From the repository root: `pnpm test:unity` (EditMode, batch mode, on `integrations/unity/TestProject`). Set `TFORGE_UNITY` to the Unity executable if it is not in the Hub's default folder. This is not part of `pnpm check`.
+
+A full run then runs the whole flow: the engine test `packages/engine/src/unity-flow.test.ts` exports a capture pack, starts Unity again to record two of its shots (live, camera-only, and a capture filmed again at half speed) into a folder it watches, then checks that the takes import, attach by code with their origins and appear in the rough cut. `--filter <test>` runs only the matching Unity tests, and `--no-flow` skips the flow.

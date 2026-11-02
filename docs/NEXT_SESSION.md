@@ -24,11 +24,30 @@ Set `TFORGE_CHROMIUM` to Chrome first (`C:/Program Files/Google/Chrome/Applicati
 
 Follow "Deferred: desktop smoke checklist" below (build the installer, install it, Setup, demo, export, brand fonts, uninstall).
 
+## Unity Capture in your own game (after Milestone 9)
+
+The package is tested on the fixture project (`pnpm test:unity`: the package's Unity tests, then the whole flow from pack to rough cut). Your game is what it has not seen yet. In your Unity project, with a capture pack exported from your TrailerForge project:
+
+1. Add the package from disk (README "Recording from Unity"). Note your Unity version, the render pipeline (Built-in, URP or HDRP), and any errors in the Console.
+2. Open Window → TrailerForge → Capture, choose the pack and a recordings folder, and watch that folder in TrailerForge. Do any warnings show at the top (folder, HUD canvases)?
+3. **Level 1**: Record one shot while playing. Does the file in the folder have the right length, size and frame rate? Is the HUD hidden when the pack says off? Does it attach to its shot in TrailerForge?
+4. **Level 2**: make a set-up asset for a shot: a scene, the player position, and one of your own debug commands marked `[TrailerForgeSetup]`. Does it run before the take? Does a failing step say which step and why?
+5. **Level 3**: give one shot a TrailerForgeShot with a short Timeline (with Cinemachine if you use it). Record it, then try Record all camera-only shots. Is the motion smooth at a locked frame rate, even if your machine is slow?
+6. **Level 4**: Capture a busy shot (enemies spawning, particles, sound) for 10–20 s. Note the file size. Render it with the recorded camera at 1×, then with a placed camera (Tagged), at 0.5×, and at 4K.
+   - Does anything move wrongly, flicker or go missing (spawned enemies come back as stand-ins unless you call `TrailerForgeCapture.Spawned`)?
+   - Do your own scripts fight the replay?
+   - Are the particle effects the same as when you played?
+   - How long does a 4K render take?
+7. Render all captured performances with one pass made to fail (a camera tag that does not exist), fix the tag, then press Run the rest again. Does it redo only that pass?
+8. Build a rough cut with the Unity takes and note anything that feels wrong.
+
+Paste your notes into the next session together with the prompt below (add "and my Unity Capture notes" to it).
+
 ## Prompt for the next session
 
 ---
 
-Read `CLAUDE.md`, then the end of `docs/PLAN.md` (Milestone 7) and `docs/NEXT_SESSION.md`. M1–M7 are complete; this session handles what my Windows run found. Here are my results: <paste the failures, the times `a11y.spec.ts` printed, and the smoke checklist answers>. For each problem, find the cause, fix it with a test where one can run in the container, run `pnpm check` (and `pnpm test:e2e` for UI changes), commit and push to `main`, and log it in `docs/BUILD_LOG.md`. Say plainly what you could not verify. Do not start new features: the parked ideas in `docs/PLAN.md` ("Potential extensions") need my go-ahead first. Use Sonnet for fixes in UI, wiring and packaging, and Opus for anything in rendering determinism, crash recovery or schemas; tell me when to switch.
+Read `CLAUDE.md`, then the end of `docs/PLAN.md` (Milestones 7 and 9) and `docs/NEXT_SESSION.md`. M1–M7 and M9 are complete; this session handles what my Windows run found. Here are my results: <paste the failures, the times `a11y.spec.ts` printed, and the smoke checklist answers>. For each problem, find the cause, fix it with a test where one can run in the container, run `pnpm check` (and `pnpm test:e2e` for UI changes), commit and push to `main`, and log it in `docs/BUILD_LOG.md`. Say plainly what you could not verify. Do not start new features: the parked ideas in `docs/PLAN.md` ("Potential extensions") need my go-ahead first. Use Sonnet for fixes in UI, wiring and packaging, and Opus for anything in rendering determinism, crash recovery or schemas; tell me when to switch.
 
 ---
 

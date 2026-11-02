@@ -1,5 +1,7 @@
 // Runs the Unity package tests on the fixture project in batch mode (not part of `pnpm check`).
-//   node scripts/unity-test.mjs [--platform EditMode|PlayMode] [--filter <name>] [--nographics]
+//   node scripts/unity-test.mjs [--platform EditMode|PlayMode] [--filter <name>] [--nographics] [--no-flow]
+// A full run (no --filter) then runs the whole flow: the engine's unity-flow test exports a pack, runs Unity again to
+// record from it, and imports, matches and cuts the takes.
 // Finds Unity through TFORGE_UNITY (the Unity executable) or the newest 2022.3 install of Unity Hub.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -83,4 +85,18 @@ if (!existsSync(results)) {
 const s = summarize(readFileSync(results, 'utf8'));
 console.log(`${s.passed}/${s.total} passed, ${s.failed} failed`);
 for (const f of s.failures) console.log(`  FAILED ${f}`);
-process.exit(s.failed > 0 || s.total === 0 ? 1 : 0);
+if (s.failed > 0 || s.total === 0) process.exit(1);
+if (arg('--filter') || process.argv.includes('--no-flow') || process.argv.includes('--nographics'))
+  process.exit(0);
+console.log('\nWhole flow: TrailerForge → Unity → TrailerForge');
+const flow = spawnSync(
+  'pnpm',
+  ['--filter', '@trailerforge/engine', 'exec', 'vitest', 'run', 'src/unity-flow.test.ts'],
+  {
+    cwd: root,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+    env: { ...process.env, TFORGE_UNITY_FLOW: '1' },
+  },
+);
+process.exit(flow.status ?? 1);
