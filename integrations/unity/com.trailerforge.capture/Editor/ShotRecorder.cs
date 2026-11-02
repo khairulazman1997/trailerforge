@@ -35,6 +35,13 @@ namespace TrailerForge.Capture.Editor
         /// <summary>With the HUD off, also hide the "UI" layer from the camera (world- and camera-space canvases).</summary>
         public bool HideUiLayer = true;
         public bool Audio = true;
+        /// <summary>How the take is made: "live", "camera" or "replay" (written to the sidecar).</summary>
+        public string Level = "live";
+        /// <summary>Playback speed of a replay (0.5 = half speed).</summary>
+        public double Speed = 1;
+        public string PerformanceId;
+        /// <summary>Name of the camera for the sidecar; defaults to the tag or "main".</summary>
+        public string CameraLabel;
 
         /// <summary>The pack's resolution and frame rate; HUD from the shot, else the pack (per-shot and "any" mean off);
         /// length = the shot's record seconds.</summary>
@@ -252,14 +259,15 @@ namespace TrailerForge.Capture.Editor
             slotId = Request.SlotId,
             projectId = Request.ProjectId,
             take = Take,
-            level = "live",
+            level = Request.Level,
+            performanceId = Request.PerformanceId,
             frames = frames,
             seconds = Math.Round((double)frames / Request.Fps, 3),
             pass = new TakePass
             {
-                camera = string.IsNullOrEmpty(Request.CameraTag) ? "main" : Request.CameraTag,
+                camera = !string.IsNullOrEmpty(Request.CameraLabel) ? Request.CameraLabel : string.IsNullOrEmpty(Request.CameraTag) ? "main" : Request.CameraTag,
                 hud = Request.Hud ? "on" : "off",
-                speed = 1,
+                speed = Request.Speed,
                 width = Request.Width,
                 height = Request.Height,
                 fps = Request.Fps,

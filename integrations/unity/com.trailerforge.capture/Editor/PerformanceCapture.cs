@@ -4,9 +4,7 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.LowLevel;
 using UnityEngine.SceneManagement;
-using PlayerLoopTypes = UnityEngine.PlayerLoop;
 
 namespace TrailerForge.Capture.Editor
 {
@@ -98,7 +96,7 @@ namespace TrailerForge.Capture.Editor
             startTime = Time.time;
             TrackScene();
             TrailerForgeCapture.OnSpawned += OnSpawned;
-            AddToPlayerLoop(Sample);
+            LateHook.Add(Sample);
             EditorApplication.playModeStateChanged += OnPlayMode;
             Sample(); // the state at the start, before the next rendered frame
         }
@@ -414,48 +412,9 @@ namespace TrailerForge.Capture.Editor
 
         void Detach()
         {
-            RemoveFromPlayerLoop();
+            LateHook.Remove(Sample);
             TrailerForgeCapture.OnSpawned -= OnSpawned;
             EditorApplication.playModeStateChanged -= OnPlayMode;
-        }
-
-        // ---- player loop: sample at the start of PostLateUpdate (after LateUpdate, before rendering) ----
-
-        struct TrailerForgeSample { }
-
-        static PlayerLoopSystem.UpdateFunction sampleFn;
-
-        static void AddToPlayerLoop(PlayerLoopSystem.UpdateFunction fn)
-        {
-            sampleFn = fn;
-            var loop = PlayerLoop.GetCurrentPlayerLoop();
-            for (var i = 0; i < loop.subSystemList.Length; i++)
-            {
-                if (loop.subSystemList[i].type != typeof(PlayerLoopTypes.PostLateUpdate)) continue;
-                var subs = loop.subSystemList[i].subSystemList.Where(s => s.type != typeof(TrailerForgeSample)).ToList();
-                subs.Insert(0, new PlayerLoopSystem { type = typeof(TrailerForgeSample), updateDelegate = () => sampleFn?.Invoke() });
-                loop.subSystemList[i].subSystemList = subs.ToArray();
-            }
-            PlayerLoop.SetPlayerLoop(loop);
-        }
-
-        // Called from inside the loop when a capture ends on its own, so the loop is changed after this frame.
-        static void RemoveFromPlayerLoop()
-        {
-            sampleFn = null;
-            EditorApplication.delayCall += RemoveNow;
-        }
-
-        static void RemoveNow()
-        {
-            if (sampleFn != null) return; // a new capture started meanwhile
-            var loop = PlayerLoop.GetCurrentPlayerLoop();
-            for (var i = 0; i < loop.subSystemList.Length; i++)
-            {
-                if (loop.subSystemList[i].type != typeof(PlayerLoopTypes.PostLateUpdate)) continue;
-                loop.subSystemList[i].subSystemList = loop.subSystemList[i].subSystemList.Where(s => s.type != typeof(TrailerForgeSample)).ToArray();
-            }
-            PlayerLoop.SetPlayerLoop(loop);
         }
     }
 }

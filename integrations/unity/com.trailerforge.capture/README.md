@@ -52,7 +52,17 @@ var boss = Instantiate(bossPrefab);
 TrailerForgeCapture.Spawned(bossPrefab, boss); // does nothing unless a capture is running
 ```
 
-Rendering a capture again from other cameras, without the HUD, in slow motion or at 4K comes in the next version of the package.
+## Film a capture again (render)
+
+In Play Mode, open the shot in the Capture window: each captured performance has a **Render** button. Choose the camera first:
+
+- **Recorded**: the game camera as it moved while you played.
+- **Tagged**: a camera you placed in the scene, found by the camera tag (it keeps its own position or animation).
+- **Live main**: the main camera is left free, so your Cinemachine Brain or camera rig drives it.
+
+Pick the speed (1×, 0.5× or 0.25×; slow motion falls between recorded frames and is interpolated) and the size (the pack's, 1440p or 4K). The HUD and format options above apply too. Each render is a new take of the shot with its sidecar, so TrailerForge imports it like any other.
+
+The scene is loaded fresh and the game is frozen while it plays back: physics, Animators, NavMesh agents and your own scripts are turned off, so nothing but the performance moves. Sound is replayed only at 1×. Play Mode stays frozen after a render; leave and enter Play Mode again to play normally.
 
 In TrailerForge, a take with a sidecar is attached to its shot by the code inside the sidecar even if you rename the file, and is labelled with how it was recorded (camera, HUD, size). The Capture tab has a **Record in Unity** panel with the pack path and a button to watch the recordings folder.
 

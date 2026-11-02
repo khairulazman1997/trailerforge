@@ -82,6 +82,7 @@ namespace TrailerForge.Capture.Editor
             var seconds = shot.Seconds;
             if (seconds <= 0) throw new InvalidOperationException($"{shot.name} has no length: its Timeline is empty.");
             Request.Seconds = seconds;
+            Request.Level = "camera";
             // A locked frame rate: every frame advances the game by exactly 1/fps, whatever the machine can do.
             savedCaptureRate = Time.captureFramerate;
             Time.captureFramerate = Request.Fps;
