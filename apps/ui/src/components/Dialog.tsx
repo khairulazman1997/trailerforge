@@ -9,12 +9,15 @@ export function Dialog({
   onClose,
   children,
   footer,
+  wide,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   children: ReactNode;
   footer: ReactNode;
+  /** Room for a large picture. */
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -27,7 +30,7 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className="dialog"
+      className={`dialog${wide ? ' wide' : ''}`}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();

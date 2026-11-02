@@ -2,6 +2,7 @@ import { Timeline } from '@trailerforge/schema';
 import { describe, expect, it } from 'vitest';
 import {
   F,
+  applySourceEdit,
   canTrim,
   captionAt,
   cutPointFor,
@@ -184,6 +185,22 @@ describe('planSourceEdit', () => {
     expect(planSourceEdit(fast, 'out', 10 * FPF, len, RATE)).toEqual({
       sourceDelta: 10 * FPF,
       timelineDelta: 5 * FPF,
+    });
+  });
+});
+
+describe('applySourceEdit', () => {
+  const clip = { duration: 30 * FPF, sourceIn: 10 * FPF, speed: 1 };
+  it('moves the start, the end or the whole window inside the recording', () => {
+    expect(applySourceEdit(clip, 'in', 4 * FPF, 100 * FPF, RATE)).toEqual({
+      duration: 26 * FPF,
+      sourceIn: 14 * FPF,
+      speed: 1,
+    });
+    expect(applySourceEdit(clip, 'out', 100 * FPF, 100 * FPF, RATE).duration).toBe(90 * FPF);
+    expect(applySourceEdit(clip, 'slip', -3 * FPF, 100 * FPF, RATE)).toMatchObject({
+      sourceIn: 7 * FPF,
+      duration: 30 * FPF,
     });
   });
 });

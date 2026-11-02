@@ -174,3 +174,22 @@ export function planSourceEdit(
   }
   return { sourceDelta: Math.round(td * item.speed), timelineDelta: td };
 }
+
+/** A clip's source range after a drag of the source window (see `planSourceEdit`). */
+export function applySourceEdit<T extends { duration: number; sourceIn: number; speed: number }>(
+  clip: T,
+  mode: SourceEdit,
+  delta: number,
+  length: number | null,
+  rate: Rate,
+): T {
+  const p = planSourceEdit(clip, mode, delta, length, rate);
+  if (mode === 'slip') return { ...clip, sourceIn: clip.sourceIn + p.sourceDelta };
+  if (mode === 'in')
+    return {
+      ...clip,
+      sourceIn: clip.sourceIn + p.sourceDelta,
+      duration: clip.duration - p.timelineDelta,
+    };
+  return { ...clip, duration: clip.duration + p.timelineDelta };
+}

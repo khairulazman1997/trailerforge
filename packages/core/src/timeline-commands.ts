@@ -134,6 +134,34 @@ export const trimItem = defineCommand({
 });
 
 /**
+ * Choose which part of a clip's recording it uses, in one step: the new source start and the new
+ * length (timeline flicks); the clip keeps its start. With `ripple`, the items after it on the
+ * track move by the change in length.
+ */
+export const setSourceRange = defineCommand({
+  type: 'core/timeline.set-source',
+  payload: z.strictObject({
+    ...Ref,
+    sourceIn: Flicks,
+    duration: z.int().positive(),
+    ripple: z.boolean().optional(),
+  }),
+  label: () => 'Re-cut clip',
+  apply: (d, { timelineId, itemId, sourceIn, duration, ripple }) => {
+    const { item, track } = find(d, timelineId, itemId, 'core/timeline.set-source');
+    if (item.kind !== 'clip')
+      throw new CommandError('core/timeline.set-source', 'only clips use a recording');
+    const oldEnd = item.start + item.duration;
+    const change = duration - item.duration;
+    item.sourceIn = sourceIn;
+    item.duration = duration;
+    if (ripple && change !== 0) shiftFollowers(track, oldEnd, change, itemId);
+    markEdited(item);
+    pruneTransitions(track);
+  },
+});
+
+/**
  * Move an item to `start`, optionally onto another track of the same kind. With
  * `ripple`, on the same track the items after it move by the same amount; onto another track,
  * the items after it close the gap it leaves and the items from `start` on the new track make
@@ -403,6 +431,7 @@ export const setTrackLocked = defineCommand({
 export const timelineCommands = [
   setTimeline,
   trimItem,
+  setSourceRange,
   moveItem,
   swapTake,
   toPlaceholder,

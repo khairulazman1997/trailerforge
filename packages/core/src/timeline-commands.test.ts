@@ -226,6 +226,34 @@ describe('core/timeline commands', () => {
     expect(isUserEdited(it_('rc_a'))).toBe(false);
   });
 
+  it('re-cuts a clip from its recording in one step, keeping its start', () => {
+    store.dispatch('core/timeline.set-source', {
+      ...ref('rc_a'),
+      sourceIn: 4 * F,
+      duration: 1.5 * F,
+    });
+    expect(it_('rc_a')).toMatchObject({ start: 0, duration: 1.5 * F, sourceIn: 4 * F });
+    expect(it_('rc_b').start).toBe(2 * F);
+    expect(isUserEdited(it_('rc_a'))).toBe(true);
+    store.undo();
+    expect(it_('rc_a')).toMatchObject({ duration: 2 * F, sourceIn: F });
+    // Longer without ripple would overlap the next item; with ripple it moves along.
+    expect(() =>
+      store.dispatch('core/timeline.set-source', { ...ref('rc_a'), sourceIn: 0, duration: 3 * F }),
+    ).toThrow();
+    store.dispatch('core/timeline.set-source', {
+      ...ref('rc_a'),
+      sourceIn: 0,
+      duration: 3 * F,
+      ripple: true,
+    });
+    expect(it_('rc_b').start).toBe(3 * F);
+    store.undo();
+    expect(() =>
+      store.dispatch('core/timeline.set-source', { ...ref('rc_b'), sourceIn: 0, duration: F }),
+    ).toThrow(/only clips/);
+  });
+
   it('ripple trims and moves carry the items after them, each in one undo step', () => {
     store.dispatch('core/timeline.trim', { ...ref('rc_a'), edge: 'out', delta: F, ripple: true });
     expect([it_('rc_a').duration, it_('rc_b').start]).toEqual([3 * F, 3 * F]);

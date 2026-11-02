@@ -138,6 +138,26 @@ test('choose music, analyse, build the cut, inspect, trim, swap, lock, rebuild, 
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(used).toHaveText(usedBefore!);
 
+  // The trimmer stages a re-cut: Cancel leaves the cut alone, Done applies it as one undo step.
+  await source.getByRole('button', { name: 'Open the trimmer…' }).click();
+  let trimmer = page.getByRole('dialog', { name: 'Trim Perfect parry' });
+  await trimmer.getByRole('slider', { name: 'Source end' }).press('Shift+ArrowLeft');
+  await expect(trimmer.getByTestId('trim-length')).toContainText('(was');
+  expect(await axe(page)).toEqual([]);
+  await trimmer.getByRole('button', { name: 'Cancel' }).click();
+  await expect(trimmer).toHaveCount(0);
+  await expect(parry).toHaveAttribute('aria-label', before!);
+  await source.getByRole('button', { name: 'Open the trimmer…' }).click();
+  trimmer = page.getByRole('dialog', { name: 'Trim Perfect parry' });
+  await trimmer.getByRole('slider', { name: 'Source start' }).press('ArrowRight');
+  await trimmer.getByRole('slider', { name: 'Source end' }).press('Shift+ArrowLeft');
+  await trimmer.getByRole('button', { name: 'Done' }).click();
+  await expect(trimmer).toHaveCount(0);
+  await expect(parry).not.toHaveAttribute('aria-label', before!);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(parry).toHaveAttribute('aria-label', before!);
+  await expect(used).toHaveText(usedBefore!);
+
   // Trim the end by a frame: the clip's timecode changes; undo puts it back.
   await page
     .getByRole('group', { name: 'Trim the end' })
