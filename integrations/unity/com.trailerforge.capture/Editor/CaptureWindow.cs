@@ -49,7 +49,7 @@ namespace TrailerForge.Capture.Editor
 
         void Update()
         {
-            if (Busy || (queue != null && queue.Running)) Repaint();
+            if (Busy || Capturing || (queue != null && queue.Running)) Repaint();
         }
 
         void Reload()
@@ -138,8 +138,58 @@ namespace TrailerForge.Capture.Editor
                     if (GUILayout.Button("Record all camera-only shots")) RecordAllCameraShots();
         }
 
+        static bool Capturing => PerformanceCapture.Current != null && PerformanceCapture.Current.State == CaptureState.Capturing;
+
+        void CapturePerformance(PackItem item)
+        {
+            try
+            {
+                var cap = PerformanceCapture.Start(item.code, manual ? 0 : item.recordSeconds);
+                cap.Done += OnCaptureDone;
+                lastResult = null;
+            }
+            catch (System.Exception e)
+            {
+                lastResult = e.Message;
+                lastResultType = MessageType.Error;
+            }
+        }
+
+        void OnCaptureDone(PerformanceCapture cap)
+        {
+            switch (cap.State)
+            {
+                case CaptureState.Finished:
+                    lastResult = $"Saved the performance {System.IO.Path.GetFileName(cap.FilePath)} ({cap.Frames} frames, {cap.Bytes / 1024.0:0.#} KB)." +
+                                 (cap.Warnings.Count > 0 ? "\n" + string.Join("\n", cap.Warnings) : "");
+                    lastResultType = cap.Warnings.Count > 0 ? MessageType.Warning : MessageType.Info;
+                    break;
+                case CaptureState.Cancelled:
+                    lastResult = "Capture cancelled; nothing was saved.";
+                    lastResultType = MessageType.Info;
+                    break;
+                default:
+                    lastResult = cap.Error;
+                    lastResultType = MessageType.Error;
+                    break;
+            }
+            Repaint();
+        }
+
         void DrawTakeStatus()
         {
+            var cap = PerformanceCapture.Current;
+            if (cap != null && cap.State == CaptureState.Capturing)
+            {
+                using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                {
+                    var length = cap.Seconds > 0 ? $" of {cap.Seconds:0.#} s" : "";
+                    EditorGUILayout.LabelField($"Capturing the performance of {cap.Code}: {cap.Frames} frames{length}", EditorStyles.boldLabel);
+                    if (GUILayout.Button("Stop", GUILayout.Width(60))) cap.Stop();
+                    if (GUILayout.Button("Cancel", GUILayout.Width(60))) cap.Cancel();
+                }
+                return;
+            }
             var rec = TakeRun.Current;
             if (rec != null && rec.State == TakeState.Recording)
             {
@@ -305,8 +355,11 @@ namespace TrailerForge.Capture.Editor
             {
                 now = EditorGUILayout.Foldout(isOpen, label, true);
                 var busy = Busy || (queue != null && queue.Running);
-                using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || busy || string.IsNullOrEmpty(outputFolder)))
+                using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || busy || Capturing || string.IsNullOrEmpty(outputFolder)))
                     if (GUILayout.Button(new GUIContent("Record", "Record a take of this shot"), GUILayout.Width(64))) Record(item);
+                using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || busy || Capturing))
+                    if (GUILayout.Button(new GUIContent("Capture", "Play the shot once; its motion is saved to film again later from other cameras, sizes and speeds"), GUILayout.Width(64)))
+                        CapturePerformance(item);
             }
             if (now != isOpen) { if (now) open.Add(item.slotId); else open.Remove(item.slotId); }
             if (!now) return;

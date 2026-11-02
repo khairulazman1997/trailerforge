@@ -41,6 +41,19 @@ Arguments are typed in the set-up as text (string, int, float, bool, enums). A s
 
 For flyovers and establishing shots, add **TrailerForge → Shot** (`TrailerForgeShot`) to the object with the shot's Timeline (`PlayableDirector`), type the shot code, and optionally pick the camera that films it (Cinemachine users: leave it empty and the main camera, driven by the Cinemachine Brain, is recorded). In Play Mode, press **Record** on the shot, or **Record all camera-only shots** to record every one in the open scenes one after another. These run at a **locked frame rate**: every frame advances the game by exactly 1/fps, so the footage is smooth at any resolution even on a slow machine.
 
+## Play once, film many times (capture)
+
+Press **Capture** on a shot in Play Mode and play it. The motion of everything visible is saved (not a video) to `TrailerForge/Performances/<code>_perf01.tfperf` in your Unity project, outside `Assets`. It stops after the shot's length (or when you press Stop or leave Play Mode); Cancel throws it away. A still object costs almost nothing, so captures are small.
+
+Objects your game creates while you play come back as stand-ins built from their meshes. For an exact replay (and for spawned particle effects), report them right after creating them:
+
+```csharp
+var boss = Instantiate(bossPrefab);
+TrailerForgeCapture.Spawned(bossPrefab, boss); // does nothing unless a capture is running
+```
+
+Rendering a capture again from other cameras, without the HUD, in slow motion or at 4K comes in the next version of the package.
+
 In TrailerForge, a take with a sidecar is attached to its shot by the code inside the sidecar even if you rename the file, and is labelled with how it was recorded (camera, HUD, size). The Capture tab has a **Record in Unity** panel with the pack path and a button to watch the recordings folder.
 
 A capture pack of another format or version is refused with a message instead of being guessed at.
