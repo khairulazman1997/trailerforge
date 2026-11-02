@@ -137,3 +137,40 @@ export function fitSourceIn(
   if (takeDuration === null) return 0;
   return Math.max(0, Math.min(current, takeDuration - itemDuration));
 }
+
+/** What dragging the source window changes: the whole window (slip) or one of its edges. */
+export type SourceEdit = 'slip' | 'in' | 'out';
+
+/**
+ * A drag of the source window, kept on the frame grid and inside the recording: `sourceDelta` is
+ * how far the dragged part moves in the recording, `timelineDelta` how far the clip's edge moves on
+ * the timeline (0 for a slip, which keeps the clip where it is). `length` null = unknown, unlimited.
+ */
+export function planSourceEdit(
+  item: { duration: number; sourceIn: number; speed: number },
+  mode: SourceEdit,
+  delta: number,
+  length: number | null,
+  rate: Rate,
+): { sourceDelta: number; timelineDelta: number } {
+  const fpf = flicksPerFrame(rate);
+  const span = item.duration * item.speed;
+  const max = length ?? Infinity;
+  const frames = (d: number) => Math.round(d / fpf) * fpf;
+  if (mode === 'slip') {
+    const lo = -item.sourceIn;
+    const hi = Math.max(lo, max - item.sourceIn - span);
+    const d = Math.min(hi, Math.max(lo, frames(delta)));
+    return { sourceDelta: d, timelineDelta: 0 };
+  }
+  let td = frames(delta / item.speed);
+  if (mode === 'in') {
+    td = Math.max(td, -Math.floor(item.sourceIn / item.speed / fpf) * fpf);
+    td = Math.min(td, item.duration - fpf);
+  } else {
+    td = Math.max(td, fpf - item.duration);
+    if (Number.isFinite(max))
+      td = Math.min(td, Math.floor((max - item.sourceIn - span) / item.speed / fpf) * fpf);
+  }
+  return { sourceDelta: Math.round(td * item.speed), timelineDelta: td };
+}

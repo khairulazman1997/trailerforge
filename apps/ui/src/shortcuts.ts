@@ -25,10 +25,14 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { keys: ['?'], what: 'Show this list', scope: 'global' },
   { keys: ['Esc'], what: 'Close a dialog, or drop an edit you have not finished', scope: 'global' },
   { keys: ['Enter'], what: 'Keep the text you typed in a one-line field', scope: 'global' },
-  { keys: ['←', '→'], what: 'Move the selected clip one frame', scope: 'cut' },
+  {
+    keys: ['←', '→'],
+    what: 'Move the selected clip one frame (on the source window: slip or trim one frame)',
+    scope: 'cut',
+  },
   {
     keys: ['Shift+←', 'Shift+→'],
-    what: 'Move the selected clip to the previous or next beat',
+    what: 'Move the selected clip to the previous or next beat (on the source window: ten frames)',
     scope: 'cut',
   },
   {

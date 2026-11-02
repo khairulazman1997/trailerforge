@@ -9,6 +9,7 @@ import {
   fitSourceIn,
   itemAt,
   pictureAt,
+  planSourceEdit,
   timecode,
   transformStyle,
 } from './cut-view.js';
@@ -151,5 +152,38 @@ describe('transformStyle', () => {
     });
     expect(transformStyle(fade, 1.5 * F)?.opacity).toBeCloseTo(0.5);
     expect(transformStyle(fade, 2.5 * F)).toBeUndefined();
+  });
+});
+
+describe('planSourceEdit', () => {
+  const clip = { duration: 30 * FPF, sourceIn: 10 * FPF, speed: 1 };
+  const len = 100 * FPF;
+
+  it('slips on the frame grid and stays inside the recording', () => {
+    expect(planSourceEdit(clip, 'slip', 5.4 * FPF, len, RATE)).toEqual({
+      sourceDelta: 5 * FPF,
+      timelineDelta: 0,
+    });
+    expect(planSourceEdit(clip, 'slip', -50 * FPF, len, RATE).sourceDelta).toBe(-10 * FPF);
+    expect(planSourceEdit(clip, 'slip', 500 * FPF, len, RATE).sourceDelta).toBe(60 * FPF);
+  });
+
+  it('trims the start no earlier than the recording and leaves a frame', () => {
+    expect(planSourceEdit(clip, 'in', -20 * FPF, len, RATE).timelineDelta).toBe(-10 * FPF);
+    expect(planSourceEdit(clip, 'in', 40 * FPF, len, RATE).timelineDelta).toBe(29 * FPF);
+  });
+
+  it('trims the end no later than the recording', () => {
+    expect(planSourceEdit(clip, 'out', 200 * FPF, len, RATE).timelineDelta).toBe(60 * FPF);
+    expect(planSourceEdit(clip, 'out', 200 * FPF, null, RATE).timelineDelta).toBe(200 * FPF);
+    expect(planSourceEdit(clip, 'out', -40 * FPF, len, RATE).timelineDelta).toBe(-29 * FPF);
+  });
+
+  it('turns source time into timeline time by the clip speed', () => {
+    const fast = { ...clip, speed: 2 };
+    expect(planSourceEdit(fast, 'out', 10 * FPF, len, RATE)).toEqual({
+      sourceDelta: 10 * FPF,
+      timelineDelta: 5 * FPF,
+    });
   });
 });

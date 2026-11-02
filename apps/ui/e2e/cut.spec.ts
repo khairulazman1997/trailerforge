@@ -117,6 +117,26 @@ test('choose music, analyse, build the cut, inspect, trim, swap, lock, rebuild, 
   await parry.click();
   await expect(page.getByRole('heading', { name: 'Perfect parry', level: 2 })).toBeVisible();
   await expect(page.getByTestId('cut-why')).toContainText('best of 2 takes');
+  // Picking it moves the preview to its start.
+  const parryItem = cut.tracks.flatMap((k) => k.items).find((i) => i.label === 'Perfect parry')!;
+  await expect(page.getByLabel('Playhead')).toHaveValue(
+    String(Math.round(parryItem.start / perFrame)),
+  );
+
+  // The source recording: slip the used part a frame later, keeping the clip in place; a
+  // frame off its end handle trims the clip. Undo walks both back.
+  const source = page.getByRole('group', { name: 'Source recording' });
+  const used = source.getByTestId('src-window');
+  const usedBefore = await used.textContent();
+  await source.getByRole('slider', { name: 'Used part of the recording' }).press('ArrowRight');
+  await expect(used).not.toHaveText(usedBefore!);
+  await expect(parry).toHaveAttribute('aria-label', before!);
+  await source.getByRole('slider', { name: 'Source end' }).press('ArrowLeft');
+  await expect(parry).not.toHaveAttribute('aria-label', before!);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(parry).toHaveAttribute('aria-label', before!);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(used).toHaveText(usedBefore!);
 
   // Trim the end by a frame: the clip's timecode changes; undo puts it back.
   await page
@@ -172,12 +192,13 @@ test('choose music, analyse, build the cut, inspect, trim, swap, lock, rebuild, 
 
   // Play: the clock follows the music.
   const time = page.getByTestId('cut-time');
+  await page.getByLabel('Playhead').fill('0');
   await expect(time).toContainText('0:00.00 /');
-  await page.getByRole('button', { name: 'Play' }).click();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect
     .poll(async () => (await time.textContent())!.split(' / ')[0], { timeout: 10_000 })
     .not.toBe('0:00.00');
-  await page.getByRole('button', { name: 'Pause' }).click();
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
 
   expect(await axe(page)).toEqual([]);
 });

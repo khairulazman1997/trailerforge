@@ -1770,3 +1770,64 @@ main:focus {
 .section-comments .comments {
   margin: 0;
 }
+
+.src-panel {
+  margin: 0.75rem 0;
+}
+.src-screen {
+  min-height: 8rem;
+}
+.src-screen video {
+  max-height: 14rem;
+}
+.src-strip {
+  position: relative;
+  height: 3rem;
+  margin: 0.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: #1c2026;
+  background-size: 100% 100%;
+  overflow: hidden;
+  touch-action: none;
+}
+.src-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 6px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  box-shadow: 0 0 0 100vw rgb(0 0 0 / 55%);
+}
+.src-body {
+  position: absolute;
+  inset: 0 10px;
+  cursor: grab;
+}
+.src-window.dragging .src-body {
+  cursor: grabbing;
+}
+.src-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  background: var(--accent);
+  cursor: ew-resize;
+}
+.src-handle.in {
+  left: 0;
+}
+.src-handle.out {
+  right: 0;
+}
+.src-window.locked .src-body,
+.src-window.locked .src-handle {
+  cursor: not-allowed;
+}
+.src-body:focus-visible,
+.src-handle:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: -3px;
+}

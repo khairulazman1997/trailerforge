@@ -11,6 +11,7 @@ import {
   itemEnd,
   timelineDuration,
   type DecisionRecord,
+  type Rate,
   type TimelineItem,
 } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
@@ -26,8 +27,10 @@ import {
   kindLabel,
   percent,
   pictureAt,
+  planSourceEdit,
   timecode,
   transformStyle,
+  type SourceEdit,
 } from '../cut-view.js';
 import { Link, projectPath } from '../router.js';
 import { busyTask } from '../store.js';
@@ -171,7 +174,7 @@ export function CutPage({ id }: { id: string }) {
 
       {tl && (
         <>
-          <Player id={id} />
+          <Player id={id} focus={sel ? { key: sel.item.id, at: sel.item.start } : null} />
           <Timeline id={id} selected={selected} onSelect={setSelected} />
           {sel && (
             <Inspector
@@ -610,6 +613,25 @@ function Inspector({
         </p>
       )}
 
+      {item.kind === 'clip' && !item.id.startsWith('rc_music') && (
+        <SourcePanel
+          key={item.assetId}
+          item={item}
+          length={lengthOf(item.assetId)}
+          name={name(item.assetId)}
+          rate={rate}
+          locked={locked}
+          onSlip={(sourceIn) =>
+            void store.command(id, 'core/timeline.swap-take', {
+              ...ref,
+              assetId: item.assetId,
+              sourceIn,
+            })
+          }
+          onTrim={trim}
+        />
+      )}
+
       {(item.kind === 'clip' || item.kind === 'placeholder') && takes.length > 0 && (
         <label className="field inline">
           <span>Take</span>
@@ -671,7 +693,7 @@ function Inspector({
 // ---------------------------------------------------------------------------------------------
 
 /** Plays the cut from the editing copies, in time with the music (no render). */
-function Player({ id }: { id: string }) {
+function Player({ id, focus }: { id: string; focus: { key: string; at: number } | null }) {
   const store = useStore();
   const view = useAppState((s) => s.projects[id])!;
   const tl = view.project.timelines.find((t) => t.id === TIMELINE_ID)!;
@@ -782,6 +804,20 @@ function Player({ id }: { id: string }) {
     },
     [],
   );
+  // Selecting an item on the timeline moves the playhead to its start, so its picture shows.
+  const seekRef = useRef(seek);
+  useEffect(() => {
+    seekRef.current = seek;
+  });
+  const focusKey = focus?.key ?? null;
+  const focusAt = focus?.at ?? null;
+  useEffect(() => {
+    if (focusKey !== null && focusAt !== null) seekRef.current(Math.round(focusAt / fpf));
+  }, [focusKey, focusAt, fpf]);
+  // Show the first picture before anything is played or picked.
+  useEffect(() => {
+    void syncRef.current(0, false);
+  }, []);
 
   return (
     <section aria-labelledby="cut-play">
@@ -834,5 +870,192 @@ function Player({ id }: { id: string }) {
         </output>
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+
+interface SourceDrag {
+  mode: SourceEdit;
+  x0: number;
+  width: number;
+  delta: number;
+}
+
+/**
+ * The clip's whole recording with the part the cut uses as a window: drag the window to use
+ * another moment (slip), drag its edges to trim. The picture shows the frame under the edit.
+ */
+function SourcePanel({
+  item,
+  length,
+  name,
+  rate,
+  locked,
+  onSlip,
+  onTrim,
+}: {
+  item: Extract<TimelineItem, { kind: 'clip' }>;
+  length: number | null;
+  name: string;
+  rate: Rate;
+  locked: boolean;
+  onSlip: (sourceIn: number) => void;
+  onTrim: (edge: 'in' | 'out', delta: number) => void;
+}) {
+  const store = useStore();
+  const fpf = flicksPerFrame(rate);
+  const video = useRef<HTMLVideoElement>(null);
+  const strip = useRef<HTMLDivElement>(null);
+  const [filmstrip, setFilmstrip] = useState<string | null>(null);
+  const [drag, setDrag] = useState<SourceDrag | null>(null);
+  const [looking, setLooking] = useState<'in' | 'out'>('in');
+  const [playing, setPlaying] = useState(false);
+  const span = item.duration * item.speed;
+  const total = Math.max(length ?? 0, item.sourceIn + span, 1);
+  const plan = (mode: SourceEdit, delta: number) => planSourceEdit(item, mode, delta, length, rate);
+  const d = drag ? plan(drag.mode, drag.delta) : null;
+  const winIn = item.sourceIn + (d && drag?.mode !== 'out' ? d.sourceDelta : 0);
+  const winOut = item.sourceIn + span + (d && drag?.mode !== 'in' ? d.sourceDelta : 0);
+  // The frame under the edit: the window's first frame, or its last.
+  const shownAt = looking === 'out' ? Math.max(winIn, winOut - fpf * item.speed) : winIn;
+
+  useEffect(() => {
+    let off = false;
+    void store.mediaUrl(item.assetId, 'proxy').then((u) => {
+      if (!off && u && video.current) video.current.src = u;
+    });
+    void store.mediaUrl(item.assetId, 'filmstrip').then((u) => {
+      if (!off) setFilmstrip(u);
+    });
+    return () => {
+      off = true;
+    };
+  }, [store, item.assetId]);
+  useEffect(() => {
+    const v = video.current;
+    if (!v || playing) return;
+    const go = () => {
+      v.currentTime = shownAt / F;
+    };
+    if (v.readyState >= 1) go();
+    else v.addEventListener('loadedmetadata', go, { once: true });
+    return () => v.removeEventListener('loadedmetadata', go);
+  }, [shownAt, playing]);
+
+  const commit = (mode: SourceEdit, delta: number) => {
+    const p = plan(mode, delta);
+    if (mode === 'slip') {
+      if (p.sourceDelta !== 0) onSlip(item.sourceIn + p.sourceDelta);
+    } else if (p.timelineDelta !== 0) onTrim(mode, p.timelineDelta);
+  };
+  const start = (e: React.PointerEvent, mode: SourceEdit) => {
+    if (locked || e.button !== 0 || !strip.current) return;
+    e.stopPropagation();
+    strip.current.setPointerCapture(e.pointerId);
+    if (mode !== 'slip') setLooking(mode);
+    setDrag({ mode, x0: e.clientX, width: strip.current.getBoundingClientRect().width, delta: 0 });
+  };
+  const move = (e: React.PointerEvent) => {
+    if (!drag) return;
+    setDrag({ ...drag, delta: ((e.clientX - drag.x0) / Math.max(1, drag.width)) * total });
+  };
+  const end = () => {
+    if (!drag) return;
+    commit(drag.mode, drag.delta);
+    setDrag(null);
+  };
+  const keys = (e: React.KeyboardEvent, mode: SourceEdit) => {
+    const step = (e.shiftKey ? 10 : 1) * fpf * (mode === 'slip' ? 1 : item.speed);
+    const by = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+    if (!by || locked) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (mode !== 'slip') setLooking(mode);
+    commit(mode, by);
+  };
+  const playWindow = () => {
+    const v = video.current;
+    if (!v) return;
+    if (playing) {
+      v.pause();
+      setPlaying(false);
+      return;
+    }
+    const stopAt = (item.sourceIn + span) / F;
+    v.currentTime = item.sourceIn / F;
+    v.playbackRate = item.speed;
+    v.ontimeupdate = () => {
+      if (v.currentTime < stopAt) return;
+      v.pause();
+      v.ontimeupdate = null;
+      setPlaying(false);
+    };
+    setPlaying(true);
+    void v.play().catch(() => setPlaying(false));
+  };
+  const slider = (at: number) => ({
+    role: 'slider',
+    tabIndex: locked ? -1 : 0,
+    'aria-valuemin': 0,
+    'aria-valuemax': Math.round(total / fpf),
+    'aria-valuenow': Math.round(at / fpf),
+    'aria-disabled': locked,
+  });
+
+  return (
+    <div className="src-panel" role="group" aria-label="Source recording">
+      <h3>Source: {name}</h3>
+      <div className="cut-screen src-screen">
+        <video ref={video} muted playsInline aria-label="Source picture" />
+      </div>
+      <div
+        ref={strip}
+        className="src-strip"
+        style={filmstrip ? { backgroundImage: `url(${filmstrip})` } : undefined}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={() => setDrag(null)}
+      >
+        <div
+          className={`src-window${drag ? ' dragging' : ''}${locked ? ' locked' : ''}`}
+          style={{ left: `${percent(winIn, total)}%`, width: `${percent(winOut - winIn, total)}%` }}
+        >
+          <span
+            className="src-body"
+            {...slider(winIn)}
+            aria-label="Used part of the recording"
+            aria-valuetext={`${timecode(winIn, rate)} to ${timecode(winOut, rate)}`}
+            onPointerDown={(e) => start(e, 'slip')}
+            onKeyDown={(e) => keys(e, 'slip')}
+          />
+          {(['in', 'out'] as const).map((edge) => (
+            <span
+              key={edge}
+              className={`src-handle ${edge}`}
+              {...slider(edge === 'in' ? winIn : winOut)}
+              aria-label={edge === 'in' ? 'Source start' : 'Source end'}
+              aria-valuetext={timecode(edge === 'in' ? winIn : winOut, rate)}
+              onPointerDown={(e) => start(e, edge)}
+              onKeyDown={(e) => keys(e, edge)}
+              onFocus={() => setLooking(edge)}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="row">
+        <button type="button" onClick={playWindow}>
+          {playing ? 'Stop' : 'Play the used part'}
+        </button>
+        <output data-testid="src-window">
+          Uses {timecode(winIn, rate)} to {timecode(winOut, rate)}
+          {length !== null && ` of ${timecode(length, rate)}`}
+        </output>
+      </div>
+      <p className="muted">
+        Drag the window to use another moment of the recording, or drag its edges to trim. With a
+        handle or the window focused, the arrow keys move one frame (ten with Shift).
+      </p>
+    </div>
   );
 }
