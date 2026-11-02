@@ -20,12 +20,12 @@ namespace TrailerForge.Capture
             return MediaExtensions.Contains(Path.GetExtension(name));
         }
 
-        /// <summary>Shot code (upper case, "TF-XXXXX") to the number of finished takes carrying it.</summary>
+        /// <summary>Shot code (upper case, "TF-XXXXX") to the number of finished takes carrying it.
+        /// Dot folders (such as the partial folder) are skipped.</summary>
         public static Dictionary<string, int> Count(string folder)
         {
             var counts = new Dictionary<string, int>();
-            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return counts;
-            foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+            foreach (var file in TakeFiles.Files(folder))
             {
                 if (!IsFinishedTake(file)) continue;
                 var m = CodeRe.Match(Path.GetFileNameWithoutExtension(file));

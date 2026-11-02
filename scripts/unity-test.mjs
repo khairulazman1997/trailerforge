@@ -1,5 +1,5 @@
 // Runs the Unity package tests on the fixture project in batch mode (not part of `pnpm check`).
-//   node scripts/unity-test.mjs [--platform EditMode|PlayMode] [--filter <name>] [--graphics]
+//   node scripts/unity-test.mjs [--platform EditMode|PlayMode] [--filter <name>] [--nographics]
 // Finds Unity through TFORGE_UNITY (the Unity executable) or the newest 2022.3 install of Unity Hub.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
@@ -58,7 +58,7 @@ mkdirSync(outDir, { recursive: true });
 const results = join(outDir, `${platform}.xml`);
 const args = [
   '-batchmode',
-  ...(process.argv.includes('--graphics') || platform === 'PlayMode' ? [] : ['-nographics']),
+  ...(process.argv.includes('--nographics') ? ['-nographics'] : []),
   '-projectPath',
   project,
   '-runTests',

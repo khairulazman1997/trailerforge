@@ -10,6 +10,12 @@ namespace TrailerForge.Capture.Editor
     {
         const string PackKey = "TrailerForge.Capture.PackPath";
         const string OutputKey = "TrailerForge.Capture.OutputFolder";
+        const string FormatKey = "TrailerForge.Capture.Format";
+        const string HudKey = "TrailerForge.Capture.Hud";
+        const string ManualKey = "TrailerForge.Capture.Manual";
+        const string CameraKey = "TrailerForge.Capture.CameraTag";
+
+        enum HudChoice { FromPack, On, Off }
 
         string packPath;
         string outputFolder;
@@ -18,6 +24,12 @@ namespace TrailerForge.Capture.Editor
         Dictionary<string, int> takes = new Dictionary<string, int>();
         Vector2 scroll;
         readonly HashSet<string> open = new HashSet<string>();
+        TakeFormat format;
+        HudChoice hud;
+        bool manual;
+        string cameraTag;
+        string lastResult;
+        MessageType lastResultType;
 
         [MenuItem("Window/TrailerForge/Capture")]
         public static void Open() => GetWindow<CaptureWindow>("TrailerForge Capture");
@@ -26,7 +38,16 @@ namespace TrailerForge.Capture.Editor
         {
             packPath = EditorPrefs.GetString(PackKey, "");
             outputFolder = EditorPrefs.GetString(OutputKey, "");
+            format = (TakeFormat)EditorPrefs.GetInt(FormatKey, (int)TakeFormat.ProRes422HQ);
+            hud = (HudChoice)EditorPrefs.GetInt(HudKey, (int)HudChoice.FromPack);
+            manual = EditorPrefs.GetBool(ManualKey, false);
+            cameraTag = EditorPrefs.GetString(CameraKey, "");
             Reload();
+        }
+
+        void Update()
+        {
+            if (ShotRecorder.Current != null && ShotRecorder.Current.State == TakeState.Recording) Repaint();
         }
 
         void Reload()
@@ -44,6 +65,8 @@ namespace TrailerForge.Capture.Editor
         void OnGUI()
         {
             DrawSetup();
+            DrawRecordOptions();
+            DrawTakeStatus();
             if (error != null) EditorGUILayout.HelpBox(error, MessageType.Error);
             if (pack == null)
             {
@@ -85,6 +108,97 @@ namespace TrailerForge.Capture.Editor
                 EditorGUILayout.HelpBox("Pick the folder TrailerForge watches, so recordings are imported by shot code.", MessageType.Warning);
         }
 
+        void DrawRecordOptions()
+        {
+            EditorGUI.BeginChangeCheck();
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                format = (TakeFormat)EditorGUILayout.EnumPopup("Format", format);
+                hud = (HudChoice)EditorGUILayout.EnumPopup("HUD", hud);
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                manual = !EditorGUILayout.Toggle(new GUIContent("Stop after shot length", "Off: record until you press Stop."), !manual);
+                cameraTag = EditorGUILayout.TextField(new GUIContent("Camera tag", "Empty records the main camera."), cameraTag);
+            }
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorPrefs.SetInt(FormatKey, (int)format);
+                EditorPrefs.SetInt(HudKey, (int)hud);
+                EditorPrefs.SetBool(ManualKey, manual);
+                EditorPrefs.SetString(CameraKey, cameraTag);
+            }
+            if (!EditorApplication.isPlaying)
+                EditorGUILayout.HelpBox("Enter Play Mode, set the shot up, then press Record on it.", MessageType.None);
+        }
+
+        void DrawTakeStatus()
+        {
+            var rec = ShotRecorder.Current;
+            if (rec != null && rec.State == TakeState.Recording)
+            {
+                var target = rec.Request.FrameTarget;
+                var seconds = (double)rec.FramesRecorded / rec.Request.Fps;
+                var text = target > 0
+                    ? $"Recording {rec.Request.Code} take {rec.Take}: {seconds:0.0} of {rec.Request.Seconds:0.#} s"
+                    : $"Recording {rec.Request.Code} take {rec.Take}: {seconds:0.0} s";
+                using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                {
+                    EditorGUILayout.LabelField(text, EditorStyles.boldLabel);
+                    if (GUILayout.Button("Stop", GUILayout.Width(60))) rec.Stop();
+                    if (GUILayout.Button("Cancel", GUILayout.Width(60))) rec.Cancel();
+                }
+                if (target > 0)
+                    EditorGUI.ProgressBar(EditorGUILayout.GetControlRect(false, 6), Mathf.Clamp01((float)rec.FramesRecorded / target), "");
+            }
+            else if (lastResult != null)
+            {
+                EditorGUILayout.HelpBox(lastResult, lastResultType);
+            }
+        }
+
+        void Record(PackItem item)
+        {
+            var request = TakeRequest.FromPack(pack, item, outputFolder);
+            request.Format = format;
+            if (hud != HudChoice.FromPack) request.Hud = hud == HudChoice.On;
+            if (manual) request.Seconds = 0;
+            request.CameraTag = cameraTag ?? "";
+            try
+            {
+                var rec = ShotRecorder.Start(request);
+                rec.Done += OnTakeDone;
+                lastResult = null;
+            }
+            catch (System.Exception e)
+            {
+                lastResult = e.Message;
+                lastResultType = MessageType.Error;
+            }
+        }
+
+        void OnTakeDone(ShotRecorder rec)
+        {
+            switch (rec.State)
+            {
+                case TakeState.Finished:
+                    lastResult = $"Saved {System.IO.Path.GetFileName(rec.FilePath)} ({rec.Sidecar.seconds:0.##} s)." +
+                                 (rec.Warning != null ? " " + rec.Warning : "");
+                    lastResultType = rec.Warning != null ? MessageType.Warning : MessageType.Info;
+                    break;
+                case TakeState.Cancelled:
+                    lastResult = "Take cancelled; nothing was saved.";
+                    lastResultType = MessageType.Info;
+                    break;
+                default:
+                    lastResult = rec.Error;
+                    lastResultType = MessageType.Error;
+                    break;
+            }
+            takes = TakeCounter.Count(outputFolder);
+            Repaint();
+        }
+
         void DrawPack()
         {
             var s = pack.recording.settings;
@@ -112,7 +226,14 @@ namespace TrailerForge.Capture.Editor
             takes.TryGetValue(item.code ?? "", out var n);
             var label = $"{item.code}  #{item.shotNumber} {item.title}  [{item.priority}]  {n} take{(n == 1 ? "" : "s")}{(item.done ? "  ✓" : "")}";
             var isOpen = open.Contains(item.slotId);
-            var now = EditorGUILayout.Foldout(isOpen, label, true);
+            bool now;
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                now = EditorGUILayout.Foldout(isOpen, label, true);
+                var busy = ShotRecorder.Current != null && ShotRecorder.Current.State == TakeState.Recording;
+                using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || busy || string.IsNullOrEmpty(outputFolder)))
+                    if (GUILayout.Button(new GUIContent("Record", "Record a take of this shot"), GUILayout.Width(64))) Record(item);
+            }
             if (now != isOpen) { if (now) open.Add(item.slotId); else open.Remove(item.slotId); }
             if (!now) return;
             using (new EditorGUI.IndentLevelScope())

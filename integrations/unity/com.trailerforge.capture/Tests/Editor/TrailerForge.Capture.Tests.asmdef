@@ -5,7 +5,10 @@
     "TrailerForge.Capture.Runtime",
     "TrailerForge.Capture.Editor",
     "UnityEngine.TestRunner",
-    "UnityEditor.TestRunner"
+    "UnityEditor.TestRunner",
+    "Unity.Recorder.Editor",
+    "Unity.Recorder",
+    "Unity.Recorder.Base"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

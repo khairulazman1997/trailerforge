@@ -1,7 +1,7 @@
 {
   "name": "TrailerForge.Capture.Editor",
   "rootNamespace": "TrailerForge.Capture.Editor",
-  "references": ["TrailerForge.Capture.Runtime"],
+  "references": ["TrailerForge.Capture.Runtime", "Unity.Recorder.Editor", "Unity.Recorder", "Unity.Recorder.Base"],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
