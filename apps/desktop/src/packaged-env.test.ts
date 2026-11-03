@@ -9,6 +9,7 @@ describe('packaged app', () => {
     expect(env.TFORGE_SIDECAR_DIR).toBe(join('C:', 'App', 'resources', 'analysis'));
     expect(env.TFORGE_UV).toBe(join('C:', 'App', 'resources', 'uv', 'uv.exe'));
     expect(env.TFORGE_EFFECTCRAFT).toBe(join('C:', 'App', 'resources', 'effectcraft', 'effectcraft-cli.exe')); // prettier-ignore
+    expect(env.TFORGE_EFFECTCRAFT_TEMPLATES).toBe(join('C:', 'App', 'resources', 'effectcraft', 'templates')); // prettier-ignore
     expect(env.UV_PROJECT_ENVIRONMENT).toBe(join('C:', 'Data', 'engine', 'analysis-env'));
     // Nothing is built behind the user's back: the Setup screen does it after they agree.
     expect(env.TFORGE_SIDECAR_AUTO_SETUP).toBe('0');

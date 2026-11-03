@@ -42,3 +42,5 @@ extraResources:
       - effectcraft-cli.exe
   - from: third-party/effectcraft
     to: effectcraft
+  - from: ../../packages/effectcraft/templates
+    to: effectcraft/templates

@@ -12,12 +12,14 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "templates"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:templates": "node scripts/build-templates.mjs"
   },
   "dependencies": {
     "@trailerforge/graphics": "workspace:*",

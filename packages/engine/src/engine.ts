@@ -81,6 +81,8 @@ export interface EngineOptions {
    * its bundled copy); null registers no EffectCraft renderer.
    */
   effectcraft?: CliLocation | null;
+  /** Folder of the shipped `.ectemplate` files. Default: `TFORGE_EFFECTCRAFT_TEMPLATES`, else the package's own. */
+  effectcraftTemplates?: string;
   /** Disclosure gate for the default client; called before any request leaves the machine. */
   approveSend?: LlmClientOptions['approveSend'];
 }
@@ -134,6 +136,7 @@ export class Engine {
         effectcraftPlugin({
           cli: opts.effectcraft === undefined ? locateCli() : opts.effectcraft,
           workRoot: join(home, 'cache', 'effectcraft-work'),
+          ...(opts.effectcraftTemplates ? { templatesDir: opts.effectcraftTemplates } : {}),
         }),
         ...(opts.plugins ?? []),
       ])),

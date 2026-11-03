@@ -8,6 +8,7 @@ import { compileRender, ffmpegArgs, type EncodeSettings } from '@trailerforge/co
 import { FLICKS_PER_SECOND } from '@trailerforge/schema';
 import { sampleProject } from '@trailerforge/schema/fixtures';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { EffectCraftCli, buildTemplateFiles } from '@trailerforge/effectcraft';
 import { Engine } from './engine.js';
 import { buildVersion, renderGraphics } from './render-ops.js';
 
@@ -160,6 +161,149 @@ describe('EffectCraft graphics in a render', { timeout: 120_000 }, () => {
       );
     } finally {
       await bare.close();
+    }
+  });
+});
+
+describe('shipped EffectCraft templates', { timeout: 120_000 }, () => {
+  const ids = ['effectcraft/title-reveal', 'effectcraft/logo-sting', 'effectcraft/kinetic-text'];
+  let templatesDir: string;
+  const cardTimeline = (
+    templateId: string,
+    res: { width: number; height: number },
+    seconds: number,
+  ) => ({
+    id: 'tl_rough',
+    name: 'Rough cut',
+    frameRate: { num: 30, den: 1 },
+    resolution: res,
+    tracks: [
+      {
+        id: 'trk_cards',
+        kind: 'graphics',
+        items: [
+          {
+            id: 'it_card',
+            kind: 'graphic',
+            start: 0,
+            duration: Math.round(seconds * FLICKS_PER_SECOND),
+            templateId,
+            params: { text: 'EMBER KNIGHT' },
+          },
+        ],
+      },
+    ],
+  });
+  const open = async (name: string, e: Parameters<typeof Engine.start>[0] = {}) => {
+    const eng = await Engine.start({
+      home: join(root, name),
+      autosaveMs: 0,
+      loadUserPlugins: false,
+      ...e,
+    });
+    const s = await eng.createProject(join(root, `${name}.tforge`), {
+      ...sampleProject(),
+      id: `proj_${name}`,
+    } as never);
+    return { eng, s };
+  };
+
+  beforeAll(async () => {
+    templatesDir = join(root, 'ec-templates');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(join(root, 'ec-cwd'), { recursive: true });
+    await buildTemplateFiles(
+      new EffectCraftCli({ bin: process.execPath, prefixArgs: [STUB, 'ok'] }),
+      templatesDir,
+      join(root, 'ec-cwd'),
+    );
+  });
+
+  it('are listed only when EffectCraft is available and the files are there', async () => {
+    const stub = { bin: process.execPath, prefixArgs: [STUB, 'ok'] };
+    const listed = async (e: Parameters<typeof Engine.start>[0]) => {
+      const { eng } = await open(`list-${Math.random().toString(36).slice(2)}`, e);
+      try {
+        return eng.plugins.registries.graphicTemplates
+          .list()
+          .map((t) => t.id)
+          .filter((id) => id.startsWith('effectcraft/'));
+      } finally {
+        await eng.close();
+      }
+    };
+    expect(await listed({ effectcraft: stub, effectcraftTemplates: templatesDir })).toEqual(
+      [...ids].sort(),
+    );
+    expect(await listed({ effectcraft: null, effectcraftTemplates: templatesDir })).toEqual([]);
+    expect(
+      await listed({
+        effectcraft: { bin: process.execPath, prefixArgs: [STUB, 'old'] },
+        effectcraftTemplates: templatesDir,
+      }),
+    ).toEqual([]);
+    expect(
+      await listed({ effectcraft: stub, effectcraftTemplates: join(root, 'no-templates') }),
+    ).toEqual([]);
+  });
+
+  it('draw with EffectCraft at the template size and scaled down, fall back otherwise', async () => {
+    const { eng, s } = await open('tpl', {
+      effectcraft: { bin: process.execPath, prefixArgs: [STUB, 'ok'] },
+      effectcraftTemplates: templatesDir,
+    });
+    try {
+      const build = async (res: { width: number; height: number }, seconds = 2) => {
+        s.dispatch('core/timeline.set', { timeline: cardTimeline(ids[0]!, res, seconds) });
+        return buildVersion(eng, s, null);
+      };
+      const full = await build({ width: 1920, height: 1080 });
+      expect(full.motion.map((m) => m.itemId)).toEqual(['it_card']);
+      expect(full.scenes).toEqual([]);
+      expect(full.warnings.join()).not.toMatch(/instead/);
+      const { frames } = await renderGraphics(s, full, undefined);
+      expect(frames.get('it_card')).toMatchObject({ frames: 60 });
+
+      const draft = await build({ width: 1280, height: 720 });
+      expect(draft.motion).toHaveLength(1);
+      expect((await renderGraphics(s, draft, undefined)).frames.get('it_card')).toMatchObject({
+        frames: 60,
+      });
+
+      for (const [res, seconds, why] of [
+        [{ width: 1080, height: 1920 }, 2, /made for 1920×1080/],
+        [{ width: 1920, height: 1080 }, 12, /at most 10 s/],
+      ] as const) {
+        const b = await build(res, seconds);
+        expect(b.motion).toEqual([]);
+        expect(b.scenes.map((x) => [x.itemId, x.templateId])).toEqual([
+          ['it_card', 'core/title-card'],
+        ]);
+        expect(b.warnings.join('\n')).toMatch(why);
+        expect(b.warnings.join('\n')).toMatch(/drawn with core\/title-card instead/);
+        expect(b.graphics.get('it_card')!.frames).toBe(Math.round(seconds * 30));
+      }
+    } finally {
+      await eng.close();
+    }
+  });
+
+  it('fall back to the built-in card, with a warning, when EffectCraft is not there', async () => {
+    const { eng, s } = await open('tpl-none', { effectcraft: null });
+    try {
+      s.dispatch('core/timeline.set', {
+        timeline: cardTimeline(ids[1]!, { width: 1920, height: 1080 }, 2),
+      });
+      const b = await buildVersion(eng, s, null);
+      expect(b.motion).toEqual([]);
+      expect(b.scenes.map((x) => x.templateId)).toEqual(['core/logo-card']);
+      expect(b.warnings.join('\n')).toMatch(
+        /Logo sting \(EffectCraft\) needs EffectCraft, which is not available \(EffectCraft is not bundled with this build\); drawn with core\/logo-card instead/,
+      );
+      const { frames } = await renderGraphics(s, b, undefined);
+      expect(frames.get('it_card')!.frames).toBe(60);
+    } finally {
+      await eng.close();
     }
   });
 });

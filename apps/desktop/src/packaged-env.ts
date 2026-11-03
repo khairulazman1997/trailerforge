@@ -16,6 +16,7 @@ export function packagedEnv(o: {
     TFORGE_ASSETS_DIR: join(o.resourcesPath, 'assets'),
     TFORGE_SIDECAR_DIR: join(o.resourcesPath, 'analysis'),
     TFORGE_UV: join(o.resourcesPath, 'uv', o.platform === 'win32' ? 'uv.exe' : 'uv'),
+    TFORGE_EFFECTCRAFT_TEMPLATES: join(o.resourcesPath, 'effectcraft', 'templates'),
     // The pinned EffectCraft CLI (plan M8 decision 1); the only copy TrailerForge drives.
     TFORGE_EFFECTCRAFT: join(
       o.resourcesPath,

@@ -1,6 +1,6 @@
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { cachedMotionFrames } from '@trailerforge/effectcraft';
+import { cachedMotionFrames, ecTemplateById, templateMisfit } from '@trailerforge/effectcraft';
 import type { MotionRenderJob, MotionRenderer } from '@trailerforge/plugin-api';
 import {
   CompileError,
@@ -114,30 +114,55 @@ export interface MotionItem {
 }
 
 /**
- * Graphic items whose template no built-in template serves but a motion renderer does (plan M8:
- * `effectcraft/project` and the EffectCraft templates). A project-relative `params.project`
- * (`media/<hash>.ecproj`) is resolved inside the project folder. An unavailable renderer leaves
- * the item out with a warning (the fallback to a built-in template comes with 8.4).
+ * Graphic items a motion renderer draws (plan M8): `effectcraft/project` items and the shipped
+ * EffectCraft templates. A project-relative `params.project` (`media/<hash>.ecproj`) is resolved
+ * inside the project folder.
+ *
+ * A shipped template that cannot be drawn by EffectCraft (it is unavailable, the file is missing,
+ * the picture has another shape, or the item is longer than the template) is drawn by its built-in
+ * fallback instead, with a warning: `swaps` maps the item to the fallback's template id. A project
+ * file that cannot be drawn is left out with a warning.
  */
 async function motionItems(
   engine: Engine,
   store: ProjectStore,
   timeline: Timeline,
   warnings: string[],
-): Promise<MotionItem[]> {
+): Promise<{ items: MotionItem[]; swaps: Map<string, string> }> {
   const renderers = engine.plugins.registries.motionRenderers.list();
-  const templates = engine.plugins.registries.graphicTemplates;
-  const out: MotionItem[] = [];
+  const items: MotionItem[] = [];
+  const swaps = new Map<string, string>();
   for (const track of timeline.tracks)
     for (const item of track.items) {
-      if (item.kind !== 'graphic' || templates.get(item.templateId)) continue;
-      const renderer = renderers.find((r) => r.supports(item.templateId));
-      if (!renderer) continue;
+      if (item.kind !== 'graphic') continue;
+      const def = ecTemplateById(item.templateId);
+      const renderer =
+        renderers.find((r) => r.supports(item.templateId)) ??
+        (def ? renderers.find((r) => r.id === 'effectcraft/cli') : undefined);
+      if (!renderer && !def) continue;
       const label = item.label || item.id;
-      const a = await renderer.available();
-      if (!a.ok) {
-        warnings.push(`"${label}" needs ${renderer.name}, which is not available: ${a.reason}`);
+      const fallback = (why: string) => {
+        swaps.set(item.id, def!.fallback);
+        warnings.push(`"${label}": ${why}; drawn with ${def!.fallback} instead`);
+      };
+      const a = renderer ? await renderer.available() : null;
+      if (!renderer || !a?.ok) {
+        const why = a && !a.ok ? a.reason : 'EffectCraft or its template is not installed';
+        if (def) fallback(`${def.name} needs EffectCraft, which is not available (${why})`);
+        else if (renderer)
+          warnings.push(`"${label}" needs ${renderer.name}, which is not available: ${why}`);
         continue;
+      }
+      if (def && !renderer.supports(item.templateId)) {
+        fallback(`${def.name} is missing or does not match its recorded hash`);
+        continue;
+      }
+      if (def) {
+        const misfit = templateMisfit(def, timeline.resolution, item.duration / FLICKS_PER_SECOND);
+        if (misfit) {
+          fallback(misfit);
+          continue;
+        }
       }
       const params: Record<string, unknown> = { ...item.params };
       if (typeof params.project === 'string') {
@@ -156,12 +181,18 @@ async function motionItems(
         frameRate: timeline.frameRate,
       };
       try {
-        out.push({ itemId: item.id, renderer, job, contentHash: await renderer.fingerprint(job) });
+        items.push({
+          itemId: item.id,
+          renderer,
+          job,
+          contentHash: await renderer.fingerprint(job),
+        });
       } catch (err) {
-        warnings.push(`"${label}": ${err instanceof Error ? err.message : String(err)}`);
+        if (def) fallback(err instanceof Error ? err.message : String(err));
+        else warnings.push(`"${label}": ${err instanceof Error ? err.message : String(err)}`);
       }
     }
-  return out;
+  return { items, swaps };
 }
 
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
@@ -235,18 +266,25 @@ export async function buildVersion(
   // Cards and captions.
   const status = await brandStatus(store.paths.dir, project.brand);
   const logoPresent = !status.warnings.some((w) => w.startsWith('The logo'));
-  const motion = await motionItems(engine, store, timeline, warnings);
+  const { items: motion, swaps } = await motionItems(engine, store, timeline, warnings);
   const motionIds = new Set(motion.map((m) => m.itemId));
   const { scenes, warnings: sceneWarnings } = timelineScenes({
-    timeline: motionIds.size
-      ? {
-          ...timeline,
-          tracks: timeline.tracks.map((t) => ({
-            ...t,
-            items: t.items.filter((i) => !motionIds.has(i.id)),
-          })),
-        }
-      : timeline,
+    timeline:
+      motionIds.size || swaps.size
+        ? {
+            ...timeline,
+            tracks: timeline.tracks.map((t) => ({
+              ...t,
+              items: t.items
+                .filter((i) => !motionIds.has(i.id))
+                .map((i) =>
+                  i.kind === 'graphic' && swaps.has(i.id)
+                    ? { ...i, templateId: swaps.get(i.id)! }
+                    : i,
+                ),
+            })),
+          }
+        : timeline,
     templates: engine.plugins.registries.graphicTemplates,
     brand: project.brand,
     fonts: status.fonts,

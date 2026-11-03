@@ -7,7 +7,14 @@ import { critiqueCommands } from './critique-commands.js';
 import { JobError, defineJob } from '@trailerforge/jobs';
 import { MediaError, makeProxy, probe } from '@trailerforge/media';
 import { definePlugin, PLUGIN_API_VERSION } from '@trailerforge/plugin-api';
-import { EffectCraftRenderer, type CliLocation } from '@trailerforge/effectcraft';
+import {
+  EFFECTCRAFT_VERSION,
+  EffectCraftRenderer,
+  defaultTemplatesDir,
+  ecGraphicTemplates,
+  loadTemplateFiles,
+  type CliLocation,
+} from '@trailerforge/effectcraft';
 import type { MediaInfo } from '@trailerforge/schema';
 import { z } from 'zod';
 
@@ -107,16 +114,34 @@ export const corePlugin = definePlugin({
 
 /**
  * EffectCraft as a motion renderer (plan M8), registered even when the CLI is absent so the
- * Setup page and the graphics pipeline can say why it is unavailable.
+ * Setup page and the graphics pipeline can say why it is unavailable. The shipped templates are
+ * registered as graphics templates only when EffectCraft is available and their files are there
+ * and match their recorded hashes; otherwise slots that name them use the built-in fallback.
  */
-export function effectcraftPlugin(o: { cli: CliLocation | null; workRoot: string }) {
+export function effectcraftPlugin(o: {
+  cli: CliLocation | null;
+  workRoot: string;
+  templatesDir?: string;
+}) {
   return definePlugin({
     id: 'effectcraft',
     name: 'EffectCraft motion graphics',
     version: '0.1.0',
     apiVersion: PLUGIN_API_VERSION,
-    register(ctx) {
-      ctx.motionRenderers.register(new EffectCraftRenderer(o));
+    async register(ctx) {
+      const { files } = loadTemplateFiles(
+        o.templatesDir ?? defaultTemplatesDir(),
+        EFFECTCRAFT_VERSION,
+      );
+      const renderer = new EffectCraftRenderer({
+        cli: o.cli,
+        workRoot: o.workRoot,
+        templates: files,
+      });
+      ctx.motionRenderers.register(renderer);
+      if (!(await renderer.available()).ok) return;
+      for (const t of ecGraphicTemplates(new Set(Object.keys(files))))
+        ctx.graphicTemplates.register(t);
     },
   });
 }

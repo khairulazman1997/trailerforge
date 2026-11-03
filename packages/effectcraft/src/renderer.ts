@@ -21,8 +21,16 @@ export interface EffectCraftRendererOptions {
   cli: CliLocation | null;
   /** Scratch space for runs; each run gets its own folder, removed when it ends. */
   workRoot: string;
-  /** Template id → `.ectemplate` file (the shipped templates, 8.4). */
-  templates?: Record<string, string>;
+  /**
+   * Template id → `.ectemplate` file (the shipped templates). A bare path passes the job's params
+   * as the template's values; `{ file, controls }` maps param names to control names and drops
+   * params that have no control.
+   */
+  templates?: Record<
+    string,
+    | string
+    | { file: string; controls?: Record<string, string>; size?: { width: number; height: number } }
+  >;
   /** Per CLI call (default 10 minutes). */
   timeoutMs?: number;
 }
@@ -74,6 +82,11 @@ export class EffectCraftRenderer implements MotionRenderer {
     return templateId === PROJECT_TEMPLATE_ID || templateId in (this.opts.templates ?? {});
   }
 
+  private templateOf(id: string) {
+    const t = this.opts.templates?.[id];
+    return typeof t === 'string' ? { file: t } : t;
+  }
+
   /** Version, template, source file by content, values, size, rate and length (no paths). */
   async fingerprint(job: Omit<MotionRenderJob, 'outDir'>): Promise<string> {
     const a = await this.available();
@@ -84,7 +97,11 @@ export class EffectCraftRenderer implements MotionRenderer {
       const { project, ...rest } = job.params;
       if (typeof project === 'string') file = project;
       params = rest;
-    } else file = this.opts.templates?.[job.templateId];
+    } else {
+      const t = this.templateOf(job.templateId);
+      file = t?.file;
+      params = t ? valuesFor(t, job.params) : params;
+    }
     if (!file) throw new Error(`EffectCraft cannot render ${job.templateId} with these params`);
     return motionContentHash({
       version: a.version,
@@ -112,13 +129,20 @@ export class EffectCraftRenderer implements MotionRenderer {
         const comp = job.params.comp;
         source = [project, ...(typeof comp === 'string' ? ['--comp', comp] : [])];
       } else {
-        const template = this.opts.templates?.[job.templateId];
+        const template = this.templateOf(job.templateId);
         if (!template) throw new Error(`EffectCraft has no template ${job.templateId}`);
         const values = join(cwd, 'values.json');
-        await writeFile(values, JSON.stringify(job.params));
-        source = ['--template', template, '--values', values];
+        await writeFile(values, JSON.stringify(valuesFor(template, job.params)));
+        source = ['--template', template.file, '--values', values];
       }
-      return this.renderFrames(cli, source, job, run, warnings);
+      return this.renderFrames(
+        cli,
+        source,
+        job,
+        run,
+        warnings,
+        scaleFor(this.templateOf(job.templateId), job),
+      );
     });
   }
 
@@ -201,6 +225,7 @@ export class EffectCraftRenderer implements MotionRenderer {
     job: MotionRenderJob,
     run: { cwd: string; signal: AbortSignal; timeoutMs: number },
     warnings: string[],
+    scale = 'full',
   ): Promise<MotionRenderResult> {
     const fpf = flicksPerFrame(job.frameRate);
     const frames = Math.max(1, Math.round(job.duration / fpf));
@@ -221,7 +246,7 @@ export class EffectCraftRenderer implements MotionRenderer {
         '--quality',
         'best',
         '--resolution',
-        'full',
+        scale,
         '--fps',
         String(Math.round((job.frameRate.num / job.frameRate.den) * 1e6) / 1e6),
         '--start',
@@ -329,4 +354,32 @@ export async function pngHeader(
   } finally {
     await f.close();
   }
+}
+
+/** Param names → control names; text values only (the CLI's values file wants plain values). */
+function valuesFor(
+  t: { controls?: Record<string, string> },
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!t.controls) return params;
+  const out: Record<string, unknown> = {};
+  for (const [param, control] of Object.entries(t.controls))
+    if (params[param] !== undefined && params[param] !== '') out[control] = params[param];
+  return out;
+}
+
+/**
+ * A template is made for one size; a smaller picture of the same shape (a 720p draft of a 1080p
+ * cut) is asked of EffectCraft as that fraction of the full size. Anything else renders at full
+ * size, and the size check afterwards refuses a mismatch.
+ */
+function scaleFor(
+  t: { size?: { width: number; height: number } } | undefined,
+  job: { resolution: { width: number; height: number } },
+): string {
+  const size = t?.size;
+  if (!size || (size.width === job.resolution.width && size.height === job.resolution.height))
+    return 'full';
+  const k = job.resolution.width / size.width;
+  return String(Math.round(k * 1e9) / 1e9);
 }

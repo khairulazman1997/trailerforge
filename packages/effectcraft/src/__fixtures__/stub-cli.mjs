@@ -22,6 +22,8 @@ const KNOWN = new Set([
   'keys.select',
   'keys.easyEase',
   'keys.toggleHold',
+  'essential.addProperty',
+  'essential.exportTemplate',
 ]);
 
 const fail = (msg) => {
@@ -75,6 +77,15 @@ if (cmd === 'run') {
     if (id === 'comp.new') project.comps.push({ ...params });
     if (id === 'layer.newText' && typeof params.text !== 'string') fail('layer.newText: text');
     project.log.push([id, params]);
+    if (id === 'essential.exportTemplate') {
+      const controls = project.log
+        .filter(([c]) => c === 'essential.addProperty')
+        .map(([, p]) => p.name);
+      writeFileSync(
+        params.path,
+        JSON.stringify({ savedBy: '0.9.2', schema: 2, controls, comps: project.comps.slice(-1) }),
+      );
+    }
     results.push({ command: id, result: {} });
   }
   const out = opt('--save-as') ?? (argv.includes('--save') ? opt('--project') : undefined);
@@ -112,11 +123,14 @@ if (cmd === 'render') {
   const end = Math.min(Number(opt('--end') ?? comp.duration), comp.duration);
   const frames = Math.round((end - start) * fps);
   const out = opt('--out');
-  const w = mode === 'wrong-size' ? comp.width + 2 : comp.width;
+  const k = Number(opt('--resolution'));
+  const scale = Number.isFinite(k) && k > 0 ? k : 1;
+  const w = Math.round(comp.width * scale) + (mode === 'wrong-size' ? 2 : 0);
+  const h = Math.round(comp.height * scale);
   for (let k = 0; k < frames; k++) {
     if (mode === 'slow') await sleep(150);
     const digest = createHash('sha256').update(`${seed}:${k}`).digest();
-    const png = encodePng(w, comp.height, mode === 'no-alpha' ? 2 : 6, digest);
+    const png = encodePng(w, h, mode === 'no-alpha' ? 2 : 6, digest);
     const file = out.replace(/\[(#+)\]/, (_, h) => String(k).padStart(h.length, '0'));
     writeFileSync(file, png);
   }

@@ -14,6 +14,7 @@ const FILES = [
   'resources/effectcraft/LICENSE-MIT',
   'resources/effectcraft/LICENSE-APACHE',
   'resources/effectcraft/NOTICE',
+  'resources/effectcraft/templates/manifest.json',
   'resources/analysis/pyproject.toml',
   'resources/analysis/uv.lock',
   'resources/analysis/.python-version',
