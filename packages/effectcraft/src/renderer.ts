@@ -7,6 +7,7 @@ import { FLICKS_PER_SECOND, flicksPerFrame, type Rate } from '@trailerforge/sche
 import { EffectCraftCli, EffectCraftError, type CliLocation } from './cli.js';
 import { pinProblem } from './pin.js';
 import { checkProjectFile, type ProjectHeader } from './project-file.js';
+import { motionContentHash } from './motion-cache.js';
 import { chunkCommands, sceneCommands, type EcCommand } from './scene-commands.js';
 
 /** Renders a stored `.ecproj`: params `{ project: <absolute path>, comp?: <name> }`. */
@@ -40,7 +41,7 @@ export interface AuthoredProject {
  * `outDir`; cancelling kills the process and removes the run's files.
  */
 export class EffectCraftRenderer implements MotionRenderer {
-  readonly id = 'effectcraft';
+  readonly id = 'effectcraft/cli';
   readonly name = 'EffectCraft';
   private readonly cli: EffectCraftCli | null;
   private checked: Promise<{ ok: true; version: string } | { ok: false; reason: string }> | null =
@@ -71,6 +72,31 @@ export class EffectCraftRenderer implements MotionRenderer {
 
   supports(templateId: string): boolean {
     return templateId === PROJECT_TEMPLATE_ID || templateId in (this.opts.templates ?? {});
+  }
+
+  /** Version, template, source file by content, values, size, rate and length (no paths). */
+  async fingerprint(job: Omit<MotionRenderJob, 'outDir'>): Promise<string> {
+    const a = await this.available();
+    if (!a.ok) throw new EffectCraftError('missing', a.reason);
+    let file: string | undefined;
+    let params = job.params;
+    if (job.templateId === PROJECT_TEMPLATE_ID) {
+      const { project, ...rest } = job.params;
+      if (typeof project === 'string') file = project;
+      params = rest;
+    } else file = this.opts.templates?.[job.templateId];
+    if (!file) throw new Error(`EffectCraft cannot render ${job.templateId} with these params`);
+    return motionContentHash({
+      version: a.version,
+      templateId: job.templateId,
+      sourceSha256: createHash('sha256')
+        .update(await readFile(file))
+        .digest('hex'),
+      params,
+      resolution: job.resolution,
+      frameRate: job.frameRate,
+      duration: job.duration,
+    });
   }
 
   async render(job: MotionRenderJob, signal: AbortSignal): Promise<MotionRenderResult> {

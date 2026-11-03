@@ -198,6 +198,12 @@ export interface MotionRenderer {
   name: string;
   available(): Promise<{ ok: true; version?: string } | { ok: false; reason: string }>;
   supports(templateId: string): boolean;
+  /**
+   * What the frames depend on, as a hash: the renderer and its version plus the job's inputs
+   * by content (never by path). Equal fingerprints draw equal frames; it keys the frame cache and
+   * goes into the render plan hash.
+   */
+  fingerprint(job: Omit<MotionRenderJob, 'outDir'>): Promise<string>;
   render(job: MotionRenderJob, signal: AbortSignal): Promise<MotionRenderResult>;
 }
 

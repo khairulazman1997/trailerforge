@@ -7,6 +7,7 @@ import { critiqueCommands } from './critique-commands.js';
 import { JobError, defineJob } from '@trailerforge/jobs';
 import { MediaError, makeProxy, probe } from '@trailerforge/media';
 import { definePlugin, PLUGIN_API_VERSION } from '@trailerforge/plugin-api';
+import { EffectCraftRenderer, type CliLocation } from '@trailerforge/effectcraft';
 import type { MediaInfo } from '@trailerforge/schema';
 import { z } from 'zod';
 
@@ -103,3 +104,19 @@ export const corePlugin = definePlugin({
     ctx.jobs.register(proxyJob);
   },
 });
+
+/**
+ * EffectCraft as a motion renderer (plan M8), registered even when the CLI is absent so the
+ * Setup page and the graphics pipeline can say why it is unavailable.
+ */
+export function effectcraftPlugin(o: { cli: CliLocation | null; workRoot: string }) {
+  return definePlugin({
+    id: 'effectcraft',
+    name: 'EffectCraft motion graphics',
+    version: '0.1.0',
+    apiVersion: PLUGIN_API_VERSION,
+    register(ctx) {
+      ctx.motionRenderers.register(new EffectCraftRenderer(o));
+    },
+  });
+}

@@ -263,6 +263,9 @@ importers:
       '@trailerforge/cut':
         specifier: workspace:*
         version: link:../cut
+      '@trailerforge/effectcraft':
+        specifier: workspace:*
+        version: link:../effectcraft
       '@trailerforge/effects':
         specifier: workspace:*
         version: link:../effects

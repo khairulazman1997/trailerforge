@@ -63,6 +63,12 @@ export interface RenderSpec {
   slateFont?: CompileInput['slateFont'];
   /** Segment length in seconds (rounded to whole frames). Default 5. */
   segmentSeconds?: number;
+  /**
+   * Why parts of the picture may not come out byte-identical on another render (e.g. motion
+   * graphics whose renderer once drew different frames for the same input). Any reason makes the
+   * manifest's `reproducible` false and is recorded there.
+   */
+  nonReproducible?: string[];
   output: string;
 }
 
@@ -81,6 +87,8 @@ export interface RenderManifest {
   ffmpeg: string;
   /** False when a hardware encoder made the picture: the bytes depend on the machine. */
   reproducible: boolean;
+  /** The reasons `reproducible` is false, besides a hardware encoder. */
+  notReproducibleBecause?: string[];
   segments: SegmentEntry[];
   audio?: { mixHash: string; master: MasterSettings | null; file: string; sha256: string };
   output?: { file: string; sha256: string; bytes: number };
@@ -200,7 +208,8 @@ export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promis
     version: VIDEO_RENDER_VERSION,
     planHash: full.planHash,
     ffmpeg: build,
-    reproducible: !spec.encode.video.hardware,
+    reproducible: !spec.encode.video.hardware && !spec.nonReproducible?.length,
+    ...(spec.nonReproducible?.length ? { notReproducibleBecause: spec.nonReproducible } : {}),
     segments: [],
   };
   try {
@@ -210,7 +219,12 @@ export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promis
       prev.planHash === full.planHash &&
       prev.ffmpeg === build
     )
-      manifest = { ...prev };
+      manifest = {
+        ...prev,
+        reproducible: !spec.encode.video.hardware && !spec.nonReproducible?.length,
+      };
+    if (spec.nonReproducible?.length) manifest.notReproducibleBecause = spec.nonReproducible;
+    else delete manifest.notReproducibleBecause;
     delete manifest.output;
   } catch {
     // no manifest yet, or a damaged one: start over
@@ -224,7 +238,7 @@ export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promis
   const ranges = planSegments(full.range.frames, spec.timeline.frameRate, spec.segmentSeconds);
   await ensureFreeSpace(opts.workRoot, Math.round((W * H * full.range.frames) / 8));
   const segEncode: EncodeSettings = { ...spec.encode, container: 'mkv' };
-  const warnings = [...full.warnings];
+  const warnings = [...full.warnings, ...(spec.nonReproducible ?? [])];
   let rendered = 0;
   let reused = 0;
   const report = (phase: RenderProgress['phase']) =>

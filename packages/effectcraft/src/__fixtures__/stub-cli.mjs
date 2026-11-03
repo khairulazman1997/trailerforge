@@ -3,9 +3,10 @@
 // (`--version`, `run`, `info`, `render` of a project or a template) with the real CLI's shapes:
 // `{"error": …}` on stdout and exit 1 on failure, numbered PNG frames plus a render log.
 // Modes: ok | old (reports 0.8.0) | slow (frames take 150 ms each) | no-alpha | wrong-size |
-// fail-render | env:<file> (writes the environment it saw to <file>).
+// fail-render | drift (different frames every run) | env:<file> (writes its environment to <file>).
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
+import { crc32, deflateSync } from 'node:zlib';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
@@ -105,6 +106,7 @@ if (cmd === 'render') {
     if (!comp) fail('no composition');
     seed = JSON.stringify(p);
   }
+  if (mode === 'drift') seed += `:${process.hrtime.bigint()}`;
   const fps = Number(opt('--fps') ?? comp.frameRate);
   const start = Number(opt('--start') ?? 0);
   const end = Math.min(Number(opt('--end') ?? comp.duration), comp.duration);
@@ -113,22 +115,8 @@ if (cmd === 'render') {
   const w = mode === 'wrong-size' ? comp.width + 2 : comp.width;
   for (let k = 0; k < frames; k++) {
     if (mode === 'slow') await sleep(150);
-    const ihdr = Buffer.alloc(13);
-    ihdr.writeUInt32BE(w, 0);
-    ihdr.writeUInt32BE(comp.height, 4);
-    ihdr[8] = 8;
-    ihdr[9] = mode === 'no-alpha' ? 2 : 6;
-    const body = createHash('sha256').update(`${seed}:${k}`).digest();
-    const len = Buffer.alloc(4);
-    len.writeUInt32BE(13);
-    const png = Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      len,
-      Buffer.from('IHDR'),
-      ihdr,
-      Buffer.alloc(4),
-      body,
-    ]);
+    const digest = createHash('sha256').update(`${seed}:${k}`).digest();
+    const png = encodePng(w, comp.height, mode === 'no-alpha' ? 2 : 6, digest);
     const file = out.replace(/\[(#+)\]/, (_, h) => String(k).padStart(h.length, '0'));
     writeFileSync(file, png);
   }
@@ -138,3 +126,39 @@ if (cmd === 'render') {
 }
 
 fail(`unknown subcommand ${cmd}`);
+
+/** A real PNG: one colour per frame from `digest`, a translucent band in the middle. */
+function encodePng(w, h, colorType, digest) {
+  const ch = colorType === 6 ? 4 : 3;
+  const raw = Buffer.alloc((w * ch + 1) * h);
+  for (let y = 0; y < h; y++) {
+    const row = y * (w * ch + 1);
+    const band = y > h / 3 && y < (2 * h) / 3;
+    for (let x = 0; x < w; x++) {
+      const o = row + 1 + x * ch;
+      raw[o] = digest[0];
+      raw[o + 1] = digest[1];
+      raw[o + 2] = digest[2];
+      if (ch === 4) raw[o + 3] = band ? 255 : 0;
+    }
+  }
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = colorType;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
