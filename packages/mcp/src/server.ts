@@ -30,6 +30,8 @@ import {
   handoffOp,
   critiqueOp,
   authorEffectOp,
+  effectcraftStatusOp,
+  effectProposalsOp,
   rejectEffectOp,
   AuthoredEffect,
   healthOp,
@@ -816,6 +818,34 @@ export function createMcpServer(opts: McpServerOptions): Server {
     },
     async run(args) {
       return critiqueOp(engine, await project(args), versionArg(args));
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'effectcraft_status',
+      description:
+        'Is the bundled EffectCraft (motion graphics) usable? Returns its state (ready, not-bundled, missing, wrong-version, broken), the version it found against the one this app is built for, the ready-made templates that are available and what is wrong with the others. Reads only.',
+      inputSchema: object({}),
+      annotations: ReadOnly,
+    },
+    async run() {
+      return effectcraftStatusOp(engine);
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'effectcraft_proposals',
+      description:
+        "Custom effects written by effectcraft_author (or from storyboard briefs) that wait for the user to accept or reject them: name, summary, length, the slot they were written for and the request as it was sent. Accepting is the user's decision (the app or `tforge effectcraft accept`). Reads only.",
+      inputSchema: object({}),
+      annotations: ReadOnly,
+    },
+    async run(args) {
+      return effectProposalsOp(await project(args));
     },
   });
 

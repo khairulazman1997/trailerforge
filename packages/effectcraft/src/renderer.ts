@@ -41,6 +41,8 @@ export interface EffectCraftRendererOptions {
     | string
     | { file: string; controls?: Record<string, string>; size?: { width: number; height: number } }
   >;
+  /** Why some shipped templates are not offered (missing or changed files), for the status view. */
+  templateProblems?: string[];
   /** Per CLI call (default 10 minutes). */
   timeoutMs?: number;
 }
@@ -67,6 +69,11 @@ export class EffectCraftRenderer implements MotionRenderer {
 
   constructor(private readonly opts: EffectCraftRendererOptions) {
     this.cli = opts.cli ? new EffectCraftCli(opts.cli) : null;
+  }
+
+  /** What was wrong with the shipped template files when this renderer was made (set by the plugin). */
+  templateProblems(): string[] {
+    return this.opts.templateProblems ?? [];
   }
 
   /** Bundled, starts, and is exactly the pinned version. Checked once per renderer. */

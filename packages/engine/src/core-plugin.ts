@@ -130,7 +130,7 @@ export function effectcraftPlugin(o: {
     version: '0.1.0',
     apiVersion: PLUGIN_API_VERSION,
     async register(ctx) {
-      const { files } = loadTemplateFiles(
+      const { files, problems } = loadTemplateFiles(
         o.templatesDir ?? defaultTemplatesDir(),
         EFFECTCRAFT_VERSION,
       );
@@ -138,6 +138,7 @@ export function effectcraftPlugin(o: {
         cli: o.cli,
         workRoot: o.workRoot,
         templates: files,
+        templateProblems: problems,
       });
       ctx.motionRenderers.register(renderer);
       for (const command of effectcraftCommands) ctx.commands.register(command);

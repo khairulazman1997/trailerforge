@@ -14,7 +14,9 @@ import {
   importExample,
   PROJECT_TEMPLATE_ID,
   EC_TEMPLATES,
+  EFFECTCRAFT_VERSION,
   authorEffect,
+  effectWire,
   cachedMotionFrames,
   type EffectRequest,
 } from '@trailerforge/effectcraft';
@@ -58,6 +60,11 @@ const Stored = z.object({
   seconds: z.number(),
   landAt: z.number().optional(),
   sha256: z.string(),
+  /** Folder name of the preview frames under `cache/render-frames`. */
+  previewDir: z.string().optional(),
+  /** Preview length in frames and the frame to show as a still. */
+  frames: z.number().optional(),
+  still: z.number().optional(),
   createdAt: z.string(),
   provider: z.string().optional(),
   model: z.string().optional(),
@@ -220,6 +227,14 @@ export async function authorEffectOp(
       seconds,
       ...(landAt !== undefined ? { landAt } : {}),
       sha256: r.project.sha256,
+      previewDir: frames.contentHash.slice(0, 24),
+      frames: frames.frames,
+      still: Math.min(
+        frames.frames - 1,
+        landAt !== undefined
+          ? Math.round((landAt * FLICKS_PER_SECOND) / flicksPerFrame(tl.frameRate))
+          : Math.floor(frames.frames / 2),
+      ),
       createdAt,
       ...(r.provider ? { provider: r.provider } : {}),
       ...(r.model ? { model: r.model } : {}),
@@ -524,4 +539,117 @@ export async function shownReferenceStills(
   file: string,
 ): Promise<{ at: number; sha256: string; path: string }[]> {
   return readStills(store, await referenceFile(engine, file));
+}
+
+export interface EffectCraftStatus {
+  /** `ready`; `not-bundled` (no CLI in this build); `missing` (the file is gone); `wrong-version`; `broken` (does not start). */
+  state: 'ready' | 'not-bundled' | 'missing' | 'wrong-version' | 'broken';
+  /** The version the app is built for. */
+  pinned: string;
+  /** The version found, when it started. */
+  version?: string;
+  /** Why it is not ready, in plain words. */
+  reason?: string;
+  /** The shipped templates: usable ids (listed in the pickers) and what is wrong with the others. */
+  templates: { available: string[]; problems: string[] };
+}
+
+/** Is the bundled EffectCraft usable, and which of its templates? Reads only; starts the CLI once. */
+export async function effectcraftStatusOp(engine: Engine): Promise<EffectCraftStatus> {
+  const r = engine.plugins.registries.motionRenderers.get('effectcraft/cli');
+  const reg = engine.plugins.registries.graphicTemplates;
+  const available = EC_TEMPLATES.filter((d) => reg.get(d.id)).map((d) => d.id);
+  const base = { pinned: EFFECTCRAFT_VERSION };
+  if (!(r instanceof EffectCraftRenderer))
+    return { ...base, state: 'not-bundled', reason: 'EffectCraft is not part of this build', templates: { available, problems: [] } }; // prettier-ignore
+  const a = await r.available();
+  const problems = r.templateProblems();
+  if (a.ok)
+    return { ...base, state: 'ready', version: a.version ?? EFFECTCRAFT_VERSION, templates: { available, problems } }; // prettier-ignore
+  const state = /not bundled/.test(a.reason)
+    ? 'not-bundled'
+    : /is missing at/.test(a.reason)
+      ? 'missing'
+      : /not the pinned/.test(a.reason)
+        ? 'wrong-version'
+        : 'broken';
+  const found = /effectcraft-cli (\d+\.\d+\.\d+\S*) is not the pinned/.exec(a.reason)?.[1];
+  return { ...base, state, ...(found ? { version: found } : {}), reason: a.reason, templates: { available, problems } }; // prettier-ignore
+}
+
+/** The PNG of one preview frame of a proposal (for the app to show), or null when it is not there. */
+export async function proposalFrameOp(
+  store: ProjectStore,
+  proposalId: string,
+  frame: number,
+): Promise<string | null> {
+  const { p } = await readProposal(store, proposalId);
+  if (!p.previewDir || !Number.isInteger(frame) || frame < 0) return null;
+  const file = join(store.paths.cache, 'render-frames', p.previewDir, `frame_${String(frame).padStart(6, '0')}.png`); // prettier-ignore
+  return existsSync(file) ? file : null;
+}
+
+/** The PNG of one of the stills `referenceStillsOp` made (what would be sent), or null. */
+export async function referenceStillFileOp(
+  engine: Engine,
+  store: ProjectStore,
+  file: string,
+  index: number,
+): Promise<string | null> {
+  const shown = await shownReferenceStills(engine, store, file);
+  return shown[index]?.path ?? null;
+}
+
+export interface EffectRequestPreview {
+  provider?: {
+    id: string;
+    name: string;
+    kind: string;
+    sendsDataOffDevice: boolean;
+    vision: boolean;
+  };
+  model?: string;
+  /** No usable AI: the effect can still be written by Claude Code through MCP. */
+  reason?: string;
+  /** The request exactly as it would go out, as data. */
+  wire: Record<string, unknown>;
+  /** Whether stills would go too (only with consent, and only to an AI that can look at them). */
+  stills: { possible: boolean; why?: string };
+  /** Game facts left out because you excluded them. */
+  excluded: number;
+}
+
+/** What "Describe an effect" would send, before anything is sent. Starts nothing. */
+export async function effectRequestPreviewOp(
+  engine: Engine,
+  store: ProjectStore,
+  input: { words: string; seconds: number; landAt?: number },
+): Promise<EffectRequestPreview> {
+  const tl = masterTimeline(store);
+  const brand = store.state.brand;
+  const wire = effectWire(
+    {
+      words: input.words,
+      seconds: input.seconds,
+      ...(input.landAt !== undefined ? { landAt: input.landAt } : {}),
+      size: tl.resolution,
+      frameRate: tl.frameRate.num / tl.frameRate.den,
+      brand: brand ? { colors: brand.colors, fonts: brand.fonts.map((f) => f.family) } : null,
+    },
+    excludedTerms(store.state.knowledge),
+  );
+  const excluded = store.state.knowledge.filter((e) => e.excludedFromLlm).length;
+  const route = await engine.llm.describeRoute('effectcraft.author');
+  if (!route.ok)
+    return { reason: route.reason, wire, stills: { possible: false, why: route.reason }, excluded };
+  const p = route.provider;
+  return {
+    provider: { id: p.id, name: p.name, kind: p.kind, sendsDataOffDevice: p.sendsDataOffDevice, vision: !!p.vision }, // prettier-ignore
+    ...(route.model ? { model: route.model } : {}),
+    wire,
+    stills: p.vision
+      ? { possible: true }
+      : { possible: false, why: `${p.name} cannot look at images` },
+    excluded,
+  };
 }

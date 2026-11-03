@@ -16,6 +16,7 @@ import {
   type HandoffFormat,
   type Progress,
   acceptEffectOp,
+  effectcraftStatusOp,
   authorEffectOp,
   rejectEffectOp,
   referenceStillsOp,
@@ -402,4 +403,18 @@ export async function effectcraftCommand(
     ctx.emit(`Discarded ${r.removed}`, r);
     return 0;
   });
+}
+
+/** `tforge effectcraft status`: the bundled EffectCraft and its templates. */
+export async function effectcraftStatusCommand(ctx: CmdCtx): Promise<number> {
+  const st = await effectcraftStatusOp(ctx.engine);
+  const lines = [
+    st.state === 'ready'
+      ? `EffectCraft ${st.version}: ready (pinned ${st.pinned})`
+      : `EffectCraft: ${st.state}${st.reason ? ` — ${st.reason}` : ''} (pinned ${st.pinned})`,
+    `Templates: ${st.templates.available.length ? st.templates.available.join(', ') : 'none available'}`,
+    ...st.templates.problems.map((p) => `  ${p}`),
+  ];
+  ctx.emit(lines.join('\n'), st);
+  return st.state === 'ready' ? 0 : 1;
 }

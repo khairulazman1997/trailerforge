@@ -127,6 +127,8 @@ describe('tool surface', () => {
         'match_accept',
         'take_ranking',
         'critique_run',
+        'effectcraft_status',
+        'effectcraft_proposals',
         'effectcraft_author',
         'effectcraft_discard',
         'health_check',
