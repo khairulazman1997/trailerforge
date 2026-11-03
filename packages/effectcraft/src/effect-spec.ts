@@ -76,7 +76,11 @@ const MAX_PARAM_BYTES = 8_000;
 const MAX_DEPTH = 6;
 
 /** Problems with an authored effect's commands, in words the model can act on; empty = fine. */
-export function effectProblems(commands: readonly EcCommand[]): string[] {
+export function effectProblems(
+  commands: readonly EcCommand[],
+  opts: { comps?: readonly string[] } = {},
+): string[] {
+  const comps = opts.comps ?? [EFFECT_COMP];
   const out: string[] = [];
   commands.forEach((c, i) => {
     const at = `command ${i + 1} (${c.command})`;
@@ -95,8 +99,10 @@ export function effectProblems(commands: readonly EcCommand[]): string[] {
       if (path.length > MAX_DEPTH) return out.push(`${where}: nested too deeply`);
       if (key && FORBIDDEN_KEYS.has(key))
         return out.push(`${where}: not allowed (no files, footage or code)`);
-      if (key === 'comp' && v !== EFFECT_COMP)
-        return out.push(`${where}: only the composition "${EFFECT_COMP}" may be used`);
+      if (key === 'comp' && !comps.includes(String(v)))
+        return out.push(
+          `${where}: only the composition${comps.length > 1 ? 's' : ''} ${comps.map((c) => `"${c}"`).join(', ')} may be used`,
+        );
       if (typeof v !== 'string') return;
       if (key === 'path') {
         if (!PROPERTY_PATH.test(v) || v.startsWith('/') || v.includes('..'))

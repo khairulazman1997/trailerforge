@@ -6,3 +6,4 @@ export * from './sidecar.js';
 export * from './vision.js';
 export * from './vision-model.js';
 export * from './setup.js';
+export * from './reference.js';

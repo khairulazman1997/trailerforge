@@ -1,13 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
+import { analyzeReference } from '@trailerforge/analysis';
+import { probe, runTool } from '@trailerforge/media';
 import { appendDecisions, type ProjectStore } from '@trailerforge/core';
 import {
   AuthoredEffect,
   EFFECT_COMP,
   EffectCraftRenderer,
+  EffectCraftError,
   EffectRefusedError,
+  importExample,
   PROJECT_TEMPLATE_ID,
   EC_TEMPLATES,
   authorEffect,
@@ -92,6 +96,13 @@ export interface AuthorEffectInput {
   effect?: AuthoredEffect;
   /** The storyboard slot whose effect brief this is written from. */
   slotId?: string;
+  /** Start from an example animation: a Lottie `.json`, or an `.ecproj` made here (plan M8 decision 10). */
+  example?: { file: string };
+  /**
+   * Match a reference clip's style. It is measured on this computer and only the numbers go out;
+   * stills go too only with `stills.consent` and exactly the frames `referenceStillsOp` showed.
+   */
+  reference?: { file: string; stills?: { consent: true; sha256: string[] } };
 }
 
 /**
@@ -130,12 +141,62 @@ export async function authorEffectOp(
   const signal = opts.signal ?? new AbortController().signal;
   await mkdir(dir, { recursive: true });
   try {
+    let base: { project: string; comps: string[] } | undefined;
+    if (input.example) {
+      const ex = await importExample(renderer, resolve(input.example.file), {
+        dest: join(dir, 'example.ecproj'),
+        size: tl.resolution,
+        frameRate: rate,
+        seconds,
+        signal,
+      }).catch((e: unknown) => {
+        if (e instanceof EffectCraftError && e.code !== 'cancelled')
+          throw new OpError('usage', `cannot use that example: ${e.message}`);
+        throw e;
+      });
+      base = { project: ex.project, comps: ex.comps };
+      req.example = ex.summary;
+    }
+    let images: { mediaType: 'image/png'; data: string }[] | undefined;
+    if (input.reference) {
+      const file = await referenceFile(engine, input.reference.file);
+      req.reference = await analyzeReference(file, { signal });
+      const st = input.reference.stills;
+      if (st) {
+        if ((st as { consent: unknown }).consent !== true)
+          throw new OpError('usage', 'stills are sent only when you agree to it');
+        const shown = await readStills(store, file);
+        if (shown.length !== st.sha256.length || shown.some((x, i) => x.sha256 !== st.sha256[i]))
+          throw new OpError('usage', 'the stills changed since you saw them; look at them again');
+        images = await Promise.all(
+          shown.map(async (x) => ({ mediaType: 'image/png' as const, data: (await readFile(x.path)).toString('base64') })), // prettier-ignore
+        );
+        await appendDecisions(store.paths.decisions, [
+          {
+            id: `dec_${id}_stills`,
+            at: (opts.now ?? (() => new Date()))().toISOString(),
+            step: 'effectcraft/reference-stills',
+            subject: { kind: 'timeline', id: tl.id },
+            choice: { frames: shown.map((x) => ({ at: x.at, sha256: x.sha256 })) },
+            reasons: {
+              consent: true,
+              why: 'the user agreed to send these stills for a custom effect',
+            },
+            summary: `Sent ${shown.length} stills of a reference clip to the AI for a custom effect`,
+            alternatives: [],
+          },
+        ]);
+      }
+    }
     const r = await authorEffect({ llm: engine.llmFor(store), renderer }, req, {
       terms: excludedTerms(store.state.knowledge),
       dest: join(dir, 'effect.ecproj'),
       signal,
       ...(input.effect ? { given: input.effect } : {}),
+      ...(base ? { base } : {}),
+      ...(images ? { images } : {}),
     });
+    await rm(join(dir, 'example.ecproj'), { force: true });
     const duration = Math.round(seconds * FLICKS_PER_SECOND);
     const frames = await cachedMotionFrames(
       renderer,
@@ -400,4 +461,67 @@ export async function effectBriefsOp(
     opts.onProgress?.(++done, briefs.length);
   }
   return out;
+}
+
+/** A reference clip, which must not be one of the game's recordings in the library. */
+async function referenceFile(engine: Engine, file: string): Promise<string> {
+  const abs = resolve(file);
+  if (!existsSync(abs)) throw new OpError('not-found', `no file ${basename(abs)}`);
+  if (engine.library.list().some((a) => a.uri === abs))
+    throw new OpError('usage', 'that is a recording from your library; a reference must be someone else\'s example, not game footage'); // prettier-ignore
+  return abs;
+}
+
+const STILLS = 8;
+const stillsDir = (store: ProjectStore, file: string) =>
+  join(store.paths.cache, 'effectcraft', 'references', createHash('sha256').update(file).digest('hex').slice(0, 16)); // prettier-ignore
+
+async function readStills(store: ProjectStore, file: string) {
+  try {
+    const list = JSON.parse(await readFile(join(stillsDir(store, file), 'stills.json'), 'utf8')) as { at: number; sha256: string; file: string }[]; // prettier-ignore
+    return list.map((x) => ({ ...x, path: join(stillsDir(store, file), x.file) }));
+  } catch {
+    throw new OpError('usage', 'look at the stills first (they are made for you to check before anything is sent)'); // prettier-ignore
+  }
+}
+
+/**
+ * The stills of a reference clip that would be sent if the user agrees (plan M8 decision 10
+ * (iii)): eight frames spread over the clip, at most 640 px wide, made on this computer and shown
+ * before anything leaves it. Their hashes must come back with the consent.
+ */
+export async function referenceStillsOp(
+  engine: Engine,
+  store: ProjectStore,
+  input: { file: string },
+  opts: { signal?: AbortSignal } = {},
+): Promise<{ stills: { index: number; at: number; sha256: string; path: string }[] }> {
+  const file = await referenceFile(engine, input.file);
+  const info = await probe(file, { tools: engine.tools });
+  const seconds = info.duration;
+  if (!(seconds > 0) || !info.video.length)
+    throw new OpError('usage', 'the reference has no picture');
+  const dir = stillsDir(store, file);
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+  const out: { at: number; sha256: string; file: string }[] = [];
+  for (let k = 0; k < STILLS; k++) {
+    const at = Math.round(((k + 0.5) / STILLS) * seconds * 1000) / 1000;
+    const name = `still_${k}.png`;
+    await runTool(engine.tools.ffmpeg, ['-v', 'error', '-y', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', "scale='min(640,iw)':-2", '-bitexact', join(dir, name)], opts.signal ? { signal: opts.signal } : {}); // prettier-ignore
+    out.push({ at, sha256: createHash('sha256').update(await readFile(join(dir, name))).digest('hex'), file: name }); // prettier-ignore
+  }
+  await writeFile(join(dir, 'stills.json'), JSON.stringify(out));
+  return {
+    stills: out.map((x, index) => ({ index, at: x.at, sha256: x.sha256, path: join(dir, x.file) })),
+  };
+}
+
+/** The stills `referenceStillsOp` made for this clip (what the user looked at), or a usage error. */
+export async function shownReferenceStills(
+  engine: Engine,
+  store: ProjectStore,
+  file: string,
+): Promise<{ at: number; sha256: string; path: string }[]> {
+  return readStills(store, await referenceFile(engine, file));
 }

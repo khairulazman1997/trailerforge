@@ -8,6 +8,8 @@ The request (JSON):
 - "size" and "frameRate": the picture's size in pixels and its frame rate.
 - "brand": the maker's colours (hex) and font families. Use them unless the words ask otherwise.
 
+{{context}}
+
 What already exists: one composition named "{{comp}}", of exactly that size, frame rate and length, transparent, active. Do not create or change compositions. The effect is drawn OVER the video with its transparency, so leave the background empty unless the words ask for a full-screen card.
 
 Commands you may use (nothing else is run): {{commands}}.

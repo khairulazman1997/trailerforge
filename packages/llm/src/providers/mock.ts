@@ -7,7 +7,11 @@ type Reply = unknown | ((req: LlmRequest<unknown>) => unknown);
  * Deterministic provider for tests and offline demos. `replies[task]` is a reply or a list of
  * replies consumed in order (to exercise the repair loop). Replies may be objects or raw text.
  */
-export function createMockProvider(replies: Record<string, Reply | Reply[]>, id = 'core/mock') {
+export function createMockProvider(
+  replies: Record<string, Reply | Reply[]>,
+  id = 'core/mock',
+  opts: { vision?: boolean } = {},
+) {
   const calls: { task: string; prompt: string }[] = [];
   const cursor = new Map<string, number>();
   const provider: LlmProvider & { calls: typeof calls } = {
@@ -15,6 +19,7 @@ export function createMockProvider(replies: Record<string, Reply | Reply[]>, id 
     name: 'Mock',
     kind: 'mock',
     sendsDataOffDevice: false,
+    ...(opts.vision ? { vision: true } : {}),
     calls,
     available: async () => ({ ok: true }),
     async generate(request) {

@@ -18,6 +18,8 @@ import {
   acceptEffectOp,
   authorEffectOp,
   rejectEffectOp,
+  referenceStillsOp,
+  shownReferenceStills,
 } from '@trailerforge/engine';
 import { fail, type CmdCtx } from './m2.js';
 
@@ -341,15 +343,38 @@ export async function effectcraftCommand(
     return n;
   };
   return withProject(ctx, dir, async (engine, store) => {
+    if (sub === 'stills') {
+      if (!ctx.flags.reference) throw new OpError('usage', 'name the clip with --reference');
+      const r = await referenceStillsOp(engine, store, { file: ctx.flags.reference });
+      ctx.emit(
+        [
+          `These ${r.stills.length} stills are what --send-stills would send (nothing has been sent):`,
+          ...r.stills.map((s) => `  ${s.at.toFixed(2)} s  ${s.path}`),
+        ].join('\n'),
+        r,
+      );
+      return 0;
+    }
     if (sub === 'author') {
       if (!ctx.flags.text)
         throw new OpError('usage', 'say what the effect should look like with --text');
       const seconds = num(ctx.flags.seconds, '--seconds') ?? 3;
       const landAt = num(ctx.flags.landAt, '--land-at');
+      let stills: { consent: true; sha256: string[] } | undefined;
+      if (ctx.flags.sendStills) {
+        if (!ctx.flags.reference) throw new OpError('usage', '--send-stills needs --reference');
+        // Exactly the stills `tforge effectcraft stills` made for you to look at.
+        const shown = await shownReferenceStills(engine, store, ctx.flags.reference);
+        stills = { consent: true, sha256: shown.map((s) => s.sha256) };
+      }
       const p = await authorEffectOp(engine, store, {
         words: ctx.flags.text,
         seconds,
         ...(landAt !== undefined ? { landAt } : {}),
+        ...(ctx.flags.example ? { example: { file: ctx.flags.example } } : {}),
+        ...(ctx.flags.reference
+          ? { reference: { file: ctx.flags.reference, ...(stills ? { stills } : {}) } }
+          : {}),
       });
       const lines = [
         `Proposal ${p.id}: "${p.name}" — ${p.summary}`,

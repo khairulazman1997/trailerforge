@@ -110,6 +110,7 @@ export function createAnthropicProvider(opts: AnthropicProviderOptions = {}): Ll
     name: 'Anthropic API',
     kind: 'api',
     sendsDataOffDevice: true,
+    vision: true,
     async available() {
       return opts.client || currentKey()
         ? { ok: true }
@@ -120,7 +121,7 @@ export function createAnthropicProvider(opts: AnthropicProviderOptions = {}): Ll
       const usage = { inputTokens: 0, outputTokens: 0 };
       let servedBy = model;
       let native = true;
-      const messages: { role: 'user' | 'assistant'; content: string }[] = [];
+      const messages: { role: 'user' | 'assistant'; content: string | unknown[] }[] = [];
 
       const call = async (): Promise<string> => {
         const params: Record<string, unknown> = {
@@ -167,7 +168,20 @@ export function createAnthropicProvider(opts: AnthropicProviderOptions = {}): Ll
 
       const send = async (prompt: string): Promise<string> => {
         // Attempt 0 is the request; later attempts are repair prompts that follow the failed reply.
-        messages.push({ role: 'user', content: prompt });
+        // The images go with the first message only; repair prompts are text.
+        messages.push({
+          role: 'user',
+          content:
+            messages.length === 0 && request.images?.length
+              ? [
+                  ...request.images.map((i) => ({
+                    type: 'image',
+                    source: { type: 'base64', media_type: i.mediaType, data: i.data },
+                  })),
+                  { type: 'text', text: prompt },
+                ]
+              : prompt,
+        });
         let text: string;
         try {
           text = await call();

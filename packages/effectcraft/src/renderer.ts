@@ -1,5 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { cp, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import {
+  copyFile,
+  cp,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Scene } from '@trailerforge/graphics';
 import type { MotionRenderJob, MotionRenderResult, MotionRenderer } from '@trailerforge/plugin-api';
@@ -182,20 +192,62 @@ export class EffectCraftRenderer implements MotionRenderer {
     commands: EcCommand[],
     dest: string,
     signal: AbortSignal,
+    opts: { base?: string } = {},
   ): Promise<AuthoredProject> {
     const cli = await this.ready();
     return this.work(async (cwd) => {
       const run = { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000 };
       const tmp = join(cwd, 'project.ecproj');
+      // With a base project (an imported example) the commands edit a copy of it.
+      if (opts.base) await copyFile(opts.base, tmp);
       const chunks = chunkCommands(commands);
       if (!chunks.length) throw new Error('no commands');
       for (const [i, chunk] of chunks.entries())
         await cli.run(
-          i === 0
+          i === 0 && !opts.base
             ? ['--empty', 'run', ...chunk, '--save-as', tmp, '--json']
             : ['--project', tmp, '--save', 'run', ...chunk, '--json'],
           run,
         );
+      const { header, warnings } = await checkProjectFile(cli, tmp, run);
+      const bytes = await readFile(tmp);
+      await mkdir(dirname(dest), { recursive: true });
+      await moveInto(tmp, dest);
+      return {
+        path: dest,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+        header,
+        warnings,
+      };
+    });
+  }
+
+  /**
+   * Import a Lottie `.json` with EffectCraft and nest its composition, scaled and centred, in a
+   * new composition `o.comp`; saved at `dest`. TrailerForge runs this with its own path; the
+   * import command is never offered to a model.
+   */
+  async importAndNest(
+    lottie: string,
+    dest: string,
+    signal: AbortSignal,
+    o: { comp: Record<string, unknown> & { name: string; width: number; height: number }; layerName: string; scale: number }, // prettier-ignore
+  ): Promise<AuthoredProject> {
+    const cli = await this.ready();
+    return this.work(async (cwd) => {
+      const run = { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000 };
+      const tmp = join(cwd, 'project.ecproj');
+      const r = await cli.run(['--empty', 'run', 'file.importLottie', JSON.stringify({ path: lottie }), '--save-as', tmp, '--json'], run); // prettier-ignore
+      const item = importedComp(r.stdout);
+      await cli.run(
+        ['--project', tmp, '--save', 'run',
+          'comp.new', JSON.stringify(o.comp),
+          'layer.addItem', JSON.stringify({ comp: o.comp.name, item, time: 0 }),
+          'prop.set', JSON.stringify({ layer: o.layerName, path: 'transform/scale', value: [o.scale, o.scale] }),
+          'prop.set', JSON.stringify({ layer: o.layerName, path: 'transform/position', value: [o.comp.width / 2, o.comp.height / 2] }),
+          '--json'],
+        run,
+      ); // prettier-ignore
       const { header, warnings } = await checkProjectFile(cli, tmp, run);
       const bytes = await readFile(tmp);
       await mkdir(dirname(dest), { recursive: true });
@@ -382,4 +434,20 @@ function scaleFor(
     return 'full';
   const k = job.resolution.width / size.width;
   return String(Math.round(k * 1e9) / 1e9);
+}
+
+/** The composition id `file.importLottie` reports (`run --json` lists each command's result). */
+function importedComp(stdout: string): number {
+  try {
+    const v = JSON.parse(stdout.trim().split('\n').at(-1)!) as { results?: { result?: { comp?: unknown } }[] } | { result?: { comp?: unknown } }[]; // prettier-ignore
+    const list = Array.isArray(v) ? v : (v.results ?? []);
+    const comp = list[0]?.result?.comp;
+    if (typeof comp === 'number') return comp;
+  } catch {
+    /* below */
+  }
+  throw new EffectCraftError(
+    'bad-output',
+    'EffectCraft did not say which composition the import made',
+  );
 }

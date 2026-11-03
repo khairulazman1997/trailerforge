@@ -82,6 +82,10 @@ Usage:
                                                           Files for an editor: FCPXML, OpenTimelineIO, EDL, with alpha clips for cards and captions
   tforge effectcraft author <dir> --text <words> --seconds <s> [--land-at <s>] [--accept --at <s>]
                                                           Ask the AI for a custom EffectCraft effect (text only); prints the proposal and its preview frames
+                 [--example <lottie.json|.ecproj>] [--reference <clip> [--send-stills]]
+                                                          --example starts from an animation; --reference sends only measurements of the clip,
+                                                          plus the stills from \`effectcraft stills\` when you add --send-stills
+  tforge effectcraft stills <dir> --reference <clip>      Make the 8 stills --send-stills would send, so you can look at them first
   tforge effectcraft accept|reject <dir> <proposalId> [--at <s>]
                                                           Put a proposed effect on the Effects track at --at seconds (one undo step), or discard it
   tforge review list|comment|resolve|reopen|approve|revoke <dir> [<commentId>] [--version <id|master>] [--at <s>] [--text <t>] [--note <t>]
@@ -176,6 +180,9 @@ export async function main(
         text: { type: 'string' },
         seconds: { type: 'string' },
         'land-at': { type: 'string' },
+        example: { type: 'string' },
+        reference: { type: 'string' },
+        'send-stills': { type: 'boolean', default: false },
         todo: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
@@ -298,6 +305,9 @@ export async function main(
       text: o.text,
       seconds: o.seconds,
       landAt: o['land-at'],
+      example: o.example,
+      reference: o.reference,
+      sendStills: o['send-stills'],
     },
   };
   try {
@@ -417,6 +427,7 @@ export async function main(
       case 'effectcraft author':
       case 'effectcraft accept':
       case 'effectcraft reject':
+      case 'effectcraft stills':
         return need(arg, '<dir>')
           ? await effectcraftCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
           : 2;

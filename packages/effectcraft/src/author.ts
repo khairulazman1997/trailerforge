@@ -22,6 +22,10 @@ export interface EffectRequest {
   size: { width: number; height: number };
   frameRate: number;
   brand?: { colors: Record<string, string>; fonts: string[] } | null;
+  /** An imported example (Lottie or an earlier effect) to edit; see `importExample`. */
+  example?: Record<string, unknown>;
+  /** Facts measured on a reference clip (numbers only). */
+  reference?: Record<string, unknown>;
 }
 
 /** The authored effect could not be made usable, even after the repair round. */
@@ -62,6 +66,8 @@ export function effectWire(req: EffectRequest, terms: readonly string[]): Record
     ...(req.brand
       ? { brand: { colors: req.brand.colors, fonts: req.brand.fonts.map(redact) } }
       : {}),
+    ...(req.example ? { example: redactDeep(req.example, redact) } : {}),
+    ...(req.reference ? { reference: req.reference } : {}),
   };
 }
 
@@ -76,7 +82,16 @@ export function effectWire(req: EffectRequest, terms: readonly string[]): Record
 export async function authorEffect(
   deps: { llm?: LlmClient; renderer: EffectCraftRenderer },
   req: EffectRequest,
-  o: { terms: readonly string[]; dest: string; given?: AuthoredEffect; signal?: AbortSignal },
+  o: {
+    terms: readonly string[];
+    dest: string;
+    given?: AuthoredEffect;
+    signal?: AbortSignal;
+    /** An imported example the commands edit (its compositions may be targeted). */
+    base?: { project: string; comps: string[] };
+    /** Stills the user agreed to send, PNG base64; with the first request only. */
+    images?: { mediaType: 'image/png'; data: string }[];
+  },
 ): Promise<AuthorEffectResult> {
   const signal = o.signal ?? new AbortController().signal;
   const sent = effectWire(req, o.terms);
@@ -85,14 +100,24 @@ export async function authorEffect(
     throw new Error('refusing to send: the request still contains knowledge excluded from LLM use');
 
   const attempt = async (effect: AuthoredEffect): Promise<AuthoredProject | string[]> => {
-    const problems = effectProblems(effect.commands);
+    const problems = effectProblems(effect.commands, { comps: o.base?.comps ?? [EFFECT_COMP] });
     if (problems.length) return problems;
     try {
-      return await deps.renderer.authorProject(
-        effectCommands(effect, { ...req.size, frameRate: req.frameRate, seconds: req.seconds }),
-        o.dest,
-        signal,
-      );
+      return o.base
+        ? await deps.renderer.authorProject(
+            effect.commands.map((c) => ({
+              command: c.command,
+              params: c.params as Record<string, unknown>,
+            })),
+            o.dest,
+            signal,
+            { base: o.base.project },
+          )
+        : await deps.renderer.authorProject(
+            effectCommands(effect, { ...req.size, frameRate: req.frameRate, seconds: req.seconds }),
+            o.dest,
+            signal,
+          );
     } catch (e) {
       if (e instanceof EffectCraftError && (e.code === 'failed' || e.code === 'bad-project'))
         return [scrubCliError(e.message)];
@@ -118,10 +143,15 @@ export async function authorEffect(
       comp: EFFECT_COMP,
       commands: EFFECT_COMMANDS.join(', '),
       maxCommands: String(EFFECT_MAX_COMMANDS),
+      context: contextText(sent, o.images?.length ?? 0, o.base?.comps ?? [EFFECT_COMP]),
     },
     [BUILTIN_PROMPTS_DIR],
   );
-  const first = await deps.llm.generate(EFFECT_AUTHOR_TASK, { system, prompt, schema: AuthoredEffect }, signal); // prettier-ignore
+  const first = await deps.llm.generate(
+    EFFECT_AUTHOR_TASK,
+    { system, prompt, schema: AuthoredEffect, ...(o.images?.length ? { images: o.images } : {}) },
+    signal,
+  );
   signal.throwIfAborted();
   const r1 = await attempt(first.value);
   if (!Array.isArray(r1))
@@ -149,6 +179,34 @@ export async function authorEffect(
     provider: second.provider,
     model: second.model,
   };
+}
+
+function redactDeep(v: unknown, redact: (t: string) => string): unknown {
+  if (typeof v === 'string') return redact(v);
+  if (Array.isArray(v)) return v.map((x) => redactDeep(x, redact));
+  if (v && typeof v === 'object')
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, redactDeep(x, redact)]));
+  return v;
+}
+
+/** What the prompt says about an example, a reference and stills, when there are any. */
+function contextText(
+  sent: Record<string, unknown>,
+  stills: number,
+  comps: readonly string[],
+): string {
+  const parts: string[] = [];
+  if (sent.example)
+    parts.push(
+      `Start from the example in "example": it is already in the project${comps.length > 1 ? `, as the composition "${comps[1]}" nested as a layer of that name in "${EFFECT_COMP}"` : ` in "${EFFECT_COMP}"`}. Edit it rather than starting over: change its text (prop.set path "text/sourceText" on its text layers, with "comp" set to the composition that holds them), its colours toward the brand, and time it to the length and the hit point (keyframes on the nested layer in "${EFFECT_COMP}"). You may add layers. Its logos or artwork are not to be copied into something new.`,
+    );
+  if (sent.reference)
+    parts.push(
+      'Match the style of the reference clip measured in "reference" (seconds): its length, its events (where things appear, flash, cut or fade), its main colours and which way and how fast things move. Copy the style, not its content.',
+    );
+  if (stills)
+    parts.push(`The ${stills} images attached are stills from that reference clip, in time order; use them for the look (layout, type, colours).`); // prettier-ignore
+  return parts.join('\n\n');
 }
 
 function leakOf(v: unknown, terms: readonly string[]): string | undefined {

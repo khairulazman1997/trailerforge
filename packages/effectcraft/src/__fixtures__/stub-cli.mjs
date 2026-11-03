@@ -23,6 +23,8 @@ const KNOWN = new Set([
   'keys.easyEase',
   'keys.toggleHold',
   'essential.addProperty',
+  'file.importLottie',
+  'layer.addItem',
   'essential.exportTemplate',
 ]);
 
@@ -77,6 +79,12 @@ if (cmd === 'run') {
     if (id === 'comp.new') project.comps.push({ ...params });
     if (id === 'layer.newText' && typeof params.text !== 'string') fail('layer.newText: text');
     project.log.push([id, params]);
+    let result = {};
+    if (id === 'file.importLottie') {
+      const l = JSON.parse(readFileSync(params.path, 'utf8'));
+      project.comps.push({ name: l.nm, width: l.w, height: l.h, frameRate: l.fr, duration: (l.op - l.ip) / l.fr }); // prettier-ignore
+      result = { comp: project.comps.length };
+    }
     if (id === 'essential.exportTemplate') {
       const controls = project.log
         .filter(([c]) => c === 'essential.addProperty')
@@ -86,7 +94,7 @@ if (cmd === 'run') {
         JSON.stringify({ savedBy: '0.9.2', schema: 2, controls, comps: project.comps.slice(-1) }),
       );
     }
-    results.push({ command: id, result: {} });
+    results.push({ command: id, result });
   }
   const out = opt('--save-as') ?? (argv.includes('--save') ? opt('--project') : undefined);
   if (out) writeFileSync(out, JSON.stringify(project, null, 2));

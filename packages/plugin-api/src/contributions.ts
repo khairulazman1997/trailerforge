@@ -215,6 +215,11 @@ export interface LlmRequest<T> {
   schema: z.ZodType<T>;
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  /**
+   * Still images sent with the prompt (PNG, base64). Only for the rare request the user agreed
+   * to, frame by frame (plan M8 decision 10); only providers with `vision` take them.
+   */
+  images?: { mediaType: 'image/png'; data: string }[];
 }
 
 export interface LlmResult<T> {
@@ -233,6 +238,8 @@ export interface LlmProvider {
   kind: 'api' | 'local-cli' | 'interactive' | 'mock';
   /** Whether requests leave the machine (shown in the disclosure UI). */
   sendsDataOffDevice: boolean;
+  /** Whether it can read `images` (default: no; a request with images is then refused). */
+  vision?: boolean;
   available(): Promise<{ ok: true } | { ok: false; reason: string }>;
   generate<T>(request: LlmRequest<T>, signal: AbortSignal): Promise<LlmResult<T>>;
 }

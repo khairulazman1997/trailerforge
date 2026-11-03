@@ -436,3 +436,25 @@ describe('LlmClient', () => {
     });
   });
 });
+
+describe('images', () => {
+  it('go only to a provider that can look at them', async () => {
+    const seen: number[] = [];
+    const make = (vision: boolean) =>
+      createMockProvider(
+        { t: (r: { images?: unknown[] }) => (seen.push(r.images?.length ?? 0), { ok: true }) },
+        'core/mock',
+        { vision },
+      );
+    const client = (p: ReturnType<typeof createMockProvider>) =>
+      new LlmClient({
+        providers: (id) => (id === 'core/mock' ? p : undefined),
+        routes: RoutesConfig.parse({ default: { provider: 'core/mock' }, fallbacks: [] }),
+      });
+    const req = { system: 's', prompt: 'p', schema: z.object({ ok: z.boolean() }), images: [{ mediaType: 'image/png' as const, data: 'AA==' }] }; // prettier-ignore
+    await expect(client(make(false)).generate('t', req)).rejects.toThrow(/cannot look at images/);
+    expect(seen).toEqual([]);
+    await client(make(true)).generate('t', req);
+    expect(seen).toEqual([1]);
+  });
+});
