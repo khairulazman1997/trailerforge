@@ -1,4 +1,4 @@
-import { CommandError, defineCommand } from '@trailerforge/core';
+import { CommandError, defineCommand, type CommandDef } from '@trailerforge/core';
 import { Flicks, Id, mintId } from '@trailerforge/schema';
 import { z } from 'zod';
 
@@ -70,4 +70,30 @@ export const addEffect = defineCommand({
   },
 });
 
-export const effectcraftCommands = [addEffect];
+/**
+ * Swap the EffectCraft project an accepted effect draws (a hand-polished copy, re-imported): one
+ * undo step. The old file stays in `media/`, so undo and redo work.
+ */
+export const replaceEffect = defineCommand({
+  type: 'effectcraft/effect.replace',
+  payload: z.strictObject({
+    timelineId: Id,
+    itemId: Id,
+    project: z.string().regex(/^media\/[0-9a-f]{64}\.ecproj$/, 'a stored EffectCraft project'),
+    decisionId: Id.optional(),
+  }),
+  label: () => 'Replace an effect with the edited copy',
+  apply: (d, p) => {
+    const type = 'effectcraft/effect.replace';
+    const item = d.timelines
+      .find((t) => t.id === p.timelineId)
+      ?.tracks.flatMap((t) => t.items)
+      .find((i) => i.id === p.itemId);
+    if (!item || item.kind !== 'graphic' || item.templateId !== 'effectcraft/project')
+      throw new CommandError(type, `"${p.itemId}" is not an EffectCraft effect`);
+    item.params = { ...item.params, project: p.project };
+    if (p.decisionId) item.decisionId = p.decisionId;
+  },
+});
+
+export const effectcraftCommands: CommandDef<any>[] = [addEffect, replaceEffect]; // eslint-disable-line @typescript-eslint/no-explicit-any

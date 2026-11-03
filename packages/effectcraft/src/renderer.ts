@@ -71,6 +71,15 @@ export class EffectCraftRenderer implements MotionRenderer {
     this.cli = opts.cli ? new EffectCraftCli(opts.cli) : null;
   }
 
+  /** Opens a `.ecproj` with the pinned EffectCraft: its schema must be the pinned one and it must load cleanly. */
+  async checkFile(file: string, signal: AbortSignal): Promise<{ warnings: string[] }> {
+    const cli = await this.ready();
+    return this.work(async (cwd) => {
+      const r = await checkProjectFile(cli, file, { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000 }); // prettier-ignore
+      return { warnings: r.warnings };
+    });
+  }
+
   /** What was wrong with the shipped template files when this renderer was made (set by the plugin). */
   templateProblems(): string[] {
     return this.opts.templateProblems ?? [];

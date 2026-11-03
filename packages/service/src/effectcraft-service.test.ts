@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -121,5 +122,41 @@ describe('EffectCraft over the service', { timeout: 120_000 }, () => {
       /changed since you saw them/,
     );
     await expect(client.startTask(ID, { kind: 'effectcraft-author', options: { words: 'x', seconds: 1, reference: { file: clip, stills: { consent: false, sha256: [] } } } } as never)).rejects.toMatchObject({ status: 400 }); // prettier-ignore
+  });
+
+  it('opens an accepted effect for hand polish and takes the edited copy back (one undo step)', async () => {
+    const t = await client.startTask(ID, { kind: 'effectcraft-author', options: { words: 'polish me', seconds: 1 } }); // prettier-ignore
+    await client.waitForTask(t.id);
+    const [p] = await client.effectProposals(ID);
+    const accepted = await client.acceptEffect(ID, p!.id, 0);
+    const items = await client.effectItems(ID);
+    expect(items.find((i) => i.itemId === accepted.itemId)).toMatchObject({
+      start: 0,
+      duration: 1,
+    });
+
+    const out = await client.exportEffect(ID, accepted.itemId);
+    expect(out.fileName).toMatch(/\.ecproj$/);
+    expect(out.path).toContain('exports');
+    const text = readFileSync(out.path, 'utf8');
+    const edited = join(root, 'edited.ecproj');
+    writeFileSync(
+      edited,
+      text.replace('"tf-effect"', '"tf-effect"').replace(/\}$/, ', "polished": true}'),
+    );
+    const r = await client.reimportEffect(ID, accepted.itemId, edited);
+    expect(r.project).toMatch(/^media\/[0-9a-f]{64}\.ecproj$/);
+    expect(r.project).not.toBe(accepted.project);
+    const after = await client.getProject(ID);
+    void after;
+    await client.undo(ID);
+    const items2 = await client.effectItems(ID);
+    expect(items2.some((i) => i.itemId === accepted.itemId)).toBe(true); // still there, old project
+
+    writeFileSync(join(root, 'bad.ecproj'), '{"schema":2}');
+    await expect(client.reimportEffect(ID, accepted.itemId, join(root, 'bad.ecproj'))).rejects.toMatchObject({ status: 400 }); // prettier-ignore
+    await expect(client.reimportEffect(ID, 'it_nope', edited)).rejects.toMatchObject({
+      status: 404,
+    });
   });
 });

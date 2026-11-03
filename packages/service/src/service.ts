@@ -58,6 +58,9 @@ import {
   setupSidecarOp,
   critiqueOp,
   authorEffectOp,
+  effectItemsOp,
+  exportEffectOp,
+  reimportEffectOp,
   effectRequestPreviewOp,
   effectBriefsOp,
   effectProposalsOp,
@@ -669,6 +672,28 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     ],
     ['GET', /^\/v1\/health$/, async () => healthOp(engine)],
     ['GET', /^\/v1\/effectcraft$/, async () => effectcraftStatusOp(engine)],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/effects$/,
+      async ({ params }) => effectItemsOp(storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/effects\/(?<item>[^/]+)\/export$/,
+      async ({ params }) => exportEffectOp(storeById(params.id!), { itemId: params.item! }),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/effects\/(?<item>[^/]+)\/reimport$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        notBusy(store);
+        const o = z.strictObject({ file: z.string().min(1) }).parse(await body());
+        const r = await reimportEffectOp(engine, store, { itemId: params.item!, file: o.file });
+        await store.save();
+        return r;
+      },
+    ],
     [
       'POST',
       /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/request-preview$/,

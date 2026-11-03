@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CardSlot, Overlay, ShotSlot } from '@trailerforge/schema';
 import { useAppState, useStore } from '../app-context.js';
+import { EffectsPanel } from '../components/EffectsPanel.js';
 import { GraphicPreview } from '../components/GraphicPreview.js';
 import { Link, projectPath } from '../router.js';
 import { busyTask, type Catalog } from '../store.js';
@@ -129,6 +130,7 @@ export function GraphicsPage({ id }: { id: string }) {
           )}
         </div>
       )}
+      <EffectsPanel id={id} />
     </>
   );
 }
@@ -300,6 +302,12 @@ function Editor({
             label={`Preview of ${item.title} at ${Math.round(at * 100) / 100} seconds`}
             {...(assets ? { images: assets.images } : {})}
           />
+          {preview.standIn && (
+            <p className="hint" data-testid="stand-in-note">
+              This preview shows the built-in {preview.standIn.replace('core/', '')} as a stand-in:
+              the final render draws this graphic with EffectCraft, so its motion and look differ.
+            </p>
+          )}
           {preview.warnings.length > 0 && (
             <ul aria-label="Problems with this graphic">
               {preview.warnings.map((w) => (

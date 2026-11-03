@@ -178,7 +178,7 @@ describe('tool surface', () => {
       'override',
     );
     // Every registered command is exposed except those, and each schema is an object.
-    expect(engine.commands.types().length - 9).toBe(
+    expect(engine.commands.types().length - 10).toBe(
       names.filter((n) => n.startsWith('core_') || n.startsWith('game-trailer_')).length,
     );
     for (const t of tools) {

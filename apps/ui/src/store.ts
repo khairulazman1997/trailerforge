@@ -99,6 +99,17 @@ export type ClientLike = Pick<
   | 'approveVersion'
   | 'quality'
   | 'critiqueFacts'
+  | 'effectcraft'
+  | 'effectRequestPreview'
+  | 'effectProposals'
+  | 'effectItems'
+  | 'acceptEffect'
+  | 'rejectEffect'
+  | 'effectFrame'
+  | 'exportEffect'
+  | 'reimportEffect'
+  | 'referenceStills'
+  | 'referenceStill'
   | 'draft'
   | 'createDefaultVariants'
   | 'brand'
@@ -625,6 +636,11 @@ export class AppStore {
       this.toast('error', describeFailure(err), this.nextStep(err));
       return undefined;
     }
+  }
+
+  /** A call on the EffectCraft routes; a failure shows a toast and gives undefined. */
+  effectcraftCall<T>(fn: (c: ClientLike) => Promise<T>): Promise<T | undefined> {
+    return this.run(fn);
   }
 
   /** Resolves once the local copy has caught up to `version`, so a caller reads what it wrote. */

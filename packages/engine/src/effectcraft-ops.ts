@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { analyzeReference } from '@trailerforge/analysis';
 import { probe, runTool } from '@trailerforge/media';
 import { appendDecisions, type ProjectStore } from '@trailerforge/core';
@@ -25,7 +25,7 @@ import { FLICKS_PER_SECOND, flicksPerFrame, type Slot, type Timeline } from '@tr
 import { effectBriefOf } from '@trailerforge/storyboard';
 import { z } from 'zod';
 import type { Engine } from './engine.js';
-import { addEffect } from './effectcraft-commands.js';
+import { addEffect, replaceEffect } from './effectcraft-commands.js';
 import { OpError } from './ops.js';
 
 /** A custom effect waiting for the user's yes or no; kept only in the project's cache. */
@@ -652,4 +652,133 @@ export async function effectRequestPreviewOp(
       : { possible: false, why: `${p.name} cannot look at images` },
     excluded,
   };
+}
+
+export interface EffectItemView {
+  itemId: string;
+  timelineId: string;
+  label: string;
+  /** Seconds from the start of the cut, and length. */
+  start: number;
+  duration: number;
+  slotId?: string;
+}
+
+/** The custom effects on the cut (graphic items that draw a stored EffectCraft project). */
+export function effectItemsOp(store: ProjectStore): EffectItemView[] {
+  const out: EffectItemView[] = [];
+  for (const tl of store.state.timelines)
+    for (const track of tl.tracks)
+      for (const i of track.items)
+        if (
+          i.kind === 'graphic' &&
+          i.templateId === 'effectcraft/project' &&
+          typeof i.params.project === 'string'
+        )
+          out.push({
+            itemId: i.id,
+            timelineId: tl.id,
+            label: i.label || i.id,
+            start: i.start / FLICKS_PER_SECOND,
+            duration: i.duration / FLICKS_PER_SECOND,
+            ...(i.slotId ? { slotId: i.slotId } : {}),
+          });
+  return out;
+}
+
+function effectItem(store: ProjectStore, itemId: string) {
+  for (const tl of store.state.timelines)
+    for (const track of tl.tracks)
+      for (const i of track.items)
+        if (
+          i.id === itemId &&
+          i.kind === 'graphic' &&
+          i.templateId === 'effectcraft/project' &&
+          typeof i.params.project === 'string'
+        )
+          return { tl, item: i, project: i.params.project };
+  throw new OpError('not-found', `no custom effect "${itemId}"`);
+}
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'effect'; // prettier-ignore
+
+/**
+ * "Open in EffectCraft": a copy of the effect's project in `<project>/exports/effectcraft/` for the
+ * user to open in the EffectCraft app and polish by hand. Nothing is launched; the copy is theirs.
+ */
+export async function exportEffectOp(
+  store: ProjectStore,
+  input: { itemId: string },
+): Promise<{ path: string; fileName: string }> {
+  const { item, project } = effectItem(store, input.itemId);
+  const src = resolve(store.paths.dir, project);
+  if (relative(store.paths.dir, src).startsWith('..') || !existsSync(src))
+    throw new OpError('not-found', "the effect's project file is missing");
+  const fileName = `${slug(item.label ?? item.id)}-${project.slice(6, 14)}.ecproj`;
+  const dir = join(store.paths.exports, 'effectcraft');
+  await mkdir(dir, { recursive: true });
+  const dest = join(dir, fileName);
+  const tmp = `${dest}.tmp-${process.pid}`;
+  await copyFile(src, tmp);
+  await rename(tmp, dest);
+  return { path: dest, fileName };
+}
+
+/**
+ * Bring a polished copy back: EffectCraft must open it cleanly with the pinned schema and it must
+ * still hold the effect's `tf-effect` composition. It is stored as `media/<sha256>.ecproj` and the
+ * effect draws it from then on, as one undoable step with a decision record; the old project stays.
+ */
+export async function reimportEffectOp(
+  engine: Engine,
+  store: ProjectStore,
+  input: { itemId: string; file: string },
+  opts: { now?: () => Date; signal?: AbortSignal } = {},
+): Promise<{ project: string; warnings: string[] }> {
+  const renderer = await effectcraftRenderer(engine);
+  const { tl, item } = effectItem(store, input.itemId);
+  const file = resolve(input.file);
+  if (!existsSync(file)) throw new OpError('not-found', 'that file does not exist');
+  const text = await readFile(file, 'utf8').catch(() => '');
+  const comp = String((item.params as { comp?: unknown }).comp ?? EFFECT_COMP);
+  if (!text.includes(`"${comp}"`))
+    throw new OpError('usage', `the project has no "${comp}" composition; keep it when you edit`);
+  let checked;
+  try {
+    checked = await renderer.checkFile(file, opts.signal ?? new AbortController().signal);
+  } catch (e) {
+    if (e instanceof EffectCraftError && e.code !== 'cancelled')
+      throw new OpError('usage', `EffectCraft cannot use that project: ${e.message}`);
+    throw e;
+  }
+  const bytes = await readFile(file);
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  const rel = `media/${sha}.ecproj`;
+  const abs = join(store.paths.dir, rel);
+  if (!existsSync(abs)) {
+    await mkdir(join(store.paths.dir, 'media'), { recursive: true });
+    const tmp = `${abs}.tmp-${process.pid}`;
+    await copyFile(file, tmp);
+    await rename(tmp, abs);
+  }
+  const decisionId = `dec_fx_${sha.slice(0, 12)}`;
+  store.dispatch(replaceEffect.type, {
+    timelineId: tl.id,
+    itemId: item.id,
+    project: rel,
+    decisionId,
+  });
+  await appendDecisions(store.paths.decisions, [
+    {
+      id: decisionId,
+      at: (opts.now ?? (() => new Date()))().toISOString(),
+      step: 'effectcraft/reimport',
+      subject: { kind: 'item', id: item.id },
+      choice: { project: rel },
+      reasons: { handEdited: true },
+      summary: `Replaced the effect "${item.label ?? item.id}" with a copy edited in EffectCraft`,
+      alternatives: [],
+    },
+  ]);
+  return { project: rel, warnings: checked.warnings };
 }

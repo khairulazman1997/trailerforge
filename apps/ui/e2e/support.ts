@@ -38,92 +38,104 @@ export async function startTestService(
 ): Promise<TestService> {
   const root = await mkdtemp(join(tmpdir(), 'tforge-ui-e2e-'));
   const prompts: string[] = [];
-  const mock = createMockProvider({
-    'storyboard.generate': (req: LlmRequest<unknown>) => {
-      prompts.push(req.prompt);
-      return {
-        rationale: 'Opens on a parry, builds to the Warden, ends on the title.',
-        sections: [
-          {
-            name: 'Hook',
-            role: 'hook',
+  const mock = createMockProvider(
+    {
+      'storyboard.generate': (req: LlmRequest<unknown>) => {
+        prompts.push(req.prompt);
+        return {
+          rationale: 'Opens on a parry, builds to the Warden, ends on the title.',
+          sections: [
+            {
+              name: 'Hook',
+              role: 'hook',
+              slots: [
+                {
+                  kind: 'shot',
+                  title: 'Perfect parry',
+                  seconds: 6,
+                  captureInstruction: 'Parry the Warden, no HUD.',
+                  entityIds: ['ent_warden'],
+                },
+                { kind: 'shot', title: 'Forest run', seconds: 6 },
+              ],
+            },
+            {
+              name: 'Escalation',
+              role: 'escalation',
+              slots: [{ kind: 'shot', title: 'Boss reveal', seconds: 8 }],
+            },
+          ],
+          music: { direction: 'Hybrid orchestral' },
+        };
+      },
+      'storyboard.regenerate-section': (req: LlmRequest<unknown>) => {
+        prompts.push(req.prompt);
+        return {
+          rationale: 'Leads with the forest.',
+          section: {
+            name: 'Hook v2',
             slots: [
-              {
-                kind: 'shot',
-                title: 'Perfect parry',
-                seconds: 6,
-                captureInstruction: 'Parry the Warden, no HUD.',
-                entityIds: ['ent_warden'],
-              },
-              { kind: 'shot', title: 'Forest run', seconds: 6 },
+              { kind: 'shot', title: 'Warden lands', seconds: 3 },
+              { kind: 'shot', title: 'Forest ambush', seconds: 3 },
             ],
           },
-          {
-            name: 'Escalation',
-            role: 'escalation',
-            slots: [{ kind: 'shot', title: 'Boss reveal', seconds: 8 }],
-          },
-        ],
-        music: { direction: 'Hybrid orchestral' },
-      };
-    },
-    'storyboard.regenerate-section': (req: LlmRequest<unknown>) => {
-      prompts.push(req.prompt);
-      return {
-        rationale: 'Leads with the forest.',
-        section: {
-          name: 'Hook v2',
-          slots: [
-            { kind: 'shot', title: 'Warden lands', seconds: 3 },
-            { kind: 'shot', title: 'Forest ambush', seconds: 3 },
-          ],
-        },
-      };
-    },
-    'capture.tips': (req: LlmRequest<unknown>) => {
-      prompts.push(req.prompt);
-      const keys = [...req.prompt.matchAll(/"key": "([^"]*)"/g)].map((m) => m[1]!);
-      return {
-        groups: keys.map((key) => ({
-          key,
-          tips: ['Start from the checkpoint.'],
-          risks: ['An autosave popup can ruin a take.'],
-        })),
-      };
-    },
-    'critique.run': (req: LlmRequest<unknown>) => {
-      prompts.push(req.prompt);
-      return {
-        notes: [
-          {
-            about: 'shot-1',
-            kind: 'issue',
-            text: 'The hook runs long for a parry.',
-            fix: {
-              type: 'slot-duration',
-              shot: 'shot-1',
-              seconds: 1.5,
-              summary: 'Cut the hook to 1.5 seconds',
+        };
+      },
+      'capture.tips': (req: LlmRequest<unknown>) => {
+        prompts.push(req.prompt);
+        const keys = [...req.prompt.matchAll(/"key": "([^"]*)"/g)].map((m) => m[1]!);
+        return {
+          groups: keys.map((key) => ({
+            key,
+            tips: ['Start from the checkpoint.'],
+            risks: ['An autosave popup can ruin a take.'],
+          })),
+        };
+      },
+      'effectcraft.author': (req: LlmRequest<unknown>) => {
+        prompts.push(`${req.images?.length ?? 0} images\n${req.prompt}`);
+        return {
+          name: 'Ember burst',
+          summary: 'The title snaps in with an orange glow.',
+          commands: [{ command: 'layer.newText', params: { name: 'T', text: 'EMBER' } }],
+        };
+      },
+      'critique.run': (req: LlmRequest<unknown>) => {
+        prompts.push(req.prompt);
+        return {
+          notes: [
+            {
+              about: 'shot-1',
+              kind: 'issue',
+              text: 'The hook runs long for a parry.',
+              fix: {
+                type: 'slot-duration',
+                shot: 'shot-1',
+                seconds: 1.5,
+                summary: 'Cut the hook to 1.5 seconds',
+              },
             },
-          },
-          {
-            about: 'overall',
-            kind: 'idea',
-            text: 'The pacing does not speed up toward the end.',
-            atSeconds: 3,
-          },
-        ],
-      };
+            {
+              about: 'overall',
+              kind: 'idea',
+              text: 'The pacing does not speed up toward the end.',
+              atSeconds: 3,
+            },
+          ],
+        };
+      },
+      'brief.suggest': (req: LlmRequest<unknown>) => {
+        prompts.push(req.prompt);
+        const field = /^Field: .*\(([^()\s]+)\)$/m.exec(req.prompt)?.[1] ?? '';
+        return {
+          value: SUGGESTIONS[field] ?? 'Something sensible',
+          reason: 'it fits the game facts',
+        };
+      },
     },
-    'brief.suggest': (req: LlmRequest<unknown>) => {
-      prompts.push(req.prompt);
-      const field = /^Field: .*\(([^()\s]+)\)$/m.exec(req.prompt)?.[1] ?? '';
-      return {
-        value: SUGGESTIONS[field] ?? 'Something sensible',
-        reason: 'it fits the game facts',
-      };
-    },
-  });
+    'core/mock',
+    { vision: true },
+  );
   if (opts.offDevice) (mock as { sendsDataOffDevice: boolean }).sendsDataOffDevice = true;
   const llm = new LlmClient({
     providers: (id) => (id === 'core/mock' ? mock : undefined),

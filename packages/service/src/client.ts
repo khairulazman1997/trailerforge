@@ -5,6 +5,9 @@ import type { Project } from '@trailerforge/schema';
 export type {
   BriefField,
   DemoOutcome,
+  EffectCraftStatus,
+  EffectItemView,
+  EffectRequestPreview,
   HealthCheck,
   HealthReport,
   CritiqueFactsView,
@@ -42,7 +45,7 @@ import type {
   WatchedFoldersView,
 } from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
-import type { EffectCraftStatus, EffectRequestPreview } from '@trailerforge/engine';
+import type { EffectCraftStatus, EffectItemView, EffectRequestPreview } from '@trailerforge/engine';
 import type { CaptureStatus, CaptureView, ExportOutcome, RenderedPack } from '@trailerforge/engine';
 import type {
   analyzeOp,
@@ -367,6 +370,26 @@ export class ServiceClient {
     });
     if (!res.ok) throw new ServiceError(res.status, 'http', res.statusText);
     return res.blob();
+  }
+  /** The custom effects on the cut. */
+  effectItems(id: string) {
+    return this.request<EffectItemView[]>('GET', `/v1/projects/${encodeURIComponent(id)}/effectcraft/effects`); // prettier-ignore
+  }
+  /** Copy an effect's project into the project's exports folder, to polish in the EffectCraft app. */
+  exportEffect(id: string, itemId: string) {
+    return this.request<{ path: string; fileName: string }>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/effects/${encodeURIComponent(itemId)}/export`,
+      {},
+    );
+  }
+  /** Use an edited copy from now on (one undo step). */
+  reimportEffect(id: string, itemId: string, file: string) {
+    return this.request<{ project: string; warnings: string[] }>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/effects/${encodeURIComponent(itemId)}/reimport`,
+      { file },
+    );
   }
   /** Make the stills of a reference clip that would be sent, for the user to look at first. */
   referenceStills(id: string, file: string) {
