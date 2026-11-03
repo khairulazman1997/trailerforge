@@ -7,6 +7,7 @@ import { critiqueCommands } from './critique-commands.js';
 import { JobError, defineJob } from '@trailerforge/jobs';
 import { MediaError, makeProxy, probe } from '@trailerforge/media';
 import { definePlugin, PLUGIN_API_VERSION } from '@trailerforge/plugin-api';
+import { effectcraftCommands } from './effectcraft-commands.js';
 import {
   EFFECTCRAFT_VERSION,
   EffectCraftRenderer,
@@ -139,6 +140,7 @@ export function effectcraftPlugin(o: {
         templates: files,
       });
       ctx.motionRenderers.register(renderer);
+      for (const command of effectcraftCommands) ctx.commands.register(command);
       if (!(await renderer.available()).ok) return;
       for (const t of ecGraphicTemplates(new Set(Object.keys(files))))
         ctx.graphicTemplates.register(t);

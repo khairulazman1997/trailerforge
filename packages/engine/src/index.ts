@@ -14,5 +14,7 @@ export * from './render-ops.js';
 export * from './critique.js';
 export * from './critique-commands.js';
 export * from './critique-ops.js';
+export * from './effectcraft-commands.js';
+export * from './effectcraft-ops.js';
 export * from './health-ops.js';
 export * from './demo-ops.js';

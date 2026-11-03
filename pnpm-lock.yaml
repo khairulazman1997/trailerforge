@@ -230,12 +230,18 @@ importers:
       '@trailerforge/graphics':
         specifier: workspace:*
         version: link:../graphics
+      '@trailerforge/llm':
+        specifier: workspace:*
+        version: link:../llm
       '@trailerforge/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
       '@trailerforge/schema':
         specifier: workspace:*
         version: link:../schema
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/effects:
     dependencies:

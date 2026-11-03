@@ -124,8 +124,11 @@ export function mergeRoughCut(
       });
     }
   }
-  // Locked tracks the new cut does not produce are kept too.
+  // Locked tracks the new cut does not produce are kept too, and so are the user's own tracks
+  // (`trk_user_…`, e.g. accepted custom effects), which the rough cut never makes.
   for (const id of locked) if (!tracks.some((t) => t.id === id)) tracks.push(prevTracks.get(id)!);
+  for (const t of previous.tracks)
+    if (t.id.startsWith('trk_user_') && !tracks.some((x) => x.id === t.id)) tracks.push(t);
 
   // Cross-track transitions (a shot into or out of a card) also need their items to still meet.
   const all = new Map(tracks.flatMap((t) => t.items.map((i) => [i.id, i] as const)));

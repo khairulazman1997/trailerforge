@@ -127,6 +127,8 @@ describe('tool surface', () => {
         'match_accept',
         'take_ranking',
         'critique_run',
+        'effectcraft_author',
+        'effectcraft_discard',
         'health_check',
         'cut_generate',
         'core_timeline_trim',
@@ -164,6 +166,7 @@ describe('tool surface', () => {
     // Which logo and font files a project uses is the user's choice, like importing footage.
     expect(names).not.toContain('core_brand_set-logo');
     expect(names).not.toContain('core_brand_set-font');
+    expect(names).not.toContain('effectcraft_effect_add'); // accepting an effect is the user's
     // Approving is the user's sign-off, and overriding a gate finding is theirs too.
     expect(names).not.toContain('core_review_approve');
     // Applying an AI critique's fix is the user's decision; Claude can ask for the critique.
@@ -173,7 +176,7 @@ describe('tool surface', () => {
       'override',
     );
     // Every registered command is exposed except those, and each schema is an object.
-    expect(engine.commands.types().length - 8).toBe(
+    expect(engine.commands.types().length - 9).toBe(
       names.filter((n) => n.startsWith('core_') || n.startsWith('game-trailer_')).length,
     );
     for (const t of tools) {

@@ -20,6 +20,7 @@ import {
   handoffCommand,
   presetsCommand,
   critiqueCommand,
+  effectcraftCommand,
   demoCommand,
   doctorCommand,
   qcCommand,
@@ -79,6 +80,10 @@ Usage:
                                                           Render with the preset, check the file, deliver to exports/render (--preset saves the choice)
   tforge handoff <dir> [--version <id|master>] [--format fcpxml,otio,edl]
                                                           Files for an editor: FCPXML, OpenTimelineIO, EDL, with alpha clips for cards and captions
+  tforge effectcraft author <dir> --text <words> --seconds <s> [--land-at <s>] [--accept --at <s>]
+                                                          Ask the AI for a custom EffectCraft effect (text only); prints the proposal and its preview frames
+  tforge effectcraft accept|reject <dir> <proposalId> [--at <s>]
+                                                          Put a proposed effect on the Effects track at --at seconds (one undo step), or discard it
   tforge review list|comment|resolve|reopen|approve|revoke <dir> [<commentId>] [--version <id|master>] [--at <s>] [--text <t>] [--note <t>]
                                                           Comments on a version and approval (goes stale when the version changes)
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
@@ -169,6 +174,8 @@ export async function main(
         override: { type: 'string', multiple: true },
         at: { type: 'string' },
         text: { type: 'string' },
+        seconds: { type: 'string' },
+        'land-at': { type: 'string' },
         todo: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
@@ -188,6 +195,7 @@ export async function main(
     'brand',
     'sfx',
     'review',
+    'effectcraft',
   ].includes(positionals[0] ?? '');
   const cmd = twoWord ? `${positionals[0]} ${positionals[1] ?? ''}`.trim() : positionals[0];
   const arg = positionals[twoWord ? 2 : 1];
@@ -288,6 +296,8 @@ export async function main(
       override: o.override ?? [],
       at: o.at,
       text: o.text,
+      seconds: o.seconds,
+      landAt: o['land-at'],
     },
   };
   try {
@@ -404,6 +414,12 @@ export async function main(
         return need(arg, '<dir>') ? await exportCommand(ctx, arg) : 2;
       case 'handoff':
         return need(arg, '<dir>') ? await handoffCommand(ctx, arg) : 2;
+      case 'effectcraft author':
+      case 'effectcraft accept':
+      case 'effectcraft reject':
+        return need(arg, '<dir>')
+          ? await effectcraftCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
+          : 2;
       case 'review list':
       case 'review comment':
       case 'review resolve':

@@ -171,6 +171,7 @@ export function describeError(err: unknown): HttpError {
       'takes-attached': 409,
       'gate-blocked': 422,
       'missing-tool': 422,
+      'effect-refused': 422,
       failed: 502,
     }[err.code];
     return new HttpError(status, err.code, err.message, err.details);

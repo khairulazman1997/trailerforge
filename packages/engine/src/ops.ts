@@ -52,6 +52,7 @@ export class OpError extends Error {
       | 'takes-attached'
       | 'gate-blocked'
       | 'missing-tool'
+      | 'effect-refused'
       | 'failed',
     message: string,
     readonly details?: unknown,

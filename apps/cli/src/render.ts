@@ -15,6 +15,9 @@ import {
   type Engine,
   type HandoffFormat,
   type Progress,
+  acceptEffectOp,
+  authorEffectOp,
+  rejectEffectOp,
 } from '@trailerforge/engine';
 import { fail, type CmdCtx } from './m2.js';
 
@@ -321,5 +324,57 @@ export async function reviewCommand(
     } finally {
       await store.save();
     }
+  });
+}
+
+/** `tforge effectcraft author|accept|reject`: custom effects by words (plan M8). */
+export async function effectcraftCommand(
+  ctx: CmdCtx,
+  sub: string,
+  dir: string,
+  proposalId: string | undefined,
+): Promise<number> {
+  const num = (v: string | undefined, what: string): number | undefined => {
+    if (v === undefined) return undefined;
+    const n = Number(v);
+    if (!Number.isFinite(n)) throw new OpError('usage', `${what} must be a number of seconds`);
+    return n;
+  };
+  return withProject(ctx, dir, async (engine, store) => {
+    if (sub === 'author') {
+      if (!ctx.flags.text)
+        throw new OpError('usage', 'say what the effect should look like with --text');
+      const seconds = num(ctx.flags.seconds, '--seconds') ?? 3;
+      const landAt = num(ctx.flags.landAt, '--land-at');
+      const p = await authorEffectOp(engine, store, {
+        words: ctx.flags.text,
+        seconds,
+        ...(landAt !== undefined ? { landAt } : {}),
+      });
+      const lines = [
+        `Proposal ${p.id}: "${p.name}" — ${p.summary}`,
+        `  ${p.seconds} s, preview frames in ${p.preview.dir} (${p.preview.frames} frames; still = frame ${p.preview.still})`,
+        ...(p.repaired.length ? [`  repaired once: ${p.repaired.join('; ')}`] : []),
+        ...p.warnings.map((w) => `  warning: ${w}`),
+      ];
+      if (ctx.flags.accept) {
+        const r = await acceptEffectOp(engine, store, { proposalId: p.id, at: num(ctx.flags.at, '--at') ?? 0 }); // prettier-ignore
+        lines.push(`Accepted: ${r.itemId} on the Effects track (one undo step)`);
+        ctx.emit(lines.join('\n'), { proposal: p, accepted: r });
+      } else {
+        lines.push(`Accept with: tforge effectcraft accept ${dir} ${p.id} --at <seconds>`);
+        ctx.emit(lines.join('\n'), p);
+      }
+      return 0;
+    }
+    if (!proposalId) throw new OpError('usage', 'missing <proposalId>');
+    if (sub === 'accept') {
+      const r = await acceptEffectOp(engine, store, { proposalId, at: num(ctx.flags.at, '--at') ?? 0 }); // prettier-ignore
+      ctx.emit(`Accepted: ${r.itemId} on the Effects track (one undo step)`, r);
+      return 0;
+    }
+    const r = await rejectEffectOp(store, { proposalId });
+    ctx.emit(`Discarded ${r.removed}`, r);
+    return 0;
   });
 }

@@ -116,6 +116,8 @@ export const HIDDEN_COMMANDS = new Set([
   // Critique notes come from `critique_run`, which checks and redacts what the model said.
   'core/critique.add',
   'core/knowledge.apply-scan',
+  // Accepting a custom effect is the user's decision (the app or `tforge effectcraft accept`).
+  'effectcraft/effect.add',
   'core/storyboard.set',
   'core/storyboard.replace-section',
 ]);

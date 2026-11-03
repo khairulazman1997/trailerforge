@@ -29,6 +29,9 @@ import {
   exportVersionOp,
   handoffOp,
   critiqueOp,
+  authorEffectOp,
+  rejectEffectOp,
+  AuthoredEffect,
   healthOp,
   qualityOp,
   renderDraftOp,
@@ -813,6 +816,56 @@ export function createMcpServer(opts: McpServerOptions): Server {
     },
     async run(args) {
       return critiqueOp(engine, await project(args), versionArg(args));
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'effectcraft_author',
+      description:
+        "Make a custom motion-graphics effect with EffectCraft and render a preview; nothing changes in the project. Either describe it in `words` (the configured AI writes it; text only: the words with excluded game facts redacted, the length, the hit point, the picture size and the brand's colours and font names), or write it yourself as `effect`: {name, summary, commands: [{command, params}]} with EffectCraft commands run inside a ready, transparent composition named \"tf-effect\" of the cut's size, frame rate and the given length. Allowed commands: layer.newText, layer.newSolid, layer.newShape, layer.newNull, layer.newAdjustment, layer.rename, layer.setSwitch, layer.addShapeItem, layer.setParent, prop.set, prop.addKey, keys.select, keys.easyEase, keys.easyEaseIn, keys.easyEaseOut, keys.toggleHold, effect.apply. Name every layer and refer to it by name; times in seconds from the effect's start; property paths like transform/position (px), transform/scale (%), transform/opacity (0..100), text/sourceText. No file paths, URLs, expressions or scripts. A refused effect returns its problems so you can fix them. Returns a proposal id and the preview frames' folder; accepting it onto the timeline is the user's decision (the app or `tforge effectcraft accept`).",
+      inputSchema: object(
+        {
+          words: { type: 'string', description: 'What the effect should look like.' },
+          seconds: { type: 'number', minimum: 0.5, maximum: 20, description: 'Length in seconds.' },
+          landAt: {
+            type: 'number',
+            minimum: 0,
+            description: 'Seconds from the start where the main hit lands.',
+          },
+          effect: {
+            type: 'object',
+            description:
+              'An effect you wrote: {name, summary, commands}. Omit to let the configured AI write it from words.',
+          },
+        },
+        ['seconds'],
+      ),
+    },
+    async run(args) {
+      const a = args as { words?: string; seconds: number; landAt?: number; effect?: unknown };
+      return authorEffectOp(engine, await project(args), {
+        words: a.words ?? '',
+        seconds: a.seconds,
+        ...(a.landAt !== undefined ? { landAt: a.landAt } : {}),
+        ...(a.effect !== undefined ? { effect: AuthoredEffect.parse(a.effect) } : {}),
+      });
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'effectcraft_discard',
+      description:
+        'Discard a custom effect proposal from effectcraft_author (nothing in the project changes).',
+      inputSchema: object({ proposalId: { type: 'string' } }, ['proposalId']),
+    },
+    async run(args) {
+      return rejectEffectOp(await project(args), {
+        proposalId: String((args as { proposalId: unknown }).proposalId),
+      });
     },
   });
 

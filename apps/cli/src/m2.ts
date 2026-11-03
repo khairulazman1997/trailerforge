@@ -57,6 +57,9 @@ export interface Flags {
   override: string[];
   at?: string | undefined;
   text?: string | undefined;
+  /** `effectcraft author`. */
+  seconds?: string | undefined;
+  landAt?: string | undefined;
   /** `demo --dir`: where the demo project goes. */
   dir?: string | undefined;
   /** `critique --show`: print what would be sent. */
