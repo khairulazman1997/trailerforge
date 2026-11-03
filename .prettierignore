@@ -11,3 +11,4 @@ packages/compile/src/__golden__
 apps/desktop/stage
 apps/desktop/release
 apps/desktop/vendor
+apps/desktop/third-party

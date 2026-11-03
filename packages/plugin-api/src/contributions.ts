@@ -176,17 +176,29 @@ export interface MotionRenderJob {
   duration: Flicks;
   resolution: z.infer<typeof Resolution>;
   frameRate: z.infer<typeof Rate>;
-  /** Output file; renderers write video with alpha (e.g. ProRes 4444). */
-  outPath: string;
+  /**
+   * Folder for the frames: transparent RGBA PNGs `frame_%06d.png` from 0, plus a `SEQUENCE_DONE` marker
+   * written last (the same layout as the built-in renderer's sequences). Renderers never write
+   * video: the compiler encodes (plan decision M8-2).
+   */
+  outDir: string;
 }
 
-/** Renders graphics/motion segments. Built-in canvas renderer by default; EffectCraft optional. */
+export interface MotionRenderResult {
+  dir: string;
+  /** `frame_%06d.png`. */
+  pattern: string;
+  frames: number;
+  warnings: string[];
+}
+
+/** Renders graphics/motion segments. Built-in SVG renderer by default; EffectCraft optional. */
 export interface MotionRenderer {
   id: string;
   name: string;
-  available(): Promise<{ ok: true } | { ok: false; reason: string }>;
+  available(): Promise<{ ok: true; version?: string } | { ok: false; reason: string }>;
   supports(templateId: string): boolean;
-  render(job: MotionRenderJob, signal: AbortSignal): Promise<{ outPath: string }>;
+  render(job: MotionRenderJob, signal: AbortSignal): Promise<MotionRenderResult>;
 }
 
 export interface LlmRequest<T> {

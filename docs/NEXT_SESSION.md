@@ -50,3 +50,9 @@ Packaging (7.11) is verified here only as far as an unsigned `win-unpacked` fold
 8. Quit, reopen the project: everything is still there. Uninstall: the app folder goes, your projects stay.
 
 Open for the installer: no icon yet (default Electron icon), no code signing, no auto-update.
+
+## M8 EffectCraft: Windows items (added with task 8.2)
+
+1. **Record the pinned EffectCraft hash.** The cloud container could not download the release (`effectcraft-0.9.2-windows-x64-portable.zip` returned 404 there; the asset name is taken from EffectCraft's `packaging/windows/package.ps1` and is unconfirmed). On Windows, download the v0.9.2 portable zip from the storytold/effectcraft release page, compare `Get-FileHash <zip> -Algorithm SHA256` with the digest the release page shows, and put it in `EC_SHA256` in `apps/desktop/scripts/package.mjs` (fix `EC_ZIP` if the name differs). Until then `package` stops with a message naming the zip's hash. `--effectcraft-zip=<file>` uses a zip you downloaded.
+2. Then `package` and `package:check -- --installer`: the check now requires `resources/effectcraft/effectcraft-cli.exe` and its `LICENSE-MIT`, `LICENSE-APACHE` and `NOTICE`.
+3. Contract tests against the real CLI: `$env:TFORGE_EFFECTCRAFT="<path>\effectcraft-cli.exe"; pnpm --filter @trailerforge/effectcraft test` (the real-CLI test renders a small scene twice and compares the frames; it is skipped without the variable). Also run the spike script (`docs/spikes/effectcraft-spike.sh`, Git Bash) with `CLI=<path>`.

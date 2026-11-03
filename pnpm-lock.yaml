@@ -225,6 +225,18 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/effectcraft:
+    dependencies:
+      '@trailerforge/graphics':
+        specifier: workspace:*
+        version: link:../graphics
+      '@trailerforge/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/effects:
     dependencies:
       '@trailerforge/schema':

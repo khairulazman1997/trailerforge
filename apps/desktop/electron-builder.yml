@@ -36,3 +36,9 @@ extraResources:
       - '!**/*.pyc'
   - from: vendor/uv
     to: uv
+  - from: vendor/effectcraft
+    to: effectcraft
+    filter:
+      - effectcraft-cli.exe
+  - from: third-party/effectcraft
+    to: effectcraft
