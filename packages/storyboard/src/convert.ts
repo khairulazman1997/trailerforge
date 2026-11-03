@@ -22,6 +22,24 @@ export interface ConvertContext {
   cardTemplates: Partial<Record<CardKind, string>>;
   /** Installed transitions and effects, to check the model's picks and their params. */
   filters?: FilterRegistry;
+  /** Installed motion-graphics templates (EffectCraft) by id, with the card kinds each draws. */
+  graphics?: ReadonlyMap<string, readonly string[]>;
+}
+
+/** Where a slot's effect brief is kept (plugin data of the EffectCraft plugin). */
+export const EFFECT_BRIEF_PACK = 'effectcraft';
+export type EffectBrief = {
+  text: string;
+  why: string;
+  /** Set when the effect written from this brief was accepted onto the timeline. */
+  accepted?: boolean;
+};
+/** A slot's effect brief, if it has one. */
+export function effectBriefOf(slot: {
+  extensions: Record<string, unknown>;
+}): EffectBrief | undefined {
+  const x = slot.extensions[EFFECT_BRIEF_PACK] as { brief?: EffectBrief } | undefined;
+  return x?.brief;
 }
 
 type SfxCue = Storyboard['music']['sfxCues'][number];
@@ -29,7 +47,7 @@ type SfxCue = Storyboard['music']['sfxCues'][number];
 /** A transition, effect or sound the model suggested for a slot, with its reason. */
 export interface Suggestion {
   slotId: string;
-  what: 'transition' | 'effect' | 'sound';
+  what: 'transition' | 'effect' | 'sound' | 'template' | 'effect-brief';
   id: string;
   why: string;
 }
@@ -68,6 +86,8 @@ interface Picked {
   transitionIn?: TransitionRef;
   effects: SlotEffect[];
   sound?: { kind: SfxCue['kind']; position: SfxCue['position']; why: string };
+  templateId?: string;
+  brief?: EffectBrief;
   suggestions: Omit<Suggestion, 'slotId'>[];
 }
 
@@ -107,6 +127,22 @@ function pick(g: GenSlot, ctx: ConvertContext, warnings: string[]): Picked {
     out.sound = { kind, position, why: snd.why };
     out.suggestions.push({ what: 'sound', id: kind, why: snd.why });
   }
+  const tpl = g.template;
+  if (tpl) {
+    const kinds = ctx.graphics?.get(tpl.id);
+    if (g.kind === 'card' && kinds?.includes(g.cardKind ?? 'custom')) {
+      out.templateId = tpl.id;
+      out.suggestions.push({ what: 'template', id: tpl.id, why: tpl.why });
+    } else
+      warnings.push(
+        `"${g.title}": ${tpl.id} ${kinds ? `cannot draw this ${g.kind === 'card' ? `${g.cardKind ?? 'custom'} card` : 'shot'}` : 'is not installed'}; left out`,
+      );
+  }
+  const brief = g.effectBrief;
+  if (brief) {
+    out.brief = { text: brief.text.trim(), why: brief.why };
+    out.suggestions.push({ what: 'effect-brief', id: 'effectcraft/brief', why: brief.why });
+  }
   return out;
 }
 
@@ -121,7 +157,7 @@ function convertSlot(g: GenSlot, ideal: number, ctx: ConvertContext, picked?: Pi
     audioNotes: g.audioNotes,
     entityIds: [...new Set(g.entityIds.filter((id) => ctx.entityIds.has(id)))],
     tags: [],
-    extensions: {},
+    extensions: picked?.brief ? { [EFFECT_BRIEF_PACK]: { brief: picked.brief } } : {},
   };
   if (g.kind === 'card') {
     const cardKind = g.cardKind ?? 'custom';
@@ -130,7 +166,7 @@ function convertSlot(g: GenSlot, ideal: number, ctx: ConvertContext, picked?: Pi
       id: mintId('cd', g.title, ctx.taken),
       kind: 'card',
       cardKind,
-      templateId: ctx.cardTemplates[cardKind] ?? `core/${cardKind}-card`,
+      templateId: picked?.templateId ?? ctx.cardTemplates[cardKind] ?? `core/${cardKind}-card`,
       text: g.text || g.title,
       params: {},
       styleTokens: {},
@@ -198,7 +234,7 @@ export function convertSections(
   const sections = gen.map((s): Section => {
     const id = keepId && gen.length === 1 ? keepId : mintId('sec', s.role || s.name, ctx.taken);
     const slots = s.slots.map((g) => {
-      const has = !!(g.transitionIn || g.effect || g.sound);
+      const has = !!(g.transitionIn || g.effect || g.sound || g.template || g.effectBrief);
       const keep = has && withPicks < limit;
       if (has && !keep) dropped++;
       if (keep) withPicks++;

@@ -9,12 +9,14 @@ import {
   EffectCraftRenderer,
   EffectRefusedError,
   PROJECT_TEMPLATE_ID,
+  EC_TEMPLATES,
   authorEffect,
   cachedMotionFrames,
   type EffectRequest,
 } from '@trailerforge/effectcraft';
 import { excludedTerms } from '@trailerforge/pack-game-trailer';
-import { FLICKS_PER_SECOND, flicksPerFrame, type Timeline } from '@trailerforge/schema';
+import { FLICKS_PER_SECOND, flicksPerFrame, type Slot, type Timeline } from '@trailerforge/schema';
+import { effectBriefOf } from '@trailerforge/storyboard';
 import { z } from 'zod';
 import type { Engine } from './engine.js';
 import { addEffect } from './effectcraft-commands.js';
@@ -24,6 +26,8 @@ import { OpError } from './ops.js';
 export interface EffectProposal {
   id: string;
   timelineId: string;
+  /** The storyboard slot whose effect brief this was written from, if any. */
+  slotId?: string;
   name: string;
   summary: string;
   seconds: number;
@@ -44,6 +48,7 @@ export interface EffectProposal {
 const Stored = z.object({
   id: z.string(),
   timelineId: z.string(),
+  slotId: z.string().optional(),
   name: z.string(),
   summary: z.string(),
   seconds: z.number(),
@@ -85,6 +90,8 @@ export interface AuthorEffectInput {
   landAt?: number;
   /** Commands written by the caller (Claude Code through MCP): no model is asked. */
   effect?: AuthoredEffect;
+  /** The storyboard slot whose effect brief this is written from. */
+  slotId?: string;
 }
 
 /**
@@ -146,6 +153,7 @@ export async function authorEffectOp(
     const stored: z.infer<typeof Stored> = {
       id,
       timelineId: tl.id,
+      ...(input.slotId ? { slotId: input.slotId } : {}),
       name: r.effect.name,
       summary: r.effect.summary,
       seconds,
@@ -162,6 +170,7 @@ export async function authorEffectOp(
     return {
       id,
       timelineId: tl.id,
+      ...(input.slotId ? { slotId: input.slotId } : {}),
       name: r.effect.name,
       summary: r.effect.summary,
       seconds,
@@ -214,13 +223,15 @@ async function readProposal(store: ProjectStore, proposalId: string) {
 export async function acceptEffectOp(
   engine: Engine,
   store: ProjectStore,
-  input: { proposalId: string; at: number },
+  input: { proposalId: string; at?: number },
   opts: { now?: () => Date } = {},
 ): Promise<{ itemId: string; project: string; start: number; duration: number }> {
   const { dir, p } = await readProposal(store, input.proposalId);
   const tl = store.state.timelines.find((t) => t.id === p.timelineId);
   if (!tl) throw new OpError('not-found', 'the cut this effect was made for is gone');
-  if (!(input.at >= 0)) throw new OpError('usage', 'the effect needs a start time of 0 or later');
+  const at = input.at ?? slotStart(tl, p.slotId);
+  if (at === undefined || !(at >= 0))
+    throw new OpError('usage', 'the effect needs a start time of 0 or later');
   const bytes = await readFile(join(dir, 'effect.ecproj'));
   const sha = createHash('sha256').update(bytes).digest('hex');
   if (sha !== p.sha256) throw new OpError('failed', 'the proposal changed on disk; write it again');
@@ -233,7 +244,7 @@ export async function acceptEffectOp(
     await rename(tmp, abs);
   }
   const fpf = flicksPerFrame(tl.frameRate);
-  const start = Math.round((input.at * FLICKS_PER_SECOND) / fpf) * fpf;
+  const start = Math.round((at * FLICKS_PER_SECOND) / fpf) * fpf;
   const duration = Math.max(fpf, Math.round((p.seconds * FLICKS_PER_SECOND) / fpf) * fpf);
   const decisionId = `dec_${p.id}`;
   const before = new Set(tl.tracks.flatMap((t) => t.items.map((i) => i.id)));
@@ -245,6 +256,7 @@ export async function acceptEffectOp(
     comp: EFFECT_COMP,
     label: p.name,
     decisionId,
+    ...(p.slotId && slotOf(store, p.slotId) ? { slotId: p.slotId } : {}),
   });
   const after = store.state.timelines.find((t) => t.id === tl.id)!;
   const itemId = after.tracks.flatMap((t) => t.items).find((i) => !before.has(i.id))!.id;
@@ -281,3 +293,111 @@ export async function rejectEffectOp(
 }
 
 export { AuthoredEffect } from '@trailerforge/effectcraft';
+
+/** Seconds where a slot starts on a timeline (its first picture item), if it is on it. */
+function slotStart(tl: Timeline, slotId: string | undefined): number | undefined {
+  if (!slotId) return undefined;
+  const starts = tl.tracks
+    .filter((t) => t.kind === 'video' || t.kind === 'graphics')
+    .flatMap((t) => t.items)
+    .filter((i) => i.slotId === slotId)
+    .map((i) => i.start);
+  return starts.length ? Math.min(...starts) / FLICKS_PER_SECOND : undefined;
+}
+
+function slotOf(store: ProjectStore, slotId: string): Slot | undefined {
+  return store.state.storyboard?.sections.flatMap((s) => s.slots).find((x) => x.id === slotId);
+}
+
+/**
+ * What the storyboard generator may use from EffectCraft (plan M8 decision 5): the shipped
+ * templates that are installed, with the card kinds each draws (those of its built-in fallback),
+ * and effect briefs. Nothing when EffectCraft is not available, so generation is then exactly
+ * what it was before.
+ */
+export async function generatorMotion(
+  engine: Engine,
+): Promise<
+  | { motion: { templates: { id: string; name: string; cardKinds: string[] }[]; briefs: boolean } }
+  | Record<string, never>
+> {
+  const r = engine.plugins.registries.motionRenderers.get('effectcraft/cli');
+  if (!(r instanceof EffectCraftRenderer) || !(await r.available()).ok) return {};
+  const reg = engine.plugins.registries.graphicTemplates;
+  const templates = EC_TEMPLATES.filter((d) => reg.get(d.id)).map((d) => ({
+    id: d.id,
+    name: d.name,
+    cardKinds: [...(reg.get(d.fallback)?.serves ?? [])],
+  }));
+  return { motion: { templates, briefs: true } };
+}
+
+/** The proposals waiting for a yes or no. */
+export async function effectProposalsOp(store: ProjectStore): Promise<z.infer<typeof Stored>[]> {
+  const { readdir } = await import('node:fs/promises');
+  let ids: string[];
+  try {
+    ids = await readdir(proposalsDir(store));
+  } catch {
+    return [];
+  }
+  const out: z.infer<typeof Stored>[] = [];
+  for (const id of ids.filter((x) => PROPOSAL_ID.test(x)).sort())
+    try {
+      out.push((await readProposal(store, id)).p);
+    } catch {
+      /* unfinished */
+    }
+  return out;
+}
+
+export interface BriefsOutcome {
+  proposals: EffectProposal[];
+  /** Briefs that were not written, and why (refused, already proposed or accepted). */
+  skipped: { slotId: string; reason: string }[];
+}
+
+/**
+ * The authoring pass after a storyboard is generated (plan M8 decision 5): one proposal per
+ * effect brief that has neither a proposal waiting nor an accepted effect, one after the other.
+ * Cancellable between and during briefs (the one in progress stores nothing); a refused brief is
+ * reported and the pass goes on. Nothing is applied: each proposal waits for the user.
+ */
+export async function effectBriefsOp(
+  engine: Engine,
+  store: ProjectStore,
+  opts: {
+    signal?: AbortSignal | undefined;
+    onProgress?: (done: number, total: number) => void;
+  } = {},
+): Promise<BriefsOutcome> {
+  const waiting = new Set((await effectProposalsOp(store)).map((p) => p.slotId).filter(Boolean));
+  const briefs = (store.state.storyboard?.sections ?? [])
+    .flatMap((s) => s.slots)
+    .map((slot) => ({ slot, brief: effectBriefOf(slot) }))
+    .filter((x) => x.brief);
+  const out: BriefsOutcome = { proposals: [], skipped: [] };
+  let done = 0;
+  for (const { slot, brief } of briefs) {
+    opts.signal?.throwIfAborted();
+    if (brief!.accepted) out.skipped.push({ slotId: slot.id, reason: 'accepted' });
+    else if (waiting.has(slot.id)) out.skipped.push({ slotId: slot.id, reason: 'proposed' });
+    else
+      try {
+        const seconds = Math.min(20, Math.max(0.5, slot.duration.ideal));
+        out.proposals.push(
+          await authorEffectOp(
+            engine,
+            store,
+            { words: brief!.text, seconds, slotId: slot.id },
+            { signal: opts.signal },
+          ),
+        );
+      } catch (e) {
+        if (opts.signal?.aborted || !(e instanceof OpError)) throw e;
+        out.skipped.push({ slotId: slot.id, reason: e.message });
+      }
+    opts.onProgress?.(++done, briefs.length);
+  }
+  return out;
+}

@@ -23,6 +23,8 @@ export const addEffect = defineCommand({
     comp: z.string().min(1).max(64),
     label: z.string().trim().min(1).max(60),
     decisionId: Id.optional(),
+    /** The storyboard slot whose effect brief this answers; the brief is marked accepted. */
+    slotId: Id.optional(),
   }),
   label: ({ label }) => `Add the effect "${label}"`,
   apply: (d, p) => {
@@ -54,8 +56,17 @@ export const addEffect = defineCommand({
       params: { project: p.project, comp: p.comp },
       effects: [],
       ...(p.decisionId ? { decisionId: p.decisionId } : {}),
-      extensions: { core: { userEdited: true } },
+      extensions: {
+        core: { userEdited: true },
+        ...(p.slotId ? { effectcraft: { slotId: p.slotId } } : {}),
+      },
     });
+    if (p.slotId) {
+      const slot = d.storyboard?.sections.flatMap((s) => s.slots).find((x) => x.id === p.slotId);
+      if (!slot) throw new CommandError(type, `no slot "${p.slotId}"`);
+      const x = (slot.extensions.effectcraft ?? {}) as { brief?: Record<string, unknown> };
+      if (x.brief) slot.extensions.effectcraft = { ...x, brief: { ...x.brief, accepted: true } };
+    }
   },
 });
 

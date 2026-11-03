@@ -41,24 +41,50 @@ export interface GenerateDeps {
   now?: () => Date;
   /** Installed transitions and effects the model may pick from (default: the built-in set). */
   filters?: FilterRegistry;
+  /**
+   * Motion graphics (EffectCraft, plan M8): templates cards may use, and whether slots may carry
+   * an effect brief. Omitted when EffectCraft is not available: the schema and the prompt are
+   * then exactly what they were before.
+   */
+  motion?: {
+    templates: readonly { id: string; name: string; cardKinds: readonly string[] }[];
+    briefs: boolean;
+  };
 }
 
 /** What the model may pick: ids from the installed registry, and the sounds we can make. */
 function installed(deps: GenerateDeps) {
   const filters = deps.filters ?? builtinFilters();
+  const templates = deps.motion?.templates ?? [];
+  const briefs = deps.motion?.briefs ?? false;
   const picks: InstalledPicks = {
     transitions: filters.ids('transition'),
     effects: filters.ids('effect'),
     sounds: [...SFX_KINDS],
+    ...(templates.length
+      ? { graphics: templates.map((t) => ({ id: t.id, cardKinds: t.cardKinds })) }
+      : {}),
+    ...(briefs ? { effectBriefs: true } : {}),
   };
   return {
     filters,
+    graphics: new Map(templates.map((t) => [t.id, t.cardKinds] as const)),
     schemas: generationSchemas(picks),
     // Shown to the model under "Transitions, effects and sounds".
     guide: [
       `Transitions (transitionIn.id): ${picks.transitions.join(', ') || '(none installed)'}`,
       `Effects (effect.id): ${picks.effects.join(', ') || '(none installed)'}`,
       `Sounds (sound.kind): ${picks.sounds.join(', ')}`,
+      ...(templates.length
+        ? [
+            `Motion-graphics card templates (template.id, cards only, instead of the card's plain built-in look): ${templates.map((t) => `${t.id} (${t.name}; for ${t.cardKinds.join('/')} cards)`).join(', ')}`,
+          ]
+        : []),
+      ...(briefs
+        ? [
+            'Custom effect (effectBrief): for a moment that deserves a bespoke motion graphic (a title slam, a stylised hit, a logo sting), describe it in one or two sentences in effectBrief.text; it is written later and only used if the maker accepts it. These count toward the same sparing limit as the other picks.',
+          ]
+        : []),
     ].join('\n'),
   };
 }
@@ -236,6 +262,7 @@ export async function generateStoryboard(
     entityIds: ctx.entityIds,
     cardTemplates: cardTemplatesOf(skeleton),
     filters: inst.filters,
+    graphics: inst.graphics,
   });
   let next = 0;
   const sections = plan.map((x) => ('gen' in x ? converted.sections[next++]! : x.locked));
@@ -404,7 +431,13 @@ export async function regenerateSection(
   const converted = convertSections(
     [value.section],
     budget,
-    { taken, entityIds: ctx.entityIds, cardTemplates: cardTemplatesOf(sb), filters: inst.filters },
+    {
+      taken,
+      entityIds: ctx.entityIds,
+      cardTemplates: cardTemplatesOf(sb),
+      filters: inst.filters,
+      graphics: inst.graphics,
+    },
     target.id,
   );
   // The role is the template's hint for this position; keep it so critique still knows it.
