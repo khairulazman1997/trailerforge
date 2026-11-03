@@ -137,8 +137,9 @@ if (cmd === 'render') {
   const h = Math.round(comp.height * scale);
   for (let k = 0; k < frames; k++) {
     if (mode === 'slow') await sleep(150);
-    const digest = createHash('sha256').update(`${seed}:${k}`).digest();
-    const png = encodePng(w, h, mode === 'no-alpha' ? 2 : 6, digest);
+    // One colour per render (no strobing); the band moves a pixel a frame.
+    const digest = createHash('sha256').update(seed).digest();
+    const png = encodePng(w, h, mode === 'no-alpha' ? 2 : 6, digest, k);
     const file = out.replace(/\[(#+)\]/, (_, h) => String(k).padStart(h.length, '0'));
     writeFileSync(file, png);
   }
@@ -150,12 +151,13 @@ if (cmd === 'render') {
 fail(`unknown subcommand ${cmd}`);
 
 /** A real PNG: one colour per frame from `digest`, a translucent band in the middle. */
-function encodePng(w, h, colorType, digest) {
+function encodePng(w, h, colorType, digest, k = 0) {
   const ch = colorType === 6 ? 4 : 3;
   const raw = Buffer.alloc((w * ch + 1) * h);
   for (let y = 0; y < h; y++) {
     const row = y * (w * ch + 1);
-    const band = y > h / 3 && y < (2 * h) / 3;
+    const top = h / 3 + (k % Math.max(1, Math.floor(h / 3)));
+    const band = y > top && y < top + h / 3;
     for (let x = 0; x < w; x++) {
       const o = row + 1 + x * ch;
       raw[o] = digest[0];
