@@ -35,6 +35,7 @@ export const DEFAULT_ROUTES: z.input<typeof RoutesConfig> = {
     'capture.tips': { provider: 'core/anthropic', model: 'claude-sonnet-5-5', effort: 'low' },
     'tiktok.concepts': { provider: 'core/anthropic', model: 'claude-sonnet-5-5', effort: 'low' },
     'tiktok.wording': { provider: 'core/anthropic', model: 'claude-sonnet-5-5', effort: 'low' },
+    'tiktok.hooks': { provider: 'core/anthropic', model: 'claude-sonnet-5-5', effort: 'low' },
     'cut.rank-takes': { provider: 'core/anthropic', model: 'claude-sonnet-5-5', effort: 'low' },
     'reference.template': {
       provider: 'core/anthropic',

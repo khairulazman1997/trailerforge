@@ -6,6 +6,7 @@ import {
 import { appendDecisions, type ProjectStore } from '@trailerforge/core';
 import {
   buildShortCut,
+  hookSlotOf,
   mergeRoughCut,
   resolveMusicGrid,
   tempoGrid,
@@ -22,6 +23,7 @@ import {
 import {
   DecisionRecord,
   FLICKS_PER_SECOND,
+  hookVersionId,
   shortTimelineId,
   timelineDuration,
   type ConceptInput,
@@ -330,6 +332,10 @@ export interface ShortView {
   /** Voice clean-up at render (on by default). */
   voiceClean: boolean;
   hasTemplate: boolean;
+  /** Alternative openings (hook versions), with the version id each is reviewed and exported by. */
+  hooks: { id: string; versionId: string; name: string; kind: string; caption: string; takeId: string | null; why: string }[]; // prettier-ignore
+  /** The opening shot the hooks change, and the takes a hook may use for it. */
+  opening: { slotId: string; title: string; caption: string; takes: { id: string; name: string }[] } | null; // prettier-ignore
   slots: ShortSlotView[];
   voiceLines: ShortVoiceLineView[];
   musicAssetId: string | null;
@@ -410,6 +416,20 @@ export async function shortsViewOp(engine: Engine, store: ProjectStore): Promise
       subtitles: { enabled: s.subtitles.enabled, style: s.subtitles.style, edits: s.subtitles.edits.length }, // prettier-ignore
       voiceClean: voiceCleanOn(s),
       hasTemplate: sb !== null,
+      hooks: s.hooks.map((h) => ({ id: h.id, versionId: hookVersionId(s.id, h.id), name: h.name, kind: h.kind, caption: h.caption, takeId: h.takeId ?? null, why: h.why })), // prettier-ignore
+      opening: (() => {
+        const o = sb ? hookSlotOf(sb) : undefined;
+        return o
+          ? {
+              slotId: o.id,
+              title: o.title,
+              caption: o.overlays[0]?.text ?? '',
+              takes: o.takes
+                .filter((t) => !t.rejected)
+                .map((t) => ({ id: t.id, name: engine.library.get(t.assetId)?.originalName ?? t.assetId })), // prettier-ignore
+            }
+          : null;
+      })(),
       slots,
       voiceLines,
       musicAssetId: sb?.music.trackAssetId ?? null,

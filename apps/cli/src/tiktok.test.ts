@@ -116,6 +116,24 @@ describe('tforge tiktok', { timeout: 120_000 }, () => {
     expect(cl.out).toMatch(/^Voice clean-up off/);
     expect((await run(['tiktok', 'clean', project, 'short_parry', '--on'])).out).toMatch(/^Voice clean-up on/); // prettier-ignore
 
+    const h0 = await run(['tiktok', 'hooks', project, 'short_parry']);
+    expect(h0.out).toMatch(/^No hook versions/);
+    const h1 = await run(['tiktok', 'hooks', project, 'short_parry', '--add', '--name', 'Question', '--caption', 'Can you parry this?', '--kind', 'question']); // prettier-ignore
+    expect(h1.out).toBe('short_parry_hk_a  Question (question): Can you parry this?');
+    const h2 = await run([
+      'tiktok',
+      'hooks',
+      project,
+      'short_parry',
+      '--edit',
+      'a',
+      '--caption',
+      'Try this',
+    ]);
+    expect(h2.out).toMatch(/Try this/);
+    expect((await run(['tiktok', 'hooks', project, 'short_parry', '--remove', 'zz'])).code).toBe(2);
+    expect((await run(['tiktok', 'hooks', project, 'short_parry', '--remove', 'a'])).out).toMatch(/^No hook versions/); // prettier-ignore
+
     const g = await run(['tiktok', 'generate', project, 'short_parry']);
     expect(g.code).toBe(1); // most slots are still empty: placeholders
     expect(g.out).toMatch(/Cut built \(on the beat\): \d+ items, \d+ placeholders/);

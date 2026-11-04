@@ -14,3 +14,4 @@ export * from './voice-align.js';
 export * from './short-cut.js';
 export * from './subtitles.js';
 export * from './tap-tempo.js';
+export * from './hooks.js';

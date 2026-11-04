@@ -244,6 +244,50 @@ describe('a TikTok, end to end', { timeout: 300_000 }, () => {
     await generateShortCutOp(engine, store, SHORT);
   });
 
+  it('a hook version is its own version: another opening, same length, own review, own file', async () => {
+    const tl = store.state.timelines.find((t) => t.id === `tl_short_${SHORT}`)!;
+    const hookSlot = store.state.shorts[0]!.storyboard!.sections[0]!.slots.find((x) => x.kind === 'shot')!; // prettier-ignore
+    store.dispatch('core/shorts.add-hook', { shortId: SHORT, hook: { name: 'Question', kind: 'question', caption: 'Can you parry this?' } }); // prettier-ignore
+    store.dispatch('core/shorts.add-hook', { shortId: SHORT, hook: { name: 'Cold open', kind: 'cold-open' } }); // prettier-ignore
+    expect(store.state.shorts[0]!.hooks.map((h) => h.id)).toEqual(['a', 'b']);
+    const vid = `${SHORT}_hk_a`;
+    const base = await buildVersion(engine, store, SHORT);
+    const a = await buildVersion(engine, store, vid);
+    const b = await buildVersion(engine, store, `${SHORT}_hk_b`);
+    expect(a.name).toBe('Parry or die hook a');
+    const caps = (x: typeof a) => (x.timeline.tracks.find((t) => t.id === 'trk_captions')?.items ?? []).filter((i) => i.slotId === hookSlot.id).map((i) => (i as { text: string }).text); // prettier-ignore
+    expect(caps(a)).toEqual(['Can you parry this?']);
+    expect(caps(b)).toEqual([]);
+    expect(a.contentHash).not.toBe(base.contentHash);
+    expect(a.contentHash).not.toBe(b.contentHash);
+    const dur = (x: typeof a) => x.timeline.tracks.flatMap((t) => t.items).reduce((m, i) => Math.max(m, i.start + i.duration), 0); // prettier-ignore
+    expect(dur(a)).toBe(dur(base));
+    expect(JSON.stringify(store.state.timelines.find((t) => t.id === tl.id))).toBe(
+      JSON.stringify(tl),
+    ); // not stored
+
+    const review = await reviewViewOp(engine, store);
+    expect(review.map((v) => v.variantId)).toEqual(expect.arrayContaining([SHORT, vid, `${SHORT}_hk_b`])); // prettier-ignore
+    await approveVersionOp(engine, store, { variantId: vid });
+    expect(approvalState(store.state.review, vid, a.contentHash)).toBe('approved');
+    expect(approvalState(store.state.review, `${SHORT}_hk_b`, b.contentHash)).toBe('none');
+    store.dispatch('core/shorts.edit-hook', { shortId: SHORT, hookId: 'a', patch: { caption: 'Another try' } }); // prettier-ignore
+    const edited = await buildVersion(engine, store, vid);
+    expect(approvalState(store.state.review, vid, edited.contentHash)).toBe('stale');
+
+    const f = await exportVersionOp(engine, store, vid);
+    expect(f.file).toContain(join('exports', 'render', vid));
+    expect(f.file).toMatch(/hook[-_ ]a/i);
+    const base2 = await exportVersionOp(engine, store, SHORT);
+    expect(f.sha256).not.toBe(base2.sha256);
+    expect((await exportVersionOp(engine, store, vid)).sha256).toBe(f.sha256);
+    // Removing a hook version drops its review; removing the short drops all.
+    store.dispatch('core/shorts.remove-hook', { shortId: SHORT, hookId: 'a' });
+    expect(store.state.review.approvals.some((x) => x.variantId === vid)).toBe(false);
+    await expect(buildVersion(engine, store, vid)).rejects.toBeInstanceOf(OpError);
+    store.dispatch('core/shorts.remove-hook', { shortId: SHORT, hookId: 'b' });
+  });
+
   it('hands off to an editor, and dropping the short drops its review', async () => {
     const h = await handoffOp(engine, store, SHORT, { formats: ['otio', 'edl'] });
     expect(h.files.some((f) => f.file.endsWith('.otio'))).toBe(true);

@@ -2,6 +2,7 @@ import type { z } from 'zod';
 import { MigrationError, migrateProject } from './migrations.js';
 import { Project } from './project.js';
 import type { Storyboard, Take } from './storyboard.js';
+import { hookVersionId, shortVersionOf } from './shorts.js';
 
 export interface RefIssue {
   path: string;
@@ -63,6 +64,13 @@ export function validateProjectRefs(project: Project): RefIssue[] {
     claim(sh.id, p);
     if (sh.formatTargetId && !formatIds.has(sh.formatTargetId))
       issue(p, `unknown format target "${sh.formatTargetId}"`);
+    const hookIds = new Set<string>();
+    sh.hooks.forEach((h, hi) => {
+      if (hookIds.has(h.id)) issue(`${p}.hooks[${hi}]`, `two hook versions "${h.id}"`);
+      hookIds.add(h.id);
+      // A take that was cleared since is not an error: the version falls back to the chosen take.
+      claim(hookVersionId(sh.id, h.id), `${p}.hooks[${hi}]`);
+    });
     if (sh.storyboard) {
       if (sh.storyboard.variants.length > 0) issue(`${p}.storyboard`, 'a short has no versions');
       checkStoryboard(sh.storyboard, `${p}.storyboard`, ctx);
@@ -75,7 +83,7 @@ export function validateProjectRefs(project: Project): RefIssue[] {
 
   // A version is the master cut (null), a version of the trailer, or a short (by its id).
   const versionOk = (v: string | null) =>
-    v === null || variantIds.has(v) || project.shorts.some((sh) => sh.id === v);
+    v === null || variantIds.has(v) || shortVersionOf(project, v) !== undefined;
   project.review.comments.forEach((c, i) => {
     claim(c.id, `review.comments[${i}]`);
     if (!versionOk(c.variantId)) issue(`review.comments[${i}]`, `unknown variant "${c.variantId}"`);

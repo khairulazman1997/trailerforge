@@ -47,3 +47,4 @@ export const gameTrailerPack = definePlugin({
       ctx.commands.register(c);
   },
 });
+export * from './short-hooks.js';

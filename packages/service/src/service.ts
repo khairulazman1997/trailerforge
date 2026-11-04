@@ -58,6 +58,7 @@ import {
   createShortOp,
   fillSlotOp,
   recordVoiceTakeOp,
+  generateHooksOp,
   voiceCleanReportOp,
   recordingExtension,
   MAX_RECORDING_BYTES,
@@ -382,6 +383,13 @@ const TaskRequest = z.discriminatedUnion('kind', [
       ideas: z.array(z.string().max(500)).max(10).optional(),
       count: z.int().min(1).max(10).optional(),
       repo: z.string().optional(),
+    }),
+  }),
+  z.strictObject({
+    kind: z.literal('hooks'),
+    options: z.strictObject({
+      shortId: z.string().min(1),
+      count: z.int().min(1).max(3).optional(),
     }),
   }),
   z.strictObject({
@@ -902,6 +910,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             'capture.tips',
             'tiktok.concepts',
             'tiktok.wording',
+            'tiktok.hooks',
             'critique.run',
           ])
           .safeParse(query.get('task'));
@@ -909,7 +918,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           throw new HttpError(
             400,
             'bad-request',
-            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips, tiktok.concepts, tiktok.wording or critique.run',
+            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips, tiktok.concepts, tiktok.wording, tiktok.hooks or critique.run',
           );
         return llmPreviewOp(engine, storeById(params.id!), task.data);
       },
@@ -1411,6 +1420,11 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await buildShortOp(engine, store, t.options.shortId, {
               ...(t.options.sectionIds ? { sectionIds: t.options.sectionIds } : {}),
               ...(t.options.wording !== undefined ? { wording: t.options.wording } : {}),
+              signal,
+            });
+          else if (t.kind === 'hooks')
+            out = await generateHooksOp(engine, store, t.options.shortId, {
+              ...(t.options.count !== undefined ? { count: t.options.count } : {}),
               signal,
             });
           else if (t.kind === 'tiktok-concepts')

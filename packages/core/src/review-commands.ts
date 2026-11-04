@@ -1,5 +1,13 @@
 import type { Draft } from 'immer';
-import { ContentHash, Flicks, Id, IsoDateTime, mintId, type Project } from '@trailerforge/schema';
+import {
+  ContentHash,
+  Flicks,
+  Id,
+  IsoDateTime,
+  mintId,
+  shortVersionOf,
+  type Project,
+} from '@trailerforge/schema';
 import { z } from 'zod';
 import { CommandError, defineCommand, type CommandDef } from './commands.js';
 
@@ -14,10 +22,7 @@ const Version = Id.nullable();
 
 function requireVersion(d: Draft<Project>, variantId: string | null, type: string) {
   if (variantId === null) return;
-  if (
-    !d.storyboard?.variants.some((v) => v.id === variantId) &&
-    !d.shorts.some((s) => s.id === variantId)
-  )
+  if (!d.storyboard?.variants.some((v) => v.id === variantId) && !shortVersionOf(d, variantId))
     throw new CommandError(type, `no version "${variantId}"`);
 }
 

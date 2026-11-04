@@ -3,11 +3,14 @@ import {
   Concept,
   ExportSettings,
   Flicks,
+  HookKind,
   Id,
   IsoDateTime,
+  MAX_HOOKS,
   PluginRef,
   ProjectAssetRef,
   CueEdit,
+  ShortHook,
   ShortId,
   ShortPlatform,
   SubtitleStyle,
@@ -18,6 +21,7 @@ import {
   type TakeMatch,
   collectIds,
   mintId,
+  hookVersionId,
   shortTimelineId,
   type AssetRole,
   type Project,
@@ -139,6 +143,7 @@ export const addShort = defineCommand({
       platform: 'tiktok',
       subtitles: { enabled: false, style: 'lines', edits: [] },
       voiceClean: true,
+      hooks: [],
       extensions: {},
     });
   },
@@ -150,10 +155,11 @@ export const removeShort = defineCommand({
   payload: z.strictObject({ shortId: Id }),
   label: () => 'Remove TikTok',
   apply: (d, { shortId }) => {
-    findShort(d, shortId, 'core/shorts.remove');
+    const short = findShort(d, shortId, 'core/shorts.remove');
     d.shorts = d.shorts.filter((s) => s.id !== shortId);
     d.timelines = d.timelines.filter((t) => t.id !== shortTimelineId(shortId));
     dropVersionReview(d, shortId);
+    for (const h of short.hooks) dropVersionReview(d, hookVersionId(shortId, h.id));
   },
 });
 
@@ -507,6 +513,139 @@ export const setShortVoiceClean = defineCommand({
   },
 });
 
+// ---- hook versions ---------------------------------------------------------------------------
+
+const HookText = {
+  name: Text(60),
+  kind: HookKind,
+  caption: z.string().trim().max(120),
+  why: z.string().trim().max(300),
+};
+
+/** The take must belong to a picture slot of the short's template. */
+function checkHookTake(s: Draft<Short>, takeId: string, type: string) {
+  const ok = (s.storyboard?.sections ?? []).some((sec) =>
+    sec.slots.some((sl) => sl.kind === 'shot' && sl.takes.some((t) => t.id === takeId)),
+  );
+  if (!ok) throw new CommandError(type, `no take "${takeId}" in "${s.name}"`);
+}
+
+const HOOK_LETTERS = 'abcdefghijklmnopqrstuvwxyz';
+
+/** Add one alternative opening (a hook version). At most three per TikTok. */
+export const addShortHook = defineCommand({
+  type: 'core/shorts.add-hook',
+  payload: z.strictObject({
+    shortId: Id,
+    hook: z.strictObject({
+      name: HookText.name,
+      kind: HookText.kind.optional(),
+      caption: HookText.caption.optional(),
+      takeId: Id.optional(),
+      why: HookText.why.optional(),
+    }),
+  }),
+  label: () => 'Add hook version',
+  apply: (d, { shortId, hook }) => {
+    const type = 'core/shorts.add-hook';
+    const s = findShort(d, shortId, type);
+    if (s.hooks.length >= MAX_HOOKS)
+      throw new CommandError(type, `a TikTok has at most ${MAX_HOOKS} hook versions`);
+    if (hook.takeId) checkHookTake(s, hook.takeId, type);
+    const id = [...HOOK_LETTERS].find((c) => !s.hooks.some((h) => h.id === c))!;
+    s.hooks.push(ShortHook.parse({ ...hook, id }));
+  },
+});
+
+/** Change a hook version (`null` clears the take back to the chosen one). */
+export const editShortHook = defineCommand({
+  type: 'core/shorts.edit-hook',
+  payload: z.strictObject({
+    shortId: Id,
+    hookId: z.string().min(1).max(8),
+    patch: z.strictObject({
+      name: HookText.name.optional(),
+      kind: HookText.kind.optional(),
+      caption: HookText.caption.optional(),
+      takeId: Id.nullable().optional(),
+      why: HookText.why.optional(),
+    }),
+  }),
+  label: () => 'Edit hook version',
+  apply: (d, { shortId, hookId, patch }) => {
+    const type = 'core/shorts.edit-hook';
+    const s = findShort(d, shortId, type);
+    const h = s.hooks.find((x) => x.id === hookId);
+    if (!h) throw new CommandError(type, `no hook version "${hookId}"`);
+    if (patch.takeId) checkHookTake(s, patch.takeId, type);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) delete (h as Record<string, unknown>)[k];
+      else if (v !== undefined) (h as Record<string, unknown>)[k] = v;
+    }
+  },
+  merge: { key: ({ shortId, hookId }) => `${shortId}:hook:${hookId}`, windowMs: 1500 },
+});
+
+export const removeShortHook = defineCommand({
+  type: 'core/shorts.remove-hook',
+  payload: z.strictObject({ shortId: Id, hookId: z.string().min(1).max(8) }),
+  label: () => 'Remove hook version',
+  apply: (d, { shortId, hookId }) => {
+    const type = 'core/shorts.remove-hook';
+    const s = findShort(d, shortId, type);
+    if (!s.hooks.some((h) => h.id === hookId)) throw new CommandError(type, `no hook version "${hookId}"`); // prettier-ignore
+    s.hooks = s.hooks.filter((h) => h.id !== hookId);
+    dropVersionReview(d, hookVersionId(shortId, hookId));
+  },
+});
+
+/**
+ * Replace the whole list of hook versions as one undo step: what the AI proposes added to the
+ * ones the user keeps. A hook with an `id` keeps it (and its review); new ones get the next free
+ * letter; reviews of ones left out go.
+ */
+export const setShortHooks = defineCommand({
+  type: 'core/shorts.set-hooks',
+  payload: z.strictObject({
+    shortId: Id,
+    hooks: z
+      .array(
+        z.strictObject({
+          id: z
+            .string()
+            .regex(/^[a-z0-9]{1,8}$/)
+            .optional(),
+          name: HookText.name,
+          kind: HookText.kind.optional(),
+          caption: HookText.caption.optional(),
+          takeId: Id.optional(),
+          why: HookText.why.optional(),
+        }),
+      )
+      .max(MAX_HOOKS),
+  }),
+  label: () => 'Set hook versions',
+  apply: (d, { shortId, hooks }) => {
+    const type = 'core/shorts.set-hooks';
+    const s = findShort(d, shortId, type);
+    const keep = new Set(hooks.flatMap((h) => (h.id ? [h.id] : [])));
+    if (keep.size !== hooks.filter((h) => h.id).length)
+      throw new CommandError(type, 'two hook versions share an id');
+    for (const h of hooks) {
+      if (h.id && !s.hooks.some((x) => x.id === h.id)) throw new CommandError(type, `no hook version "${h.id}"`); // prettier-ignore
+      if (h.takeId) checkHookTake(s, h.takeId, type);
+    }
+    for (const h of s.hooks)
+      if (!keep.has(h.id)) dropVersionReview(d, hookVersionId(shortId, h.id));
+    const used = new Set(keep);
+    s.hooks = hooks.map((h) => {
+      const id = h.id ?? [...HOOK_LETTERS].find((c) => !used.has(c))!;
+      used.add(id);
+      return ShortHook.parse({ ...h, id });
+    });
+  },
+});
+
 export const shortsCommands = [
   addConcepts,
   removeConcepts,
@@ -521,6 +660,10 @@ export const shortsCommands = [
   clearShortSlot,
   setShortMusic,
   setShortGrid,
+  addShortHook,
+  editShortHook,
+  removeShortHook,
+  setShortHooks,
   setShortSubtitles,
   setShortVoiceClean,
   editCue,

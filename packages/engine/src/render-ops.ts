@@ -31,6 +31,7 @@ import {
   type GateOverride,
   type GateVerdict,
   type TakeSource,
+  deriveHook,
 } from '@trailerforge/cut';
 import {
   PLATFORM_SAFE,
@@ -58,6 +59,8 @@ import {
   flicksPerFrame,
   isMasterTimeline,
   shortTimelineId,
+  shortVersionIds,
+  shortVersionOf,
   timelineDuration,
   type ApprovalState,
   type LibraryAsset,
@@ -70,6 +73,7 @@ import { readFootageAnalysis } from '@trailerforge/analysis';
 import type { Engine } from './engine.js';
 import { deriveVariantOp } from './graphics-ops.js';
 import { OpError } from './ops.js';
+import { shortSources } from './shorts-ops.js';
 import { STILL_SECONDS } from './still.js';
 import { voiceCleanOn, withVoiceClean } from './voice-clean.js';
 import { toSrt, toVtt } from '@trailerforge/cut';
@@ -88,7 +92,7 @@ const keyOf = (variantId: string | null) => variantId ?? 'master';
 
 /** The short a version id names (a short is a version of the project, by its id). */
 const shortOf = (project: { shorts: readonly Short[] }, id: string | null): Short | undefined =>
-  id === null ? undefined : project.shorts.find((x) => x.id === id);
+  shortVersionOf(project, id)?.short;
 
 /** Export choices of a version: a trailer version's, or a short's. */
 function exportOf(project: ProjectStore['state'], id: string | null) {
@@ -151,12 +155,26 @@ export async function buildVersion(
   let name: string;
   let exportSettings: StoryboardVariant['export'];
   const short = shortOf(project, variantId);
+  let hookWarnings: string[] = [];
   if (short) {
     const tl = project.timelines.find((t) => t.id === shortTimelineId(short.id));
     if (!tl) throw new OpError('not-found', `"${short.name}" has no cut yet: build its cut first`);
     timeline = tl;
     name = short.name;
     exportSettings = short.export;
+    // A hook version is the short with another opening: derived here, never stored.
+    const hook = shortVersionOf(project, variantId)?.hook;
+    if (hook && short.storyboard) {
+      const d = deriveHook({
+        timeline: tl,
+        storyboard: short.storyboard,
+        hook,
+        sources: await shortSources(engine, store, short),
+      });
+      timeline = { ...d.timeline, id: `${tl.id}_hk_${hook.id}`, name: `${tl.name} (${hook.name})` };
+      name = `${short.name} hook ${hook.id}`;
+      hookWarnings = d.warnings;
+    }
   } else if (variantId === null) {
     const master =
       project.timelines.find((t) => t.id === 'tl_rough') ??
@@ -175,7 +193,7 @@ export async function buildVersion(
   // A track that only gives the beat is never part of a render; the music-free export drops the rest.
   if (short && (o.withoutMusic || short.storyboard?.music.timingOnly))
     timeline = { ...timeline, tracks: timeline.tracks.filter((t) => t.id !== 'trk_music') };
-  const warnings: string[] = [];
+  const warnings: string[] = [...hookWarnings];
   // Voice clean-up is applied at render, tuned to each recording; the stored cut stays as it is.
   if (short && voiceCleanOn(short)) {
     const c = await withVoiceClean(engine, store, timeline);
@@ -438,7 +456,8 @@ export async function reviewViewOp(engine: Engine, store: ProjectStore): Promise
   if (project.timelines.some(isMasterTimeline)) ids.push(null);
   for (const v of project.storyboard?.variants ?? []) ids.push(v.id);
   for (const sh of project.shorts)
-    if (project.timelines.some((t) => t.id === shortTimelineId(sh.id))) ids.push(sh.id);
+    if (project.timelines.some((t) => t.id === shortTimelineId(sh.id)))
+      ids.push(...shortVersionIds(sh));
   const out: VersionReview[] = [];
   for (const id of ids) {
     let b: VersionBuild;

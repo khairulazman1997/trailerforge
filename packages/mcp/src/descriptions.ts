@@ -118,6 +118,13 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
     'Beat grid for a TikTok: tempo (BPM; no music file needed, e.g. from tap tempo), offset in flicks (at most a second), downbeatShift, beatsPerBar, barsPerPhrase. null clears tempo or beatsPerBar. Rebuild the cut with tiktok_cut afterwards.',
   'core/shorts.set-voice-clean':
     "Voice clean-up on or off for a TikTok (on by default): high-pass, noise reduction tuned to the recording's own noise floor, de-esser, gentle compression and a level to -16 LUFS, applied when it renders; the recordings are not changed.",
+  'core/shorts.add-hook':
+    "Add a hook version to a TikTok: an alternative opening for A/B tests (name, kind cold-open|text|question|custom, caption = the words over the first shot (empty for none), optional takeId of the opening shot's other recording). At most three. It exports as its own version <short id>_hk_<hook id>.",
+  'core/shorts.edit-hook':
+    'Change a hook version: name, kind, caption, why, or takeId (null goes back to the chosen take). Its review approval goes out of date if the picture changes.',
+  'core/shorts.remove-hook': 'Remove a hook version and its comments and approval.',
+  'core/shorts.set-hooks':
+    'Replace the whole list of hook versions at once (up to three; an entry with an id keeps it).',
   'core/shorts.set-subtitles':
     'Turn subtitles on or off for a TikTok, choose lines or word-pop, and the app it is made for (tiktok, shorts, reels: where the app covers the picture). Rebuild the cut with tiktok_cut afterwards.',
   'core/shorts.edit-cue':

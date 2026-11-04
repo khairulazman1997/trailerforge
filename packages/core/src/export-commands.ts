@@ -1,5 +1,5 @@
 import type { Draft } from 'immer';
-import { Id, type Project } from '@trailerforge/schema';
+import { Id, shortVersionOf, type Project } from '@trailerforge/schema';
 import { z } from 'zod';
 import { CommandError, defineCommand, type CommandDef } from './commands.js';
 
@@ -13,7 +13,8 @@ function findVariant(d: Draft<Project>, variantId: string, type: string) {
   // A version of the trailer, or a short (a short is a version of the project, by its id).
   const v =
     d.storyboard?.variants.find((x) => x.id === variantId) ??
-    d.shorts.find((x) => x.id === variantId);
+    // A hook version shares its short's export settings.
+    shortVersionOf(d, variantId)?.short;
   if (!v) throw new CommandError(type, `no version "${variantId}"`);
   return v;
 }

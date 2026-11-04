@@ -13,7 +13,8 @@ export type Task =
   | 'storyboard.regenerate-section'
   | 'capture.tips'
   | 'critique.run'
-  | 'tiktok.concepts';
+  | 'tiktok.concepts'
+  | 'tiktok.hooks';
 
 /** Loads the disclosure each time a dialog opens; null while loading. */
 export function usePreview(projectId: string, task: Task, open: boolean): LlmPreview | null {

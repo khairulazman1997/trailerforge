@@ -276,4 +276,46 @@ describe('core/shorts.fill-slot and clear-slot', () => {
     expect(short().export).toEqual({ presetId: 'core/tiktok' });
     valid();
   });
+
+  it('hook versions: added with the next letter, edited, replaced as one step, removed with their review; at most three', () => {
+    const sid = 'short_parry';
+    store.dispatch('core/shorts.add-hook', { shortId: sid, hook: { name: 'Question', kind: 'question', caption: 'Can you parry this?' } }); // prettier-ignore
+    store.dispatch('core/shorts.add-hook', { shortId: sid, hook: { name: 'Cold open' } });
+    expect(short().hooks.map((h) => [h.id, h.kind, h.caption])).toEqual([
+      ['a', 'question', 'Can you parry this?'],
+      ['b', 'custom', ''],
+    ]);
+    store.dispatch('core/shorts.edit-hook', { shortId: sid, hookId: 'b', patch: { caption: 'Hi', kind: 'text' } }); // prettier-ignore
+    expect(short().hooks[1]).toMatchObject({ caption: 'Hi', kind: 'text' });
+    expect(() => store.dispatch('core/shorts.edit-hook', { shortId: sid, hookId: 'zz', patch: { name: 'x' } })).toThrow(/no hook version/); // prettier-ignore
+    expect(() => store.dispatch('core/shorts.add-hook', { shortId: sid, hook: { name: 'x', takeId: 'take_nope' } })).toThrow(/no take/); // prettier-ignore
+
+    // A hook version is a version: reviews and export settings use its id; removing drops them.
+    const vid = 'short_parry_hk_a';
+    store.dispatch('core/review.comment', { variantId: vid, at: 0, text: 'Slow' });
+    store.dispatch('core/export.set', { variantId: vid, presetId: 'core/tiktok' });
+    expect(short().export).toEqual({ presetId: 'core/tiktok' }); // shared with the short
+    valid();
+    store.dispatch('core/shorts.add-hook', { shortId: sid, hook: { name: 'Third' } });
+    expect(() => store.dispatch('core/shorts.add-hook', { shortId: sid, hook: { name: 'Fourth' } })).toThrow(/at most 3/); // prettier-ignore
+    store.dispatch('core/shorts.remove-hook', { shortId: sid, hookId: 'a' });
+    expect(store.state.review.comments.some((c) => c.variantId === vid)).toBe(false);
+    store.dispatch('core/shorts.add-hook', { shortId: sid, hook: { name: 'Again' } });
+    expect(short().hooks.map((h) => h.id)).toEqual(['b', 'c', 'a']); // the free letter comes back
+
+    // Replace: keep b (with its id), drop the others, add a new one; one undo step.
+    store.dispatch('core/review.comment', { variantId: 'short_parry_hk_c', at: 0, text: 'x' });
+    store.dispatch('core/shorts.set-hooks', { shortId: sid, hooks: [{ id: 'b', name: 'Kept' }, { name: 'New', caption: 'Hey' }] }); // prettier-ignore
+    expect(short().hooks.map((h) => [h.id, h.name])).toEqual([
+      ['b', 'Kept'],
+      ['a', 'New'],
+    ]);
+    expect(store.state.review.comments.some((c) => c.variantId === 'short_parry_hk_c')).toBe(false);
+    store.undo();
+    expect(short().hooks).toHaveLength(3);
+    valid();
+    store.dispatch('core/shorts.remove', { shortId: sid });
+    expect(store.state.review.comments).toEqual([]);
+    valid();
+  });
 });

@@ -155,6 +155,8 @@ export type TaskRequest =
       kind: 'claude-code-concepts';
       options: { allow: true; ideas?: string[]; count?: number; repo?: string };
     }
+  /** Ask the AI for alternative openings (hook versions) for a TikTok; they are added to the free places. */
+  | { kind: 'hooks'; options: { shortId: string; count?: number } }
   | { kind: 'build-short'; options: { shortId: string; sectionIds?: string[]; wording?: boolean } }
   /** Ask the AI to critique a version (`variantId` null = the master cut); notes land on the Review tab. */
   | { kind: 'critique'; options: { variantId: string | null } }
@@ -473,6 +475,7 @@ export class ServiceClient {
       | 'capture.tips'
       | 'tiktok.concepts'
       | 'tiktok.wording'
+      | 'tiktok.hooks'
       | 'critique.run',
   ) {
     return this.request<LlmPreview>(

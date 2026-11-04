@@ -75,6 +75,33 @@ export type ShortSubtitles = z.infer<typeof ShortSubtitles>;
 /** Short ids leave room for the `tl_short_` timeline prefix within the 64-character id limit. */
 export const ShortId = Id.refine((id) => id.length <= 52, 'short ids are at most 52 characters');
 
+/** The kinds of opening a hook version can be (the label helps the AI and the user; nothing branches on it). */
+export const HookKind = z.enum(['cold-open', 'text', 'question', 'custom']);
+export type HookKind = z.infer<typeof HookKind>;
+
+/**
+ * An alternative opening for a TikTok, for A/B testing: the same body with a different first shot
+ * or on-screen text. It changes only the opening shot's recording and its caption, never the
+ * length, so the rest of the cut (and the voice, music and subtitles) stays where it is. A hook
+ * version renders and exports as its own file, with its own review and approval.
+ */
+export const ShortHook = z.strictObject({
+  /** `a`, `b`, `c`…: lower-case, at most 8 characters, unique within the short. */
+  id: z.string().regex(/^[a-z0-9]{1,8}$/),
+  name: Line(60),
+  kind: HookKind.default('custom'),
+  /** On-screen text over the opening shot; empty means no text over it. */
+  caption: z.string().trim().max(120).default(''),
+  /** Use this take of the opening shot instead of the chosen one. */
+  takeId: Id.optional(),
+  /** Why it might work (from the AI, or the user's note). */
+  why: z.string().trim().max(300).default(''),
+});
+export type ShortHook = z.infer<typeof ShortHook>;
+export type ShortHookInput = z.input<typeof ShortHook>;
+
+export const MAX_HOOKS = 3;
+
 export const Short = z.strictObject({
   id: ShortId,
   name: Line(120),
@@ -86,6 +113,7 @@ export const Short = z.strictObject({
   /** Null until a template is built from the concept (10.3). */
   storyboard: Storyboard.nullable().default(null),
   export: ExportSettings.optional(),
+  hooks: z.array(ShortHook).max(MAX_HOOKS).default([]),
   platform: ShortPlatform.default('tiktok'),
   subtitles: ShortSubtitles.default({ enabled: false, style: 'lines', edits: [] }),
   /** Clean up the voiceover at render (high-pass, noise reduction, de-esser, compression, level); the files are untouched. */
@@ -93,6 +121,32 @@ export const Short = z.strictObject({
   extensions: Extensions.default({}),
 });
 export type Short = z.infer<typeof Short>;
+
+/** The version id of a hook version (`<short id>_hk_<hook id>`): ids stay within 64 characters. */
+export const hookVersionId = (shortId: string, hookId: string): string => `${shortId}_hk_${hookId}`;
+
+/**
+ * What a version id of a short names: the short itself (its own opening), or one of its hook
+ * versions. Undefined for anything else.
+ */
+export function shortVersionOf(
+  project: { shorts: readonly Short[] },
+  id: string | null,
+): { short: Short; hook?: ShortHook } | undefined {
+  if (id === null) return undefined;
+  for (const short of project.shorts) {
+    if (short.id === id) return { short };
+    const hook = short.hooks.find((h) => hookVersionId(short.id, h.id) === id);
+    if (hook) return { short, hook };
+  }
+  return undefined;
+}
+
+/** Every version id a short owns: itself and its hook versions. */
+export const shortVersionIds = (s: Pick<Short, 'id' | 'hooks'>): string[] => [
+  s.id,
+  ...s.hooks.map((h) => hookVersionId(s.id, h.id)),
+];
 
 /** The id of a short's timeline in `project.timelines`. */
 export function shortTimelineId(shortId: string): string {

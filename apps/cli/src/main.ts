@@ -108,6 +108,8 @@ Usage:
   tforge tiktok music <dir> <short> [--asset <id>|--none] [--timing-only] [--tempo <bpm>|--taps <s,s,s,s…>] [--export with|without|both]
                                                           Music for the cut (a reference song can give the beat only); tap tempo; export with/without music
   tforge tiktok clean <dir> <short> [--on|--off]        Voice clean-up at render, with each recording's loudness before and after
+  tforge tiktok hooks <dir> <short> [--generate [--count n]|--add --name <n> [--caption <t>] [--kind cold-open|text|question|custom] [--take <id>]|--edit <id> …|--remove <id>]
+                                                          Alternative openings for A/B tests; each exports as its own version <short>_hk_<id>
   tforge tiktok generate <dir> <short>                    Build the TikTok's cut; then draft/export it with --version <short>
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
   tforge serve [--ui <dist>] [--port <n>] [--allow-origin <url>]...
@@ -217,6 +219,13 @@ export async function main(
         to: { type: 'string' },
         language: { type: 'string' },
         none: { type: 'boolean', default: false },
+        generate: { type: 'boolean', default: false },
+        add: { type: 'boolean', default: false },
+        edit: { type: 'string' },
+        remove: { type: 'string' },
+        caption: { type: 'string' },
+        kind: { type: 'string' },
+        why: { type: 'string' },
         'timing-only': { type: 'boolean', default: false },
         taps: { type: 'string' },
         tempo: { type: 'string' },
@@ -481,6 +490,7 @@ export async function main(
       case 'tiktok subtitles':
       case 'tiktok music':
       case 'tiktok clean':
+      case 'tiktok hooks':
       case 'tiktok generate':
       case 'tiktok ask-claude':
         return await tiktokCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3], {
@@ -509,6 +519,14 @@ export async function main(
           style: o.style,
           platform: o.platform,
           none: o.none,
+          generate: o.generate,
+          add: o.add,
+          edit: o.edit,
+          remove: o.remove,
+          caption: o.caption,
+          kind: o.kind,
+          take: o.take,
+          why: o.why,
           'timing-only': o['timing-only'],
           taps: o.taps,
           tempo: o.tempo,

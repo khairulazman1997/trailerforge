@@ -1,5 +1,5 @@
 import { CommandError, defineCommand, type CommandDef } from '@trailerforge/core';
-import { CritiqueFix, Flicks, Id, IsoDateTime, mintId } from '@trailerforge/schema';
+import { CritiqueFix, Flicks, Id, IsoDateTime, mintId, shortVersionOf } from '@trailerforge/schema';
 import { removeSlot, updateSlot } from '@trailerforge/storyboard';
 import { z } from 'zod';
 
@@ -39,7 +39,7 @@ export const addCritique = defineCommand({
     if (
       variantId !== null &&
       !d.storyboard?.variants.some((v) => v.id === variantId) &&
-      !d.shorts.some((s) => s.id === variantId)
+      !shortVersionOf(d, variantId)
     )
       throw new CommandError(type, `no version "${variantId}"`);
     d.review.comments = d.review.comments.filter(

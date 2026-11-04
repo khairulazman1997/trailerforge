@@ -161,6 +161,8 @@ describe('tool surface', () => {
         'tiktok_create',
         'tiktok_fill',
         'tiktok_cut',
+        'tiktok_hooks_generate',
+        'core_shorts_add-hook',
         'core_shorts_rename',
       ]),
     );

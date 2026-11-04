@@ -81,6 +81,19 @@ test('tiktok: pick a concept, fill a shot, set subtitles, undo', async ({ page }
   await expect(first).toContainText('clip.mp4', { timeout: 30_000 });
   await expect(page.getByRole('status').filter({ hasText: 'shots filled' })).toContainText('1 of');
 
+  // Hook versions: add one, give it words, see its own version id, remove it.
+  await page.getByRole('button', { name: 'Add a hook version' }).click();
+  const hook = page.locator('li.card').filter({ hasText: '_hk_a' });
+  await expect(hook).toBeVisible();
+  await hook.getByLabel(/Words over the opening/).fill('Can you parry this?');
+  await hook.getByLabel(/Words over the opening/).blur();
+  await expect(hook.getByLabel(/Words over the opening/)).toHaveValue('Can you parry this?');
+  await page.getByRole('button', { name: 'Suggest hook versions' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Never recordings or game files', { timeout: 15_000 }); // prettier-ignore
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Remove hook version Hook A' }).click();
+  await expect(page.getByRole('button', { name: 'Remove hook version Hook A' })).toHaveCount(0);
+
   // Music: export without it, and the tap button asks for more taps.
   await page.getByRole('combobox', { name: /^Export/ }).selectOption('without');
   await expect(page.getByRole('combobox', { name: /^Export/ })).toHaveValue('without');

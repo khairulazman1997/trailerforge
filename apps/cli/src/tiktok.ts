@@ -10,6 +10,7 @@ import {
   placeVoiceOp,
   tapTempo,
   voiceCleanReportOp,
+  generateHooksOp,
   shortsViewOp,
   voiceDownloadOp,
   voiceStatusOp,
@@ -21,6 +22,14 @@ import { fail, type CmdCtx } from './m2.js';
 /** Options of `tforge tiktok …` (parsed in `main.ts`). */
 export interface TikTokOpts {
   none?: boolean | undefined;
+  generate?: boolean | undefined;
+  add?: boolean | undefined;
+  edit?: string | undefined;
+  remove?: string | undefined;
+  caption?: string | undefined;
+  kind?: string | undefined;
+  take?: string | undefined;
+  why?: string | undefined;
   'timing-only'?: boolean | undefined;
   taps?: string | undefined;
   tempo?: string | undefined;
@@ -64,6 +73,7 @@ export const TIKTOK_SUBS = [
   'subtitles',
   'music',
   'clean',
+  'hooks',
   'generate',
   'ask-claude',
 ] as const;
@@ -328,6 +338,60 @@ export async function tiktokCommand(
             ),
           ].join('\n'),
           r,
+        );
+        return 0;
+      }
+      case 'hooks': {
+        const dispatch = (type: string, payload: Record<string, unknown>) => {
+          try {
+            store.dispatch(type, { shortId: sid(), ...payload });
+          } catch (err) {
+            throw new OpError('usage', err instanceof Error ? err.message : String(err));
+          }
+        };
+        if (o.generate) {
+          const r = await generateHooksOp(e, store, sid(), { ...(o.count ? { count: num('--count', o.count)! } : {}) }); // prettier-ignore
+          ctx.emit(
+            [
+              r.full
+                ? 'Already at three hook versions.'
+                : `${r.added.length} hook version${r.added.length === 1 ? '' : 's'} added`,
+              ...r.added.map((h) => `  ${h.versionId}  ${h.name}: ${h.caption || '(no text)'}`),
+              ...r.rejected.map((x) => `  ! "${x.name}" left out: ${x.reasons.join('; ')}`),
+            ].join('\n'),
+            r,
+          );
+          return 0;
+        }
+        if (o.add)
+          dispatch('core/shorts.add-hook', {
+            hook: {
+              name: need(o.name, '--name'),
+              ...(o.kind ? { kind: o.kind } : {}),
+              ...(o.caption !== undefined ? { caption: o.caption } : {}),
+              ...(o.take ? { takeId: o.take } : {}),
+              ...(o.why ? { why: o.why } : {}),
+            },
+          });
+        else if (o.edit)
+          dispatch('core/shorts.edit-hook', {
+            hookId: o.edit,
+            patch: {
+              ...(o.name ? { name: o.name } : {}),
+              ...(o.kind ? { kind: o.kind } : {}),
+              ...(o.caption !== undefined ? { caption: o.caption } : {}),
+              ...(o.take ? { takeId: o.take === 'chosen' ? null : o.take } : {}),
+              ...(o.why ? { why: o.why } : {}),
+            },
+          });
+        else if (o.remove) dispatch('core/shorts.remove-hook', { hookId: o.remove });
+        const s = (await shortsViewOp(e, store)).shorts.find((x) => x.id === sid());
+        if (!s) throw new OpError('not-found', `no TikTok "${sid()}"`);
+        ctx.emit(
+          s.hooks.length
+            ? s.hooks.map((h) => `${h.versionId}  ${h.name} (${h.kind}): ${h.caption || '(no text)'}${h.takeId ? `  take ${h.takeId}` : ''}`).join('\n') // prettier-ignore
+            : 'No hook versions. Add one with --add --name <name> [--caption <text>], or ask the AI with --generate.',
+          { hooks: s.hooks },
         );
         return 0;
       }

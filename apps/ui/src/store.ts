@@ -985,7 +985,8 @@ export class AppStore {
       | 'capture.tips'
       | 'critique.run'
       | 'tiktok.concepts'
-      | 'tiktok.wording',
+      | 'tiktok.wording'
+      | 'tiktok.hooks',
   ): Promise<LlmPreview | null> {
     return (await this.run((c) => c.llmPreview(projectId, task))) ?? null;
   }

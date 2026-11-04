@@ -13,6 +13,7 @@ import {
 import { Engine } from './engine.js';
 import { OpError } from './ops.js';
 import { readFile } from 'node:fs/promises';
+import { generateHooksOp } from './hooks-ops.js';
 import { createShortOp, fillSlotOp, recordVoiceTakeOp, recordingExtension, shortsViewOp } from './shorts-ops.js'; // prettier-ignore
 
 const ff = (args: string[]) =>
@@ -29,7 +30,21 @@ const concept = {
   entityIds: [],
 };
 
-const mock = createMockProvider({ 'tiktok.wording': { slots: [] } });
+const mock = createMockProvider({
+  'tiktok.wording': { slots: [] },
+  'tiktok.hooks': {
+    hooks: [
+      { name: 'Question', kind: 'question', caption: 'Can you parry this?', why: 'Curiosity.' },
+      { name: 'Same again', kind: 'text', caption: 'can you PARRY this' },
+      {
+        name: 'Too wordy',
+        kind: 'text',
+        caption: 'one two three four five six seven eight nine ten eleven',
+      },
+      { name: 'Cold open', kind: 'cold-open', caption: '' },
+    ],
+  },
+});
 let root: string;
 let engine: Engine;
 beforeAll(async () => {
@@ -143,6 +158,28 @@ describe('creating and filling a TikTok', { timeout: 120_000 }, () => {
     await expect(recordVoiceTakeOp(engine, store, 'short_parry', { voLineId: line.id, data: bytes, mime: 'text/plain' })).rejects.toThrow(/cannot read/); // prettier-ignore
     await expect(recordVoiceTakeOp(engine, store, 'short_parry', { voLineId: line.id, data: new Uint8Array([1, 2, 3, 4]), mime: 'audio/webm' })).rejects.toThrow(/cannot read the recording/); // prettier-ignore
     expect(recordingExtension('audio/webm;codecs=opus')).toBe('webm');
+    await store.close();
+  });
+
+  it('asks for hook versions: keeps the ones that pass the checks, adds them in one undo step, and stops at three', async () => {
+    const store = await open();
+    await createShortOp(engine, store, { concept, name: 'Parry', wording: false });
+    store.dispatch('core/shorts.add-hook', { shortId: 'short_parry', hook: { name: 'Mine', caption: 'My own' } }); // prettier-ignore
+    const r = await generateHooksOp(engine, store, 'short_parry');
+    expect(r.added.map((h) => [h.id, h.name, h.versionId])).toEqual([
+      ['b', 'Question', 'short_parry_hk_b'],
+      ['c', 'Cold open', 'short_parry_hk_c'],
+    ]);
+    expect(r.rejected.map((x) => x.reasons[0])).toEqual([
+      'repeats another opening',
+      expect.stringMatching(/over 10 words/),
+    ]);
+    const v = (await shortsViewOp(engine, store)).shorts[0]!;
+    expect(v.hooks.map((h) => h.name)).toEqual(['Mine', 'Question', 'Cold open']);
+    expect(v.opening?.slotId).toBeTruthy();
+    expect((await generateHooksOp(engine, store, 'short_parry')).full).toBe(true);
+    store.undo();
+    expect(store.state.shorts[0]!.hooks.map((h) => h.id)).toEqual(['a']);
     await store.close();
   });
 

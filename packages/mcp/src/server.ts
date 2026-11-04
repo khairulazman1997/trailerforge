@@ -19,6 +19,7 @@ import {
   conceptsOp,
   createShortOp,
   fillSlotOp,
+  generateHooksOp,
   generateShortCutOp,
   placeVoiceOp,
   proposeConceptsOp,
@@ -918,6 +919,27 @@ export function createMcpServer(opts: McpServerOptions): Server {
           : {}),
         ...(typeof args.name === 'string' ? { name: args.name } : {}),
         wording: args.wording === true,
+      });
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_hooks_generate',
+      description:
+        "Ask TrailerForge's own AI for alternative openings (hook versions) for a TikTok, for A/B tests: a different first caption (or none, for a cold open), at most three per TikTok. The body, length, voice and music stay the same. Each exports as its own version (<short id>_hk_<hook id>), with its own review and approval. You can also write them yourself with core_shorts_add-hook, and pick another take of the opening shot with core_shorts_edit-hook. The request sends the concept, the brief and the game facts not excluded from AI use; never the recordings.",
+      inputSchema: object(
+        {
+          short: SHORT_PROP,
+          count: { type: 'integer', minimum: 1, maximum: 3, description: 'How many (default: all free places).' }, // prettier-ignore
+        },
+        ['short'],
+      ),
+    },
+    async run(args) {
+      return generateHooksOp(engine, await project(args), shortArg(args), {
+        ...(typeof args.count === 'number' ? { count: args.count } : {}),
       });
     },
   });

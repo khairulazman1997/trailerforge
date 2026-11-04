@@ -518,6 +518,8 @@ function ShortEditor({ id, short, disabled }: { id: string; short: Short; disabl
         onClose={() => setPrompter(false)}
       />
 
+      <HooksPanel id={id} short={short} disabled={disabled} />
+
       <MusicPanel id={id} short={short} disabled={disabled} />
 
       <h3>Platform and subtitles</h3>
@@ -818,5 +820,167 @@ function VoiceCleanPanel({ id, short, disabled }: { id: string; short: Short; di
         </ul>
       )}
     </div>
+  );
+}
+
+/** Alternative openings for A/B tests: each one exports as its own version of the TikTok. */
+function HooksPanel({ id, short, disabled }: { id: string; short: Short; disabled: boolean }) {
+  const store = useStore();
+  const [ask, setAsk] = useState(false);
+  const run = (type: string, payload: Record<string, unknown>) =>
+    store.command(id, type, { shortId: short.id, ...payload });
+  const full = short.hooks.length >= 3;
+  return (
+    <section aria-labelledby="tt-hooks">
+      <h3 id="tt-hooks">Hook versions</h3>
+      <p className="muted">
+        Try different openings on the same video: another first shot or other words over it. The
+        rest stays the same. Each version has its own review and exports as its own file, so you can
+        compare how they perform.
+      </p>
+      {!short.hasTemplate ? (
+        <p className="muted">Build the template first.</p>
+      ) : (
+        <>
+          <div className="row">
+            <button
+              type="button"
+              disabled={disabled || full}
+              onClick={() => void run('core/shorts.add-hook', { hook: { name: `Hook ${'ABC'[short.hooks.length]}` } })} // prettier-ignore
+            >
+              Add a hook version
+            </button>
+            <button type="button" disabled={disabled || full} onClick={() => setAsk(true)}>
+              Suggest hook versions
+            </button>
+            {full && <span className="muted">Three is the most.</span>}
+          </div>
+          <ul className="tt-concepts">
+            {short.hooks.map((h) => (
+              <li key={h.id} className="card">
+                <label className="field">
+                  <span>Name</span>
+                  <input
+                    key={`n:${h.name}`}
+                    type="text"
+                    defaultValue={h.name}
+                    disabled={disabled}
+                    onBlur={
+                      (e) =>
+                      e.target.value.trim() &&
+                      e.target.value.trim() !== h.name &&
+                      void run('core/shorts.edit-hook', { hookId: h.id, patch: { name: e.target.value.trim() } }) // prettier-ignore
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Words over the opening (empty for none)</span>
+                  <input
+                    key={`c:${h.caption}`}
+                    type="text"
+                    defaultValue={h.caption}
+                    disabled={disabled}
+                    onBlur={
+                      (e) =>
+                      e.target.value.trim() !== h.caption &&
+                      void run('core/shorts.edit-hook', { hookId: h.id, patch: { caption: e.target.value.trim() } }) // prettier-ignore
+                    }
+                  />
+                </label>
+                {short.opening && short.opening.takes.length > 1 && (
+                  <label className="field">
+                    <span>Recording of the opening shot</span>
+                    <select
+                      value={h.takeId ?? ''}
+                      disabled={disabled}
+                      onChange={
+                        (e) =>
+                        void run('core/shorts.edit-hook', { hookId: h.id, patch: { takeId: e.target.value || null } }) // prettier-ignore
+                      }
+                    >
+                      <option value="">The chosen one</option>
+                      {short.opening.takes.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {h.why && <p className="muted">{h.why}</p>}
+                <p className="muted">
+                  Review and export it as <code>{h.versionId}</code> on the{' '}
+                  <Link to={projectPath(id, 'review')}>Review</Link> and{' '}
+                  <Link to={projectPath(id, 'export')}>Export</Link> tabs.
+                </p>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-label={`Remove hook version ${h.name}`}
+                  onClick={() => void run('core/shorts.remove-hook', { hookId: h.id })}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <HooksDialog id={id} shortId={short.id} open={ask} onClose={() => setAsk(false)} />
+    </section>
+  );
+}
+
+function HooksDialog({
+  id,
+  shortId,
+  open,
+  onClose,
+}: {
+  id: string;
+  shortId: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const store = useStore();
+  const preview = usePreview(id, 'tiktok.hooks', open);
+  const provider = preview?.provider;
+  return (
+    <ConfirmDialog
+      open={open}
+      title="Suggest hook versions"
+      confirmLabel="Suggest"
+      confirmDisabled={!preview?.available}
+      {...(needsConsent(preview) && provider
+        ? { acknowledge: `I understand this information is sent to ${provider.name}.` }
+        : {})}
+      onCancel={onClose}
+      onConfirm={async () => {
+        if (!preview?.available) return;
+        if (provider?.sendsDataOffDevice) giveConsent(provider.id);
+        await store.startTask(id, { kind: 'hooks', options: { shortId } });
+        onClose();
+      }}
+    >
+      <div className="stack">
+        <p>
+          The AI proposes openings: different words over the first shot, or none for a cold open.
+          They fill the free places; the ones you made stay.
+        </p>
+        {!preview ? (
+          <p role="status">Checking which AI provider will be used…</p>
+        ) : !preview.available || !provider ? (
+          <p className="error" role="alert">
+            No AI provider is available: {preview.reason}.
+          </p>
+        ) : (
+          <p data-testid="disclosure">
+            Sent to <strong>{provider.name}</strong>
+            {preview.model ? ` (${preview.model})` : ''}: the concept, the brief and the game facts
+            not excluded from AI use. Never recordings or game files.
+          </p>
+        )}
+      </div>
+    </ConfirmDialog>
   );
 }
