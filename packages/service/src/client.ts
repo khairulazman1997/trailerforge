@@ -386,6 +386,35 @@ export class ServiceClient {
       body,
     );
   }
+  /** Add a voiceover take recorded in the browser (raw audio over the loopback service; nothing is sent elsewhere). */
+  async recordVoiceTake(
+    id: string,
+    shortId: string,
+    voLineId: string,
+    audio: Blob,
+  ): Promise<{ assetId: string; file: string; take: number; seconds: number | null }> {
+    const res = await this.fetchFn(
+      `${this.opts.baseUrl}/v1/projects/${encodeURIComponent(id)}/shorts/${encodeURIComponent(shortId)}/record?line=${encodeURIComponent(voLineId)}`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.opts.token}`, 'Content-Type': audio.type },
+        body: audio,
+      },
+    );
+    const data = (await res.json().catch(() => null)) as {
+      error?: { code: string; message: string; details?: unknown };
+    } | null;
+    if (!res.ok) {
+      const e = data?.error;
+      throw new ServiceError(
+        res.status,
+        e?.code ?? 'http',
+        e?.message ?? res.statusText,
+        e?.details,
+      );
+    }
+    return data as never;
+  }
   /** What "Ask Claude Code" would send (the request text and the number of files), before anything is. */
   claudeConceptsPreview(id: string, o: { ideas?: string[]; count?: number; repo?: string } = {}) {
     const q = new URLSearchParams();

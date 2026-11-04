@@ -155,3 +155,19 @@ export async function makeFilmstrip(
     opts,
   );
 }
+
+/**
+ * A voice recording from the browser (WebM/Ogg/MP4 audio) as a 48 kHz mono 24-bit WAV, the format
+ * the voiceover tools read. Written to `output` only when FFmpeg succeeds.
+ */
+export async function convertRecordingToWav(
+  input: string,
+  output: string,
+  opts: OpOptions = {},
+): Promise<void> {
+  await ffmpeg(
+    ['-i', input, '-vn', '-ac', '1', '-ar', '48000', '-c:a', 'pcm_s24le', '-f', 'wav', output],
+    0,
+    opts,
+  );
+}

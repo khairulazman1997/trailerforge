@@ -115,6 +115,7 @@ export type ClientLike = Pick<
   | 'shorts'
   | 'createShort'
   | 'fillShort'
+  | 'recordVoiceTake'
   | 'claudeConceptsPreview'
   | 'brandFile'
   | 'importBrandFile'
@@ -1322,6 +1323,20 @@ export class AppStore {
   /** What "Ask Claude Code" for concepts would share; null if it failed (a toast says why). */
   async claudeConceptsPreview(projectId: string, ideas: string[]) {
     return (await this.run((c) => c.claudeConceptsPreview(projectId, { ideas }))) ?? null;
+  }
+
+  /** Sends a voiceover take recorded in the browser to the engine (loopback only); true when it was added. */
+  async recordVoiceTake(
+    projectId: string,
+    shortId: string,
+    voLineId: string,
+    audio: Blob,
+  ): Promise<boolean> {
+    const r = await this.run((c) => c.recordVoiceTake(projectId, shortId, voLineId, audio));
+    if (!r) return false;
+    await this.waitForVersion(projectId, (this.state.projects[projectId]?.version ?? 0) + 1);
+    await this.refreshShorts(projectId);
+    return true;
   }
 
   // ---- footage ----

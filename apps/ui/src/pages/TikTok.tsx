@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { tapTempo } from '@trailerforge/cut';
 import { PLATFORM_NAMES, PLATFORM_SAFE } from '@trailerforge/graphics';
 import { useAppState, useStore } from '../app-context.js';
+import { Teleprompter } from '../components/Teleprompter.js';
 import { BrowseButton } from '../components/BrowseButton.js';
 import { giveConsent } from '../consent.js';
 import { ConfirmDialog } from '../components/Dialog.js';
@@ -282,6 +283,7 @@ function ShortEditor({ id, short, disabled }: { id: string; short: Short; disabl
   const voice = useAppState((s) => s.shorts[id]?.view.voice);
   const [over, setOver] = useState<string | null>(null);
   const [safe, setSafe] = useState(true);
+  const [prompter, setPrompter] = useState(false);
   const [paste, setPaste] = useState<Record<string, string>>({});
   const [enabled, setEnabledNow] = usePending(
     useAppState(
@@ -482,6 +484,14 @@ function ShortEditor({ id, short, disabled }: { id: string; short: Short; disabl
           <div className="row">
             <button
               type="button"
+              className="primary"
+              disabled={disabled}
+              onClick={() => setPrompter(true)}
+            >
+              Record the script in the app
+            </button>
+            <button
+              type="button"
               disabled={disabled || short.progress.linesRecorded === 0}
               onClick={() =>
                 void store.startTask(id, { kind: 'place-voice', options: { shortId: short.id } })
@@ -497,6 +507,14 @@ function ShortEditor({ id, short, disabled }: { id: string; short: Short; disabl
           </div>
         </>
       )}
+
+      <Teleprompter
+        id={id}
+        shortId={short.id}
+        lines={short.voiceLines}
+        open={prompter}
+        onClose={() => setPrompter(false)}
+      />
 
       <MusicPanel id={id} short={short} disabled={disabled} />
 

@@ -57,6 +57,9 @@ import {
   conceptsOp,
   createShortOp,
   fillSlotOp,
+  recordVoiceTakeOp,
+  recordingExtension,
+  MAX_RECORDING_BYTES,
   generateShortCutOp,
   placeVoiceOp,
   rankTakesOp,
@@ -256,6 +259,24 @@ async function readJson(req: IncomingMessage, limit: number): Promise<unknown> {
   } catch {
     throw new HttpError(400, 'bad-json', 'request body is not valid JSON');
   }
+}
+
+/** The raw body of an upload (a voice recording), with its content type. */
+async function readAudio(
+  req: IncomingMessage,
+  limit: number,
+): Promise<{ data: Uint8Array; mime: string }> {
+  const mime = (req.headers['content-type'] ?? '').toLowerCase();
+  if (!recordingExtension(mime))
+    throw new HttpError(415, 'unsupported-media-type', 'send the recording as audio/webm, audio/ogg, audio/mp4 or audio/wav'); // prettier-ignore
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > limit) throw new HttpError(413, 'too-large', `the recording is over ${limit} bytes`);
+    chunks.push(chunk as Buffer);
+  }
+  return { data: Buffer.concat(chunks), mime };
 }
 
 type Handler = (ctx: {
@@ -772,6 +793,20 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           .parse(await body());
         notBusy(store);
         return fillSlotOp(engine, store, decodeURIComponent(params.short!), o);
+      },
+    ],
+    [
+      // A voiceover take recorded in the app: raw audio in the body, `?line=<voiceover line id>`.
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/shorts\/(?<short>[^/]+)\/record$/,
+      async ({ params, query, req, res }) => {
+        const store = storeById(params.id!);
+        const line = query.get('line');
+        if (!line) throw new HttpError(400, 'bad-request', 'give ?line=<voiceover line id>');
+        const { data, mime } = await readAudio(req, MAX_RECORDING_BYTES);
+        notBusy(store);
+        res.statusCode = 201;
+        return recordVoiceTakeOp(engine, store, decodeURIComponent(params.short!), { voLineId: line, data, mime }); // prettier-ignore
       },
     ],
     [

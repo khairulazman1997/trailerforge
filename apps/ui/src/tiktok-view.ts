@@ -57,3 +57,34 @@ export function shortCues(timelines: readonly Timeline[], shortId: string): Cue[
   const tl = timelines.find((t) => t.id === `tl_short_${shortId}`);
   return tl ? cuesOf(tl) : [];
 }
+
+/** The first recording type this browser can make that the engine reads, or undefined if none. */
+export function pickRecorderMime(
+  supported: (mime: string) => boolean,
+): 'audio/webm;codecs=opus' | 'audio/webm' | 'audio/ogg;codecs=opus' | 'audio/mp4' | undefined {
+  return (['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'] as const).find(supported); // prettier-ignore
+}
+
+/** The line to show after `index`: the next one without a recording, else the next, else the same. */
+export function nextLine(recorded: readonly boolean[], index: number): number {
+  for (let i = index + 1; i < recorded.length; i++) if (!recorded[i]) return i;
+  return Math.min(index + 1, recorded.length - 1);
+}
+
+/** `m:ss` for seconds. */
+export function elapsedLabel(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Plain words for why the microphone could not be used. */
+export function micProblem(err: unknown): string {
+  const name = err instanceof DOMException ? err.name : '';
+  if (name === 'NotAllowedError' || name === 'SecurityError')
+    return 'The microphone is blocked. Allow it for this app in your system or browser settings, then try again.';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError')
+    return 'No microphone was found. Plug one in and try again.';
+  if (name === 'NotReadableError')
+    return 'The microphone is in use by another program. Close it and try again.';
+  return 'The microphone could not be started.';
+}

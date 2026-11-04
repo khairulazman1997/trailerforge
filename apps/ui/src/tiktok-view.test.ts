@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { acceptsLabel, cueTime, inputFor, progressLabel, splitIdeas } from './tiktok-view.js';
+import {
+  acceptsLabel,
+  cueTime,
+  elapsedLabel,
+  inputFor,
+  nextLine,
+  pickRecorderMime,
+  progressLabel,
+  splitIdeas,
+} from './tiktok-view.js';
 
 describe('tiktok view helpers', () => {
   it('splits ideas by line and caps them', () => {
@@ -21,5 +30,13 @@ describe('tiktok view helpers', () => {
       '1 of 3 shots filled',
     );
     expect(cueTime(705_600_000 * 65.5)).toBe('1:05.5');
+  });
+  it('picks a recorder type, the next line to read, and words time', () => {
+    expect(pickRecorderMime((m) => m === 'audio/webm')).toBe('audio/webm');
+    expect(pickRecorderMime(() => false)).toBeUndefined();
+    expect(nextLine([true, false, true, false], 0)).toBe(1);
+    expect(nextLine([true, true, true], 0)).toBe(1);
+    expect(nextLine([false, true], 1)).toBe(1);
+    expect(elapsedLabel(65.9)).toBe('1:05');
   });
 });

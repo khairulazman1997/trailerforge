@@ -29,7 +29,10 @@ import {
   type SlotInput,
   type TakeInput,
 } from '@trailerforge/schema';
+import { convertRecordingToWav } from '@trailerforge/media';
 import { createHash } from 'node:crypto';
+import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Engine } from './engine.js';
 import { OpError } from './ops.js';
 import { STILL_SECONDS } from './still.js';
@@ -559,4 +562,75 @@ export async function fillSlotOp(
     throw new OpError('usage', err instanceof Error ? err.message : String(err));
   }
   return { assetId, input, target: opts.voLineId ?? opts.slotId! };
+}
+
+// ---- recording the voiceover in the app ---------------------------------------------------------
+
+/** Audio containers a browser's MediaRecorder writes. */
+const RECORDING_EXTENSIONS: Record<string, string> = {
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'm4a',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'video/webm': 'webm',
+};
+export const MAX_RECORDING_BYTES = 200 * 1024 * 1024;
+
+/** `audio/webm;codecs=opus` → `webm`; undefined when the type is not audio we read. */
+export function recordingExtension(mime: string): string | undefined {
+  return RECORDING_EXTENSIONS[mime.split(';')[0]!.trim().toLowerCase()];
+}
+
+/**
+ * A voiceover take recorded in the app: the browser's audio is converted to a 48 kHz WAV inside the
+ * project (`recordings/voiceover/<line>-takeNN.wav`), imported into the library and put on the line
+ * as its newest take (and the chosen one). Nothing leaves the machine.
+ */
+export async function recordVoiceTakeOp(
+  engine: Engine,
+  store: ProjectStore,
+  shortId: string,
+  opts: { voLineId: string; data: Uint8Array; mime: string; signal?: AbortSignal | undefined },
+): Promise<{ assetId: string; file: string; take: number; seconds: number | null }> {
+  const short = findShort(store, shortId);
+  if (!short.storyboard?.voLines.some((v) => v.id === opts.voLineId))
+    throw new OpError('not-found', `no voiceover line "${opts.voLineId}" in "${short.name}"`);
+  const ext = recordingExtension(opts.mime);
+  if (!ext) throw new OpError('usage', `cannot read a recording of type "${opts.mime}"`);
+  if (opts.data.length === 0) throw new OpError('usage', 'the recording is empty');
+  if (opts.data.length > MAX_RECORDING_BYTES) throw new OpError('usage', 'the recording is too large'); // prettier-ignore
+
+  const dir = join(store.paths.dir, 'recordings', 'voiceover');
+  await mkdir(dir, { recursive: true });
+  const taken = (await readdir(dir)).filter((f) => f.startsWith(`${opts.voLineId}-take`)).length;
+  const take = taken + 1;
+  const base = `${opts.voLineId}-take${String(take).padStart(2, '0')}`;
+  const raw = join(dir, `.${base}.raw.${ext}`);
+  const partial = join(dir, `.${base}.wav.tmp`);
+  const file = join(dir, `${base}.wav`);
+  try {
+    await writeFile(raw, opts.data);
+    try {
+      await convertRecordingToWav(raw, partial, {
+        tools: engine.tools,
+        ...(opts.signal ? { signal: opts.signal } : {}),
+      });
+    } catch (err) {
+      throw new OpError('usage', `cannot read the recording: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`); // prettier-ignore
+    }
+    await rename(partial, file);
+  } finally {
+    await rm(raw, { force: true });
+    await rm(partial, { force: true });
+  }
+  const r = await fillSlotOp(engine, store, shortId, {
+    voLineId: opts.voLineId,
+    path: file,
+    input: 'voiceover',
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  });
+  const media = engine.library.get(r.assetId)?.media;
+  return { assetId: r.assetId, file, take, seconds: media?.duration ?? null };
 }

@@ -16,8 +16,27 @@ function createWindow(): WindowLike {
     title: 'TrailerForge',
     webPreferences: { ...WINDOW_PREFERENCES, preload: join(here, '..', 'preload.cjs') },
   });
-  // No camera, microphone, notifications, etc.; no embedded <webview>s.
-  win.webContents.session.setPermissionRequestHandler((_wc, _perm, done) => done(false));
+  // No camera, notifications, etc.; no embedded <webview>s. The microphone is granted to the
+  // TrailerForge window only, once `onPermission` is set (see `desktop.ts`).
+  let decide: (p: string, t: readonly string[] | undefined, url: string) => boolean = () => false;
+  win.webContents.session.setPermissionRequestHandler((_wc, permission, done, details) =>
+    done(
+      decide(
+        permission,
+        (details as { mediaTypes?: string[] }).mediaTypes,
+        (details as { requestingUrl?: string }).requestingUrl ?? '',
+      ),
+    ),
+  );
+  win.webContents.session.setPermissionCheckHandler((_wc, permission, _origin, details) =>
+    decide(
+      permission,
+      permission === 'media' && (details as { mediaType?: string }).mediaType === 'audio'
+        ? ['audio']
+        : undefined,
+      (details as { requestingUrl?: string }).requestingUrl ?? '',
+    ),
+  );
   win.webContents.on('will-attach-webview', (event) => event.preventDefault());
   return {
     load: (url) => win.loadURL(url),
@@ -33,6 +52,7 @@ function createWindow(): WindowLike {
         handle(url);
         return { action: 'deny' };
       }),
+    onPermission: (d) => void (decide = d),
     onClosed: (cb) => win.on('closed', cb),
   };
 }

@@ -12,7 +12,8 @@ import {
 } from './concepts-ops.js';
 import { Engine } from './engine.js';
 import { OpError } from './ops.js';
-import { createShortOp, fillSlotOp, shortsViewOp } from './shorts-ops.js';
+import { readFile } from 'node:fs/promises';
+import { createShortOp, fillSlotOp, recordVoiceTakeOp, recordingExtension, shortsViewOp } from './shorts-ops.js'; // prettier-ignore
 
 const ff = (args: string[]) =>
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args]);
@@ -99,6 +100,49 @@ describe('creating and filling a TikTok', { timeout: 120_000 }, () => {
     // The same file again, by library id, into another slot.
     await fillSlotOp(engine, store, 'short_parry', { slotId: id('b2'), assetId: a.assetId });
     expect((await shortsViewOp(engine, store)).shorts[0]!.progress.slotsFilled).toBe(3);
+    await store.close();
+  });
+
+  it('records a voiceover take from the browser: a 48 kHz WAV, a new take each time, the newest chosen', async () => {
+    ff([
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=330:d=1.5',
+      '-c:a',
+      'libopus',
+      join(root, 'rec.webm'),
+    ]);
+    const bytes = new Uint8Array(await readFile(join(root, 'rec.webm')));
+    ff([
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=440:d=1.6',
+      '-c:a',
+      'libopus',
+      join(root, 'rec2.webm'),
+    ]);
+    const bytes2 = new Uint8Array(await readFile(join(root, 'rec2.webm')));
+    const store = await open();
+    await createShortOp(engine, store, { concept: { ...concept, voiceover: ['One line.'] }, name: 'Parry', wording: false }); // prettier-ignore
+    const line = (await shortsViewOp(engine, store)).shorts[0]!.voiceLines[0]!;
+    const a = await recordVoiceTakeOp(engine, store, 'short_parry', { voLineId: line.id, data: bytes, mime: 'audio/webm;codecs=opus' }); // prettier-ignore
+    expect(a.take).toBe(1);
+    expect(a.file).toMatch(/recordings[\\/]voiceover[\\/].+-take01\.wav$/);
+    expect(a.seconds).toBeGreaterThan(1.2);
+    const info = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=sample_rate,channels', '-of', 'csv=p=0', a.file]).toString().trim(); // prettier-ignore
+    expect(info).toBe('48000,1');
+    const b = await recordVoiceTakeOp(engine, store, 'short_parry', { voLineId: line.id, data: bytes2, mime: 'audio/webm' }); // prettier-ignore
+    expect(b.take).toBe(2);
+    const v = (await shortsViewOp(engine, store)).shorts[0]!.voiceLines[0]!;
+    expect(v.takes).toBe(2);
+    expect(v.chosen?.assetId).toBe(b.assetId);
+    await expect(recordVoiceTakeOp(engine, store, 'short_parry', { voLineId: 'nope', data: bytes, mime: 'audio/webm' })).rejects.toBeInstanceOf(OpError); // prettier-ignore
+    await expect(recordVoiceTakeOp(engine, store, 'short_parry', { voLineId: line.id, data: new Uint8Array(0), mime: 'audio/webm' })).rejects.toThrow(/empty/); // prettier-ignore
+    await expect(recordVoiceTakeOp(engine, store, 'short_parry', { voLineId: line.id, data: bytes, mime: 'text/plain' })).rejects.toThrow(/cannot read/); // prettier-ignore
+    await expect(recordVoiceTakeOp(engine, store, 'short_parry', { voLineId: line.id, data: new Uint8Array([1, 2, 3, 4]), mime: 'audio/webm' })).rejects.toThrow(/cannot read the recording/); // prettier-ignore
+    expect(recordingExtension('audio/webm;codecs=opus')).toBe('webm');
     await store.close();
   });
 

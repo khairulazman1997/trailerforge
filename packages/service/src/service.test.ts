@@ -1102,6 +1102,21 @@ describe('TikToks', () => {
     await expect(client.createShort(ID, {})).rejects.toMatchObject({ status: 400 });
   });
 
+  it('takes a voiceover recording over the loopback service, converts it, and refuses what is not audio', async () => {
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=330:d=1.2', '-c:a', 'libopus', join(root, 'tt-rec.webm')]); // prettier-ignore
+    const audio = new Blob([await readFile(join(root, 'tt-rec.webm'))], { type: 'audio/webm;codecs=opus' }); // prettier-ignore
+    await client.createShort(ID, { concept: { ...concept, title: 'Spoken', voiceover: ['Hi there.'] }, name: 'Spoken' }); // prettier-ignore
+    const line = (await client.shorts(ID)).shorts.find((x) => x.id === 'short_spoken')!.voiceLines[0]!; // prettier-ignore
+    const r = await client.recordVoiceTake(ID, 'short_spoken', line.id, audio);
+    expect(r).toMatchObject({ take: 1 });
+    expect(r.seconds).toBeGreaterThan(1);
+    expect((await client.shorts(ID)).shorts.find((x) => x.id === 'short_spoken')!.progress.linesRecorded).toBe(1); // prettier-ignore
+    await expect(client.recordVoiceTake(ID, 'short_spoken', line.id, new Blob(['x'], { type: 'text/plain' }))).rejects.toMatchObject({ status: 415 }); // prettier-ignore
+    await expect(client.recordVoiceTake(ID, 'short_spoken', 'nope', audio)).rejects.toMatchObject({ status: 404 }); // prettier-ignore
+    const noToken = await fetch(`${svc.url}/v1/projects/${ID}/shorts/short_spoken/record?line=${line.id}`, { method: 'POST', headers: { 'Content-Type': 'audio/webm' }, body: 'x' }); // prettier-ignore
+    expect(noToken.status).toBe(401);
+  });
+
   it('the voice model needs a yes; Claude Code needs one too, and its preview shows what it would send', async () => {
     expect(await client.voice()).toMatchObject({
       status: 'absent',

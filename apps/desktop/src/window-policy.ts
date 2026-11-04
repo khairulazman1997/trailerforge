@@ -25,3 +25,22 @@ export const WINDOW_PREFERENCES = {
   webSecurity: true,
   allowRunningInsecureContent: false,
 } as const;
+
+/**
+ * The microphone, and only the microphone, for the TrailerForge window itself (the voiceover
+ * recorder). Never the camera, never screen capture, never another page.
+ */
+export function allowMicrophone(
+  permission: string,
+  mediaTypes: readonly string[] | undefined,
+  requestingUrl: string,
+  serviceOrigin: string,
+): boolean {
+  return (
+    permission === 'media' &&
+    mediaTypes !== undefined &&
+    mediaTypes.length > 0 &&
+    mediaTypes.every((t) => t === 'audio') &&
+    isServiceUrl(requestingUrl, serviceOrigin)
+  );
+}

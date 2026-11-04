@@ -1916,3 +1916,9 @@ main:focus {
   position: absolute;
   border: 2px dashed var(--text);
 }
+
+.tt-prompt-line {
+  font-size: 1.75rem;
+  line-height: 1.4;
+  margin: 1rem 0;
+}

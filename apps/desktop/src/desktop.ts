@@ -3,7 +3,7 @@ import { isAbsolute, join } from 'node:path';
 import { Engine } from '@trailerforge/engine';
 import { DEFAULT_APP_PORT, startService } from '@trailerforge/service';
 import { openSafeSecretStore, type SafeStorageLike } from './safe-secrets.js';
-import { isSafeExternalUrl, isServiceUrl } from './window-policy.js';
+import { allowMicrophone, isSafeExternalUrl, isServiceUrl } from './window-policy.js';
 
 /** What the app window must offer; `main.ts` adapts Electron's BrowserWindow to this. */
 export interface WindowLike {
@@ -12,6 +12,8 @@ export interface WindowLike {
   onWillNavigate(decide: (url: string) => boolean): void;
   /** Called when the page tries to open a new window; the window is never created. */
   onWindowOpen(handle: (url: string) => void): void;
+  /** Decide a permission request (microphone, camera…) from the page: true to grant. */
+  onPermission(decide: (permission: string, mediaTypes: readonly string[] | undefined, requestingUrl: string) => boolean): void; // prettier-ignore
   onClosed(cb: () => void): void;
 }
 
@@ -97,6 +99,7 @@ export async function startDesktop(host: DesktopHost): Promise<Desktop> {
   win.onWindowOpen((url) => {
     if (isSafeExternalUrl(url) && !isServiceUrl(url, origin)) host.openExternal(url);
   });
+  win.onPermission((permission, types, url) => allowMicrophone(permission, types, url, origin));
   // The token travels in the hash, which the page scrubs and which is never sent anywhere.
   await win.load(`${svc.url}/#token=${svc.token}`);
 

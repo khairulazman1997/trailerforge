@@ -7,6 +7,14 @@ import { sampleConcept, sampleProject } from '@trailerforge/schema/fixtures';
 import { startTestService, type TestService } from './support.js';
 
 test.describe.configure({ mode: 'serial' });
+// A fake microphone, granted without asking (the desktop app grants it to its own window only).
+test.use({
+  launchOptions: {
+    ...(process.env.TFORGE_CHROMIUM ? { executablePath: process.env.TFORGE_CHROMIUM } : {}),
+    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+  },
+  permissions: ['microphone'],
+});
 
 let t: TestService;
 let dir: string;
@@ -85,4 +93,27 @@ test('tiktok: pick a concept, fill a shot, set subtitles, undo', async ({ page }
   await page.getByLabel('Made for').selectOption('reels');
   await expect(page.getByRole('img', { name: /Instagram Reels/ })).toBeVisible();
   expect(await axe(page)).toEqual([]);
+});
+
+test('tiktok: record the voiceover in the app, line by line', async ({ page }) => {
+  await page.goto(`${t.svc.url}/p/${ID}/tiktok#token=${t.svc.token}`);
+  await expect(page.getByText('0 of 2 voiceover lines recorded')).toBeVisible();
+  await page.getByRole('button', { name: 'Record the script in the app' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('This boss has one tell.');
+  await expect(dialog).toContainText('Line 1 of 2');
+  expect(await axe(page)).toEqual([]);
+
+  await dialog.getByRole('button', { name: 'Record', exact: true }).click();
+  await expect(dialog.getByRole('status')).toContainText('Recording…');
+  await page.waitForTimeout(1200);
+  await dialog.getByRole('button', { name: 'Stop' }).click();
+  // The take is converted and added; the next line comes up.
+  await expect(dialog).toContainText('Line 2 of 2', { timeout: 30_000 });
+  await expect(dialog).toContainText('Miss it and you are done.');
+  await dialog.getByRole('button', { name: 'Previous line' }).click();
+  await expect(dialog.getByRole('status')).toContainText('1 take so far.');
+  await expect(dialog.getByRole('button', { name: 'Record again' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByText('1 of 2 voiceover lines recorded')).toBeVisible();
 });

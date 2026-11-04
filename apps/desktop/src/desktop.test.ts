@@ -19,6 +19,7 @@ async function harness() {
     loaded: '',
     external: [] as string[],
     decide: (_: string) => true,
+    permit: (_p: string, _t: readonly string[] | undefined, _u: string) => true,
     open: (_: string) => {},
     closed: () => {},
     shown: [] as string[],
@@ -28,6 +29,7 @@ async function harness() {
     load: async (url) => void (rec.loaded = url),
     onWillNavigate: (d) => void (rec.decide = d),
     onWindowOpen: (h) => void (rec.open = h),
+    onPermission: (d) => void (rec.permit = d),
     onClosed: (cb) => void (rec.closed = cb),
   };
   const host: DesktopHost = {
@@ -67,6 +69,18 @@ describe('desktop shell', () => {
     rec.open('https://example.com/docs');
     rec.open('file:///etc/passwd');
     expect(rec.external).toEqual(['https://example.com/', 'https://example.com/docs']);
+  });
+
+  it('grants the microphone to the TrailerForge window only, never the camera or other pages', async () => {
+    const rec = await harness();
+    const here = `${running!.url}/p/x/tiktok`;
+    expect(rec.permit('media', ['audio'], here)).toBe(true);
+    expect(rec.permit('media', ['audio', 'video'], here)).toBe(false);
+    expect(rec.permit('media', ['video'], here)).toBe(false);
+    expect(rec.permit('media', undefined, here)).toBe(false);
+    expect(rec.permit('media', ['audio'], 'https://example.com/')).toBe(false);
+    expect(rec.permit('notifications', undefined, here)).toBe(false);
+    expect(rec.permit('display-capture', ['audio'], here)).toBe(false);
   });
 
   it('exposes only the pickers and show-in-folder, and stops the service when the window closes', async () => {
