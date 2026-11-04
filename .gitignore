@@ -15,3 +15,4 @@ release
 
 apps/desktop/stage/
 apps/desktop/vendor/
+apps/ui/tforge-cc-*/
