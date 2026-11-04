@@ -11,3 +11,4 @@ export * from './quality.js';
 export * from './drag.js';
 export * from './stills.js';
 export * from './voice-align.js';
+export * from './short-cut.js';

@@ -10,7 +10,7 @@ import {
   type Storyboard,
   type TimelineItem,
 } from '@trailerforge/schema';
-import { applyAccents, slotEffects, type SoundSetup } from './accents.js';
+import { applyAccents, slotEffects, type Decide, type SoundSetup } from './accents.js';
 import { placeCaptions } from './captions.js';
 import type { MusicGrid } from './grid.js';
 import { layoutOnGrid } from './layout.js';
@@ -118,6 +118,7 @@ function bestWindow(
   handle: number,
   hint?: { in?: number; out?: number },
 ): Window | null {
+  if (src.still) return { sourceIn: 0, level: 0, score: 0, why: ['an image'] };
   if (src.duration < length) return null;
   let lo = Math.max(0, hint?.in ?? 0);
   let hi = Math.min(src.duration, hint?.out ?? src.duration);
@@ -203,68 +204,39 @@ function bestWindow(
   return w;
 }
 
-export function buildRoughCut(input: RoughCutInput): RoughCut {
-  const { storyboard: sb, grid, sources } = input;
-  const o = input.options ?? {};
-  const fpf = flicksPerFrame(input.timeline.frameRate);
+export interface SlotFillContext {
+  sources: ReadonlyMap<string, TakeSource>;
+  fpf: number;
+  handle: number;
+  minItem: number;
+  picture: TimelineItem[];
+  cards: TimelineItem[];
+  warnings: string[];
+  decide: Decide;
+}
+
+/** Part `index` of `count` when a long slot is shown as several shots (see the short cut). */
+export interface SlotPart {
+  index: number;
+  count: number;
+}
+
+/**
+ * Fills one slot at `[start, start + duration)`: a card, the best stretch of the best take, the
+ * longest too-short take plus a placeholder, or a placeholder. With `part`, a slot shown as
+ * several shots takes its takes in turn, or (one take) a different stretch of it each time.
+ */
+export function slotFiller(ctx: SlotFillContext) {
+  const { sources, fpf, handle, minItem, picture, cards, warnings, decide } = ctx;
   const toFrameGrid = (t: number) => Math.round(Math.round(t / fpf) * fpf);
-  const lead = Math.max(0, Math.min(2, o.leadFrames ?? 1));
-  const handle = Math.round((o.handleSeconds ?? 0.5) * FLICKS_PER_SECOND);
-  const minItem = Math.max(fpf * 6, MIN_ITEM_SECONDS * FLICKS_PER_SECOND);
-  const warnings: string[] = [];
-
-  const layout = layoutOnGrid(sb, grid, o.omitSlotIds ? { omitSlotIds: o.omitSlotIds } : {});
-  warnings.push(...layout.warnings);
-  const slotById = new Map(sb.sections.flatMap((s) => s.slots).map((s) => [s.id, s]));
-  const beatSet = new Set(grid.beats);
-
-  // Cut points: a frame or two ahead of the beat, on the timeline's frame grid; the first starts
-  // at zero and the last stays on its bar for the music fade.
-  const ends = layout.slots.map((x, i) =>
-    i === layout.slots.length - 1
-      ? toFrameGrid(x.end)
-      : toFrameGrid(beatSet.has(x.end) ? x.end - lead * fpf : x.end),
-  );
-  const starts = ends.map((_, i) => (i === 0 ? 0 : ends[i - 1]!));
-
-  const picture: TimelineItem[] = [];
-  const cards: TimelineItem[] = [];
-  const decisions: DecisionRecord[] = [];
-  const decide = (
-    itemId: string,
-    slotId: string,
-    choice: unknown,
-    reasons: Record<string, unknown>,
-    summary: string,
-  ) => {
-    const inputsHash = stableHash(JSON.stringify({ itemId, slotId, choice, reasons }));
-    const rec = DecisionRecord.parse({
-      id: `dec_${stableHash(`${ROUGH_CUT_STEP}|${itemId}|${inputsHash}`)}`,
-      at: input.now.toISOString(),
-      step: ROUGH_CUT_STEP,
-      subject: { kind: 'item', id: itemId },
-      choice: choice as never,
-      reasons: reasons as never,
-      summary,
-    });
-    decisions.push(rec);
-    return rec.id;
-  };
-
-  layout.slots.forEach((ls, i) => {
-    const start = starts[i]!;
-    const duration = ends[i]! - start;
-    const slot = slotById.get(ls.slotId)!;
-    const id = `rc_${ls.slotId}`;
-    const timing = {
-      beatAligned: beatSet.has(ls.end),
-      leadFrames: i < layout.slots.length - 1 && beatSet.has(ls.end) ? lead : 0,
-      seconds: secs(duration),
-    };
-    if (duration <= 0) return;
-    if (duration < minItem)
-      warnings.push(`"${slot.title || slot.id}" is only ${secs(duration)} s long in the cut`);
-
+  return (
+    slot: CardSlot | ShotSlot,
+    id: string,
+    start: number,
+    duration: number,
+    timing: Record<string, unknown> & { leadFrames?: number },
+    part?: SlotPart,
+  ): void => {
     if (slot.kind === 'card') {
       const card = slot as CardSlot;
       const decisionId = decide(
@@ -293,13 +265,24 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
     const shot = slot as ShotSlot;
     const takes = shot.takes.filter((t) => !t.rejected);
     const chosen = shot.chosenTakeId ? takes.find((t) => t.id === shot.chosenTakeId) : undefined;
-    const candidates = (chosen ? [chosen] : takes)
+    const pool = chosen ? [chosen] : takes;
+    const own = part && pool.length > 1 ? [pool[part.index % pool.length]!] : pool;
+    const candidates = own
       .map((t, order) => {
         const src = sources.get(t.assetId);
-        const hint = {
+        let hint: { in?: number; out?: number } = {
           ...(t.sourceIn !== undefined ? { in: t.sourceIn } : {}),
           ...(t.sourceOut !== undefined ? { out: t.sourceOut } : {}),
         };
+        if (part && own.length === 1 && src && !src.still) {
+          // One take for several shots: each looks in its own share of the take.
+          const lo = hint.in ?? 0;
+          const span = (hint.out ?? src.duration) - lo;
+          hint = {
+            in: Math.round(lo + (span * part.index) / part.count),
+            out: Math.round(lo + (span * (part.index + 1)) / part.count),
+          };
+        }
         return { t, src, order, w: src ? bestWindow(src, duration, handle, hint) : null };
       })
       .filter((c) => c.src !== undefined);
@@ -417,6 +400,71 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
       muted: false,
       extensions: {},
     });
+  };
+}
+
+export function buildRoughCut(input: RoughCutInput): RoughCut {
+  const { storyboard: sb, grid, sources } = input;
+  const o = input.options ?? {};
+  const fpf = flicksPerFrame(input.timeline.frameRate);
+  const toFrameGrid = (t: number) => Math.round(Math.round(t / fpf) * fpf);
+  const lead = Math.max(0, Math.min(2, o.leadFrames ?? 1));
+  const handle = Math.round((o.handleSeconds ?? 0.5) * FLICKS_PER_SECOND);
+  const minItem = Math.max(fpf * 6, MIN_ITEM_SECONDS * FLICKS_PER_SECOND);
+  const warnings: string[] = [];
+
+  const layout = layoutOnGrid(sb, grid, o.omitSlotIds ? { omitSlotIds: o.omitSlotIds } : {});
+  warnings.push(...layout.warnings);
+  const slotById = new Map(sb.sections.flatMap((s) => s.slots).map((s) => [s.id, s]));
+  const beatSet = new Set(grid.beats);
+
+  // Cut points: a frame or two ahead of the beat, on the timeline's frame grid; the first starts
+  // at zero and the last stays on its bar for the music fade.
+  const ends = layout.slots.map((x, i) =>
+    i === layout.slots.length - 1
+      ? toFrameGrid(x.end)
+      : toFrameGrid(beatSet.has(x.end) ? x.end - lead * fpf : x.end),
+  );
+  const starts = ends.map((_, i) => (i === 0 ? 0 : ends[i - 1]!));
+
+  const picture: TimelineItem[] = [];
+  const cards: TimelineItem[] = [];
+  const decisions: DecisionRecord[] = [];
+  const decide = (
+    itemId: string,
+    slotId: string,
+    choice: unknown,
+    reasons: Record<string, unknown>,
+    summary: string,
+  ) => {
+    const inputsHash = stableHash(JSON.stringify({ itemId, slotId, choice, reasons }));
+    const rec = DecisionRecord.parse({
+      id: `dec_${stableHash(`${ROUGH_CUT_STEP}|${itemId}|${inputsHash}`)}`,
+      at: input.now.toISOString(),
+      step: ROUGH_CUT_STEP,
+      subject: { kind: 'item', id: itemId },
+      choice: choice as never,
+      reasons: reasons as never,
+      summary,
+    });
+    decisions.push(rec);
+    return rec.id;
+  };
+
+  const fill = slotFiller({ sources, fpf, handle, minItem, picture, cards, warnings, decide });
+  layout.slots.forEach((ls, i) => {
+    const start = starts[i]!;
+    const duration = ends[i]! - start;
+    const slot = slotById.get(ls.slotId)!;
+    const timing = {
+      beatAligned: beatSet.has(ls.end),
+      leadFrames: i < layout.slots.length - 1 && beatSet.has(ls.end) ? lead : 0,
+      seconds: secs(duration),
+    };
+    if (duration <= 0) return;
+    if (duration < minItem)
+      warnings.push(`"${slot.title || slot.id}" is only ${secs(duration)} s long in the cut`);
+    fill(slot, `rc_${ls.slotId}`, start, duration, timing);
   });
 
   const end = ends.at(-1) ?? 0;
