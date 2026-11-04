@@ -256,4 +256,24 @@ describe('core/shorts.fill-slot and clear-slot', () => {
     expect(store.state.review).toEqual({ comments: [], approvals: [] });
     valid();
   });
+
+  it('music: a track (for timing only, if asked) and a tapped-in tempo; the music option of an export', () => {
+    store.dispatch('core/shorts.set-grid', { shortId: 'short_parry', patch: { tempo: 128, offset: 1000 } }); // prettier-ignore
+    expect(short().storyboard!.music.grid).toMatchObject({ tempo: 128, offset: 1000 });
+    store.dispatch('core/shorts.set-grid', { shortId: 'short_parry', patch: { tempo: null } });
+    expect(short().storyboard!.music.grid?.tempo).toBeUndefined();
+    const id = 'ast_ref';
+    store.dispatch('core/shorts.set-music', { shortId: 'short_parry', assetId: id, timingOnly: true }); // prettier-ignore
+    expect(short().storyboard!.music).toMatchObject({ trackAssetId: id, timingOnly: true });
+    expect(store.state.assets.some((a) => a.assetId === id && a.role === 'music')).toBe(true);
+    store.dispatch('core/shorts.set-music', { shortId: 'short_parry', assetId: id });
+    expect(short().storyboard!.music.timingOnly).toBeUndefined();
+    store.dispatch('core/shorts.set-music', { shortId: 'short_parry', assetId: null });
+    expect(short().storyboard!.music.trackAssetId).toBeUndefined();
+    store.dispatch('core/export.set', { variantId: 'short_parry', presetId: 'core/tiktok', music: 'without' }); // prettier-ignore
+    expect(short().export).toEqual({ presetId: 'core/tiktok', music: 'without' });
+    store.dispatch('core/export.set', { variantId: 'short_parry', music: null });
+    expect(short().export).toEqual({ presetId: 'core/tiktok' });
+    valid();
+  });
 });

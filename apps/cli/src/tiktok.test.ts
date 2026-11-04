@@ -106,9 +106,15 @@ describe('tforge tiktok', { timeout: 120_000 }, () => {
     ]);
     expect(s.out).toBe('Subtitles on (word-pop), made for reels, 0 hand changes');
 
+    const mu = await run(['tiktok', 'music', project, 'short_parry', '--taps', '0,0.5,1,1.5,2,2.5', '--export', 'without']); // prettier-ignore
+    expect(mu.code).toBe(0);
+    expect(mu.out).toMatch(/tempo 120; export without/);
+    expect(mu.out).toMatch(/tapped: 120 BPM/);
+    expect((await run(['tiktok', 'music', project, 'short_parry', '--taps', '0,1'])).code).toBe(2);
+
     const g = await run(['tiktok', 'generate', project, 'short_parry']);
     expect(g.code).toBe(1); // most slots are still empty: placeholders
-    expect(g.out).toMatch(/Cut built \(storyboard lengths\): \d+ items, \d+ placeholders/);
+    expect(g.out).toMatch(/Cut built \(on the beat\): \d+ items, \d+ placeholders/);
     expect(g.out).toMatch(/tforge draft\|export <dir> --version short_parry/);
     const json = JSON.parse((await run(['tiktok', 'list', project, '--json'])).out) as { shorts: { cut: { built: boolean } }[] }; // prettier-ignore
     expect(json.shorts[0]!.cut.built).toBe(true);

@@ -1,4 +1,5 @@
-import { useEffect, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { tapTempo } from '@trailerforge/cut';
 import { PLATFORM_NAMES, PLATFORM_SAFE } from '@trailerforge/graphics';
 import { useAppState, useStore } from '../app-context.js';
 import { BrowseButton } from '../components/BrowseButton.js';
@@ -497,6 +498,8 @@ function ShortEditor({ id, short, disabled }: { id: string; short: Short; disabl
         </>
       )}
 
+      <MusicPanel id={id} short={short} disabled={disabled} />
+
       <h3>Platform and subtitles</h3>
       <div className="row">
         <label className="field">
@@ -599,6 +602,136 @@ function ShortEditor({ id, short, disabled }: { id: string; short: Short; disabl
           )}
         </>
       )}
+    </section>
+  );
+}
+
+const NO_MUSIC: never[] = [];
+
+/** Music for the cut, a tapped-in tempo when there is no music file, and whether to export without the music. */
+function MusicPanel({ id, short, disabled }: { id: string; short: Short; disabled: boolean }) {
+  const store = useStore();
+  const music = useAppState((s) => s.footage[id]?.status.music) ?? NO_MUSIC;
+  const stored = useAppState((s) => s.projects[id]!.project.shorts.find((x) => x.id === short.id));
+  const mode = stored?.export?.music ?? 'both';
+  const [taps, setTaps] = useState<number[]>([]);
+  const last = useRef(0);
+  useEffect(() => {
+    void store.refreshFootage(id);
+  }, [store, id]);
+  const result = taps.length >= 4 ? tapTempo(taps) : null;
+  const run = (type: string, payload: Record<string, unknown>) =>
+    store.command(id, type, { shortId: short.id, ...payload });
+  const tap = () => {
+    const now = performance.now() / 1000;
+    // A pause of more than two seconds starts a new run.
+    setTaps((t) => (t.length && now - last.current > 2 ? [now] : [...t, now]));
+    last.current = now;
+  };
+  return (
+    <section aria-labelledby="tt-music">
+      <h3 id="tt-music">Music and tempo</h3>
+      <p className="muted">
+        Trending sounds can only be added inside the TikTok app, so the TikTok can be exported with
+        the music, without it, or both. Without music the cut still follows a beat: tap the tempo
+        in, or choose a reference song that is used for its beat only and never exported.
+      </p>
+      <div className="row">
+        <label className="field">
+          <span>Music file</span>
+          <select
+            value={short.music.assetId ?? ''}
+            disabled={disabled}
+            onChange={(e) =>
+              void run('core/shorts.set-music', {
+                assetId: e.target.value || null,
+                timingOnly: stored?.storyboard?.music.timingOnly === true,
+              })
+            }
+          >
+            <option value="">None</option>
+            {music.map((m) => (
+              <option key={m.assetId} value={m.assetId}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={short.music.timingOnly}
+            disabled={disabled || !short.music.assetId}
+            onChange={(e) =>
+              void run('core/shorts.set-music', {
+                assetId: short.music.assetId,
+                timingOnly: e.target.checked,
+              })
+            }
+          />
+          <span>Use it for the beat only (never exported)</span>
+        </label>
+        <label className="field">
+          <span>Export</span>
+          <select
+            value={mode}
+            disabled={disabled}
+            onChange={(e) =>
+              void store.command(id, 'core/export.set', {
+                variantId: short.id,
+                ...(stored?.export ? {} : { presetId: 'core/tiktok' }),
+                music: e.target.value,
+              })
+            }
+          >
+            <option value="both">With and without music</option>
+            <option value="with">With music</option>
+            <option value="without">Without music</option>
+          </select>
+        </label>
+      </div>
+      <div className="row">
+        <button type="button" onClick={tap} disabled={disabled}>
+          Tap the beat
+        </button>
+        <span role="status">
+          {short.music.tempo !== null && `Tempo ${short.music.tempo} BPM. `}
+          {taps.length === 0
+            ? 'Tap along to set a tempo (four taps or more).'
+            : result === null
+              ? `${taps.length} tap${taps.length === 1 ? '' : 's'}…`
+              : result.ok
+                ? `${result.tempo} BPM from your taps (steadiness ${Math.round(result.steadiness * 100)}%).`
+                : result.reason}
+        </span>
+        {result?.ok && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() =>
+              void run('core/shorts.set-grid', {
+                patch: { tempo: result.tempo, offset: result.offset },
+              }).then(() => setTaps([]))
+            }
+          >
+            Use {result.tempo} BPM
+          </button>
+        )}
+        {taps.length > 0 && (
+          <button type="button" onClick={() => setTaps([])}>
+            Start over
+          </button>
+        )}
+        {short.music.tempo !== null && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => void run('core/shorts.set-grid', { patch: { tempo: null } })}
+          >
+            Use the music's own beat
+          </button>
+        )}
+      </div>
     </section>
   );
 }

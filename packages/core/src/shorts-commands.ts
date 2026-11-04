@@ -27,6 +27,7 @@ import {
 } from '@trailerforge/schema';
 import { z } from 'zod';
 import { CommandError, defineCommand, type CommandDef } from './commands.js';
+import { GridPatch, applyGridPatch } from './music-commands.js';
 import { dropVersionReview } from './review-commands.js';
 
 /**
@@ -451,6 +452,50 @@ export const resetCues = defineCommand({
   },
 });
 
+/**
+ * The music a TikTok's cut follows. With `timingOnly` the file gives the beat grid and nothing
+ * else: it is never put on the timeline and never exported (a reference song, for example).
+ */
+export const setShortMusic = defineCommand({
+  type: 'core/shorts.set-music',
+  payload: z.strictObject({
+    shortId: Id,
+    assetId: Id.nullable(),
+    timingOnly: z.boolean().optional(),
+  }),
+  label: ({ assetId }) => (assetId ? 'Choose the TikTok music' : 'Remove the TikTok music'),
+  apply: (d, { shortId, assetId, timingOnly }) => {
+    const type = 'core/shorts.set-music';
+    const sb = findShort(d, shortId, type).storyboard;
+    if (!sb) throw new CommandError(type, `TikTok "${shortId}" has no template yet`);
+    const m = sb.music;
+    if (assetId !== null && !d.assets.some((a) => a.assetId === assetId)) {
+      d.assets.push(
+        ProjectAssetRef.parse({ assetId, role: 'music', addedAt: new Date().toISOString() }),
+      );
+    }
+    if (assetId !== (m.trackAssetId ?? null)) delete m.grid; // nudges belong to the old track
+    if (assetId === null) delete m.trackAssetId;
+    else m.trackAssetId = assetId;
+    if (assetId !== null && timingOnly) m.timingOnly = true;
+    else delete m.timingOnly;
+  },
+});
+
+/** Beat grid settings for a TikTok: a tempo (from tapping it in) needs no music file at all. */
+export const setShortGrid = defineCommand({
+  type: 'core/shorts.set-grid',
+  payload: z.strictObject({ shortId: Id, patch: GridPatch }),
+  label: () => 'Adjust the TikTok beat grid',
+  apply: (d, { shortId, patch }) => {
+    const type = 'core/shorts.set-grid';
+    const sb = findShort(d, shortId, type).storyboard;
+    if (!sb) throw new CommandError(type, `TikTok "${shortId}" has no template yet`);
+    applyGridPatch(sb.music, patch, type);
+  },
+  merge: { key: ({ shortId }) => `${shortId}:grid`, windowMs: 1500 },
+});
+
 export const shortsCommands = [
   addConcepts,
   removeConcepts,
@@ -463,6 +508,8 @@ export const shortsCommands = [
   fillShortSlot,
   fillShortVoice,
   clearShortSlot,
+  setShortMusic,
+  setShortGrid,
   setShortSubtitles,
   editCue,
   resetCues,

@@ -27,15 +27,16 @@ export const setExport = defineCommand({
     fileName: z.string().min(1).max(120).nullable().optional(),
     loudnessLufs: z.number().min(-30).max(-6).nullable().optional(),
     posterSeconds: z.number().min(0).max(600).nullable().optional(),
+    music: z.enum(['with', 'without', 'both']).nullable().optional(),
   }),
   label: () => 'Change export settings',
-  apply: (d, { variantId, presetId, fileName, loudnessLufs, posterSeconds }) => {
+  apply: (d, { variantId, presetId, fileName, loudnessLufs, posterSeconds, music }) => {
     const type = 'core/export.set';
     const v = findVariant(d, variantId, type);
     const next = { ...(v.export ?? {}) } as Record<string, unknown>;
     if (presetId !== undefined) next.presetId = presetId;
     if (typeof next.presetId !== 'string') throw new CommandError(type, 'choose a preset first');
-    for (const [key, value] of Object.entries({ fileName, loudnessLufs, posterSeconds })) {
+    for (const [key, value] of Object.entries({ fileName, loudnessLufs, posterSeconds, music })) {
       if (value === null) delete next[key];
       else if (value !== undefined) next[key] = value;
     }

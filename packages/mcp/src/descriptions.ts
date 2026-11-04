@@ -18,7 +18,7 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
     "Set text sizes as a share of the frame's shorter side (title, heading, body, caption).",
   'core/brand.reset': 'Forget the whole brand kit.',
   'core/export.set':
-    'Choose how a version is exported: the preset (core/youtube, core/steam, core/vertical, core/x, core/master), the file name pattern ({project}, {version}, {format}, {preset}), a loudness target override in LUFS, and where the poster frame is taken (seconds). null clears an override.',
+    'Choose how a version is exported: the preset (core/youtube, core/steam, core/vertical, core/x, core/master), the file name pattern ({project}, {version}, {format}, {preset}), a loudness target override in LUFS, and where the poster frame is taken (seconds), and for TikToks music: with, without or both (both also writes a -nomusic copy for adding a trending sound in the app). null clears an override.',
   'core/export.reset': "Back to the default export for the version's shape.",
   'core/review.comment':
     'Leave a comment on a version (variantId null = the master cut) at a time (flicks), optionally on the timeline item under it. Comments never change the render, so they never make an approval stale.',
@@ -112,6 +112,10 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
   'core/shorts.set-export':
     'Choose how a TikTok is exported (preset such as core/tiktok, file name pattern, loudness, poster frame); null clears it.',
   'core/shorts.clear-slot': 'Take a file (or every file) out of a TikTok slot or voiceover line.',
+  'core/shorts.set-music':
+    "Choose the music a TikTok's cut follows (a library asset id, or null for none). timingOnly: the file only gives the beat (a reference song): it is never put on the timeline or exported. Rebuild the cut with tiktok_cut afterwards.",
+  'core/shorts.set-grid':
+    'Beat grid for a TikTok: tempo (BPM; no music file needed, e.g. from tap tempo), offset in flicks (at most a second), downbeatShift, beatsPerBar, barsPerPhrase. null clears tempo or beatsPerBar. Rebuild the cut with tiktok_cut afterwards.',
   'core/shorts.set-subtitles':
     'Turn subtitles on or off for a TikTok, choose lines or word-pop, and the app it is made for (tiktok, shorts, reels: where the app covers the picture). Rebuild the cut with tiktok_cut afterwards.',
   'core/shorts.edit-cue':

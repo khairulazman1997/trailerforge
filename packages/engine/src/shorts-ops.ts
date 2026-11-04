@@ -8,6 +8,7 @@ import {
   buildShortCut,
   mergeRoughCut,
   resolveMusicGrid,
+  tempoGrid,
   type AlignWord,
   type TakeSource,
 } from '@trailerforge/cut';
@@ -216,7 +217,19 @@ export async function generateShortCutOp(
 
   const track = sb.music.trackAssetId ? engine.library.get(sb.music.trackAssetId) : undefined;
   const music = track ? await readMusicAnalysis(store.paths.analysisCache, track.quickHash) : null;
-  const grid = music ? resolveMusicGrid(music, sb.music.grid ?? {}) : null;
+  const tempo = sb.music.grid?.tempo;
+  // A tapped-in tempo needs no music file: the grid comes from the tempo alone.
+  const grid = music
+    ? resolveMusicGrid(music, sb.music.grid ?? {})
+    : tempo
+      ? tempoGrid({ ...sb.music.grid, tempo }, short.concept.targetSeconds + 10)
+      : null;
+  // A timing-only track gives the beat and is never placed on the timeline.
+  const cutBoard = (() => {
+    if (!sb.music.timingOnly) return sb;
+    const { trackAssetId: _unused, ...rest } = sb.music;
+    return { ...sb, music: rest };
+  })();
 
   const words = new Map<string, readonly AlignWord[]>();
   const model = engine.voice.manifest;
@@ -236,7 +249,7 @@ export async function generateShortCutOp(
     store.state.formatTargets.find((f) => f.aspect === '9:16');
   const id = shortTimelineId(shortId);
   const built = buildShortCut({
-    storyboard: sb,
+    storyboard: cutBoard,
     sources,
     grid,
     timeline: {
@@ -314,6 +327,8 @@ export interface ShortView {
   slots: ShortSlotView[];
   voiceLines: ShortVoiceLineView[];
   musicAssetId: string | null;
+  /** The music: a file (maybe for timing only) and/or a tapped-in tempo. */
+  music: { assetId: string | null; timingOnly: boolean; tempo: number | null };
   /** Counts for the progress bar: picture slots with a file, voiceover lines with a recording. */
   progress: { slots: number; slotsFilled: number; lines: number; linesRecorded: number };
   cut: { built: boolean; mode: 'voice' | 'beat' | 'plain' | null; seconds: number | null };
@@ -391,6 +406,11 @@ export async function shortsViewOp(engine: Engine, store: ProjectStore): Promise
       slots,
       voiceLines,
       musicAssetId: sb?.music.trackAssetId ?? null,
+      music: {
+        assetId: sb?.music.trackAssetId ?? null,
+        timingOnly: sb?.music.timingOnly === true,
+        tempo: sb?.music.grid?.tempo ?? null,
+      },
       progress: {
         slots: picture.length,
         slotsFilled: picture.filter((x) => x.chosen).length,

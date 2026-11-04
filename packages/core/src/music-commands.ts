@@ -33,7 +33,7 @@ export const setMusicTrack = defineCommand({
   },
 });
 
-const GridPatch = z.strictObject({
+export const GridPatch = z.strictObject({
   downbeatShift: z.int().min(-11).max(11).optional(),
   /** null clears the override. */
   tempo: z.number().min(30).max(300).nullable().optional(),
@@ -42,6 +42,23 @@ const GridPatch = z.strictObject({
   barsPerPhrase: z.int().min(1).max(16).optional(),
   offset: z.int().optional(),
 });
+
+/** Merge a patch into a music plan's grid settings (`null` clears a field). */
+export function applyGridPatch(
+  m: { grid?: MusicGridSettings | undefined },
+  patch: z.infer<typeof GridPatch>,
+  type: string,
+): void {
+  const next: Record<string, unknown> = { ...(m.grid ?? {}) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete next[k];
+    else if (v !== undefined) next[k] = v;
+  }
+  const parsed = MusicGridSettings.safeParse(next);
+  if (!parsed.success)
+    throw new CommandError(type, parsed.error.issues[0]?.message ?? 'invalid grid');
+  m.grid = parsed.data;
+}
 
 /** Nudge the beat grid. Repeated nudges within a second and a half undo as one step. */
 export const setMusicGrid = defineCommand({
@@ -52,19 +69,7 @@ export const setMusicGrid = defineCommand({
     const m = music(d, 'core/music.set-grid');
     if (!m.trackAssetId)
       throw new CommandError('core/music.set-grid', 'choose a music track first');
-    const next: Record<string, unknown> = { ...(m.grid ?? {}) };
-    for (const [k, v] of Object.entries(patch)) {
-      if (v === null) delete next[k];
-      else if (v !== undefined) next[k] = v;
-    }
-    const parsed = MusicGridSettings.safeParse(next);
-    if (!parsed.success) {
-      throw new CommandError(
-        'core/music.set-grid',
-        parsed.error.issues[0]?.message ?? 'invalid grid',
-      );
-    }
-    m.grid = parsed.data;
+    applyGridPatch(m, patch, 'core/music.set-grid');
   },
   merge: { key: () => 'grid', windowMs: 1500 },
 });

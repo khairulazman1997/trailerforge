@@ -8,6 +8,7 @@ import {
   fillSlotOp,
   generateShortCutOp,
   placeVoiceOp,
+  tapTempo,
   shortsViewOp,
   voiceDownloadOp,
   voiceStatusOp,
@@ -18,6 +19,11 @@ import { fail, type CmdCtx } from './m2.js';
 
 /** Options of `tforge tiktok …` (parsed in `main.ts`). */
 export interface TikTokOpts {
+  none?: boolean | undefined;
+  'timing-only'?: boolean | undefined;
+  taps?: string | undefined;
+  tempo?: string | undefined;
+  export?: string | undefined;
   idea: string[];
   count?: string | undefined;
   concept?: string | undefined;
@@ -55,6 +61,7 @@ export const TIKTOK_SUBS = [
   'voice',
   'transcribe',
   'subtitles',
+  'music',
   'generate',
   'ask-claude',
 ] as const;
@@ -262,6 +269,45 @@ export async function tiktokCommand(
         const s = (await shortsViewOp(e, store)).shorts.find((x) => x.id === sid());
         if (!s) throw new OpError('not-found', `no TikTok "${sid()}"`);
         ctx.emit(`Subtitles ${s.subtitles.enabled ? `on (${s.subtitles.style})` : 'off'}, made for ${s.platform}, ${s.subtitles.edits} hand changes`, { platform: s.platform, subtitles: s.subtitles }); // prettier-ignore
+        return 0;
+      }
+      case 'music': {
+        const dispatch = (type: string, payload: Record<string, unknown>) => {
+          try {
+            store.dispatch(type, { shortId: sid(), ...payload });
+          } catch (err) {
+            throw new OpError('usage', err instanceof Error ? err.message : String(err));
+          }
+        };
+        if (o.none && o.asset) throw new OpError('usage', 'choose --asset or --none');
+        if (o.asset || o.none)
+          dispatch('core/shorts.set-music', { assetId: o.asset ?? null, timingOnly: o['timing-only'] === true }); // prettier-ignore
+        let tapped: ReturnType<typeof tapTempo> | undefined;
+        if (o.taps) {
+          const taps = o.taps.split(',').map((x) => Number(x.trim()));
+          if (taps.some((x) => !Number.isFinite(x))) throw new OpError('usage', '--taps takes seconds separated by commas'); // prettier-ignore
+          tapped = tapTempo(taps);
+          if (!tapped.ok) throw new OpError('usage', tapped.reason);
+          dispatch('core/shorts.set-grid', { patch: { tempo: tapped.tempo, offset: tapped.offset } }); // prettier-ignore
+        } else if (o.tempo !== undefined) {
+          dispatch('core/shorts.set-grid', { patch: { tempo: num('--tempo', o.tempo)! } });
+        }
+        if (o.export) {
+          if (!['with', 'without', 'both'].includes(o.export))
+            throw new OpError('usage', '--export is with, without or both');
+          const cur = store.state.shorts.find((x) => x.id === sid())?.export;
+          store.dispatch('core/export.set', { variantId: sid(), ...(cur ? {} : { presetId: 'core/tiktok' }), music: o.export }); // prettier-ignore
+        }
+        const s = (await shortsViewOp(e, store)).shorts.find((x) => x.id === sid());
+        if (!s) throw new OpError('not-found', `no TikTok "${sid()}"`);
+        const mode = store.state.shorts.find((x) => x.id === sid())?.export?.music ?? 'both';
+        ctx.emit(
+          [
+            `Music: ${s.music.assetId ? `${s.music.assetId}${s.music.timingOnly ? ' (timing only, never exported)' : ''}` : 'none'}; tempo ${s.music.tempo ?? 'from the music'}; export ${mode}`,
+            ...(tapped?.ok ? [`  tapped: ${tapped.tempo} BPM from ${tapped.used} intervals, steadiness ${tapped.steadiness}`] : []), // prettier-ignore
+          ].join('\n'),
+          { music: s.music, export: mode },
+        );
         return 0;
       }
       case 'generate': {

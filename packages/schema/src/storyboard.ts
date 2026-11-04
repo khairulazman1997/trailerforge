@@ -204,6 +204,8 @@ export const MusicPlan = z.strictObject({
   trackAssetId: Id.optional(),
   /** Nudges to the analysed beat grid of `trackAssetId`; reset when the track changes. */
   grid: MusicGridSettings.optional(),
+  /** The track only gives the cut its beat: it is never placed on a timeline or exported. */
+  timingOnly: z.boolean().optional(),
   direction: z.string().default(''),
   bpm: z
     .strictObject({ min: z.number().positive(), max: z.number().positive() })
@@ -285,6 +287,8 @@ export const ExportSettings = z.strictObject({
   loudnessLufs: z.number().min(-30).max(-6).optional(),
   /** Where the poster frame is taken, seconds into the version. */
   posterSeconds: z.number().min(0).max(600).optional(),
+  /** TikToks: export with the music, without it (trending sounds are added in the app), or both. */
+  music: z.enum(['with', 'without', 'both']).optional(),
 });
 export type ExportSettings = z.infer<typeof ExportSettings>;
 

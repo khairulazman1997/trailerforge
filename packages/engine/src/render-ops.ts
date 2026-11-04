@@ -143,7 +143,7 @@ export async function buildVersion(
   engine: Engine,
   store: ProjectStore,
   variantId: string | null,
-  o: { maxHeight?: number } = {},
+  o: { maxHeight?: number; withoutMusic?: boolean } = {},
 ): Promise<VersionBuild> {
   const project = store.state;
   let timeline: Timeline;
@@ -171,6 +171,9 @@ export async function buildVersion(
     exportSettings = v.export;
   }
   if (o.maxHeight) timeline = scaled(timeline, o.maxHeight);
+  // A track that only gives the beat is never part of a render; the music-free export drops the rest.
+  if (short && (o.withoutMusic || short.storyboard?.music.timingOnly))
+    timeline = { ...timeline, tracks: timeline.tracks.filter((t) => t.id !== 'trk_music') };
   const warnings: string[] = [];
 
   // The files the timeline uses, as the renderer and the checks need them.
@@ -701,6 +704,8 @@ export interface ExportResult {
   findings: GateFinding[];
   overridden: string[];
   warnings: string[];
+  /** TikToks exported "both": the copy without the music (`-nomusic`), for adding a trending sound in the app. */
+  musicFree?: ExportResult;
 }
 
 /**
@@ -714,15 +719,44 @@ export async function exportVersionOp(
   engine: Engine,
   store: ProjectStore,
   variantId: string | null,
-  o: {
-    overrides?: readonly GateOverride[];
-    signal?: AbortSignal;
-    onProgress?: OnProgress;
-    now?: () => Date;
-  } = {},
+  o: VersionExportOptions = {},
+): Promise<ExportResult> {
+  const short = shortOf(store.state, variantId);
+  const mode = short ? (exportOf(store.state, variantId).settings?.music ?? 'both') : 'with';
+  const tl = short ? store.state.timelines.find((t) => t.id === shortTimelineId(short.id)) : null;
+  const hasMusic =
+    !short?.storyboard?.music.timingOnly &&
+    !!tl?.tracks.some((t) => t.id === 'trk_music' && t.items.length > 0);
+  // Without music in the cut there is only one file to make.
+  if (!hasMusic || mode === 'with') return exportOne(engine, store, variantId, o, false);
+  if (mode === 'without') return exportOne(engine, store, variantId, o, true);
+  const part = (from: number): VersionExportOptions => {
+    const { onProgress, ...rest } = o;
+    return onProgress
+      ? { ...rest, onProgress: (p) => onProgress({ ...p, fraction: from + p.fraction * 0.5 }) }
+      : rest;
+  };
+  const withMusic = await exportOne(engine, store, variantId, part(0), false);
+  const musicFree = await exportOne(engine, store, variantId, part(0.5), true);
+  return { ...withMusic, musicFree };
+}
+
+export interface VersionExportOptions {
+  overrides?: readonly GateOverride[];
+  signal?: AbortSignal;
+  onProgress?: OnProgress;
+  now?: () => Date;
+}
+
+async function exportOne(
+  engine: Engine,
+  store: ProjectStore,
+  variantId: string | null,
+  o: VersionExportOptions,
+  withoutMusic: boolean,
 ): Promise<ExportResult> {
   const overrides = o.overrides ?? [];
-  const b = await buildVersion(engine, store, variantId);
+  const b = await buildVersion(engine, store, variantId, withoutMusic ? { withoutMusic } : {});
   const ex = exportOf(store.state, variantId);
   const planFound = planFindings(b);
   const planVerdict = gateVerdict(planFound, overrides);
@@ -739,7 +773,7 @@ export async function exportVersionOp(
   const work = join(store.paths.cache, 'render-out');
   const tmpOut = join(
     work,
-    `${keyOf(variantId)}-${b.contentHash.slice(0, 16)}-${b.resolved.preset.id.replace('/', '-')}.${b.resolved.extension}`,
+    `${keyOf(variantId)}-${b.contentHash.slice(0, 16)}${withoutMusic ? '-nomusic' : ''}-${b.resolved.preset.id.replace('/', '-')}.${b.resolved.extension}`,
   );
   let r;
   try {
@@ -791,7 +825,8 @@ export async function exportVersionOp(
   }
 
   // Deliver.
-  const name = fileNameFor(store, b, ex.settings?.fileName);
+  const baseName = fileNameFor(store, b, ex.settings?.fileName);
+  const name = withoutMusic ? baseName.replace(/(\.[^.]+)$/, '-nomusic$1') : baseName;
   const dir = join(store.paths.exports, 'render', keyOf(variantId));
   const file = join(dir, name);
   await mkdir(dir, { recursive: true });

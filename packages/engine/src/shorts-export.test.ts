@@ -194,6 +194,33 @@ describe('a TikTok, end to end', { timeout: 300_000 }, () => {
     expect(again.sha256).toBe(r.sha256);
   });
 
+  it('exports with and without the music, and a timing-only track is never rendered', async () => {
+    const both = await exportVersionOp(engine, store, SHORT);
+    expect(both.musicFree?.file).toMatch(/-nomusic\.mp4$/);
+    expect(both.musicFree?.sha256).not.toBe(both.sha256);
+    expect(existsSync(both.musicFree!.file)).toBe(true);
+    expect(both.musicFree!.musicFree).toBeUndefined();
+
+    store.dispatch('core/export.set', { variantId: SHORT, presetId: 'core/tiktok', music: 'without' }); // prettier-ignore
+    const only = await exportVersionOp(engine, store, SHORT);
+    expect(only.file).toMatch(/-nomusic\.mp4$/);
+    expect(only.musicFree).toBeUndefined();
+    expect(only.sha256).toBe(both.musicFree!.sha256);
+
+    // The same song as a reference for the beat only: the cut keeps its grid, no music track.
+    store.dispatch('core/export.set', { variantId: SHORT, music: null });
+    const track = store.state.shorts.find((x) => x.id === SHORT)!.storyboard!.music.trackAssetId!;
+    store.dispatch('core/shorts.set-music', { shortId: SHORT, assetId: track, timingOnly: true });
+    await generateShortCutOp(engine, store, SHORT);
+    const tl = store.state.timelines.find((t) => t.id === `tl_short_${SHORT}`)!;
+    expect(tl.tracks.some((t) => t.id === 'trk_music')).toBe(false);
+    const one = await exportVersionOp(engine, store, SHORT);
+    expect(one.musicFree).toBeUndefined();
+    expect(one.file).not.toMatch(/-nomusic/);
+    store.dispatch('core/shorts.set-music', { shortId: SHORT, assetId: track });
+    await generateShortCutOp(engine, store, SHORT);
+  });
+
   it('hands off to an editor, and dropping the short drops its review', async () => {
     const h = await handoffOp(engine, store, SHORT, { formats: ['otio', 'edl'] });
     expect(h.files.some((f) => f.file.endsWith('.otio'))).toBe(true);

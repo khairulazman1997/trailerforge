@@ -73,6 +73,13 @@ test('tiktok: pick a concept, fill a shot, set subtitles, undo', async ({ page }
   await expect(first).toContainText('clip.mp4', { timeout: 30_000 });
   await expect(page.getByRole('status').filter({ hasText: 'shots filled' })).toContainText('1 of');
 
+  // Music: export without it, and the tap button asks for more taps.
+  await page.getByRole('combobox', { name: /^Export/ }).selectOption('without');
+  await expect(page.getByRole('combobox', { name: /^Export/ })).toHaveValue('without');
+  await page.getByRole('button', { name: 'Tap the beat' }).click();
+  await expect(page.getByText('1 tap…')).toBeVisible();
+  await page.getByRole('button', { name: 'Start over' }).click();
+
   await page.getByLabel('Subtitles synced to the voiceover').check();
   await expect(page.getByLabel('Style')).toBeEnabled();
   await page.getByLabel('Made for').selectOption('reels');
