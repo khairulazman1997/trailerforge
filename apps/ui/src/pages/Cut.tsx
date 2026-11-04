@@ -532,7 +532,10 @@ function Inspector({
     return d === undefined || d === null ? null : Math.round(d * F);
   };
   const lengthOf = (assetId: string) => {
-    const d = snap?.status.footage.find((f) => f.assetId === assetId)?.durationSec;
+    const f = snap?.status.footage.find((x) => x.assetId === assetId);
+    // An image has no length: it can be held for as long as the cut needs.
+    if (f?.kind === 'image') return null;
+    const d = f?.durationSec;
     return d === undefined || d === null ? null : Math.round(d * F);
   };
   const locked = trackLocked;

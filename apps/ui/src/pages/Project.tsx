@@ -12,6 +12,7 @@ import { BrandPage } from './Brand.js';
 import { GraphicsPage } from './Graphics.js';
 import { ExportPage } from './Export.js';
 import { ReviewPage } from './Review.js';
+import { TikTokPage } from './TikTok.js';
 import { StoryboardPage } from './Storyboard.js';
 import { VersionsPage } from './Versions.js';
 import { busyTask } from '../store.js';
@@ -23,6 +24,7 @@ const TAB_LABEL: Record<ProjectTab, string> = {
   storyboard: 'Storyboard',
   capture: 'Capture',
   footage: 'Footage',
+  tiktok: 'TikTok',
   cut: 'Cut',
   variants: 'Versions',
   brand: 'Brand',
@@ -70,6 +72,8 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
         <CapturePage id={id} />
       ) : tab === 'footage' ? (
         <FootagePage id={id} />
+      ) : tab === 'tiktok' ? (
+        <TikTokPage id={id} />
       ) : tab === 'cut' ? (
         <CutPage id={id} />
       ) : tab === 'variants' ? (

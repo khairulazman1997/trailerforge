@@ -7,6 +7,7 @@ export type ProjectTab =
   | 'storyboard'
   | 'capture'
   | 'footage'
+  | 'tiktok'
   | 'cut'
   | 'variants'
   | 'brand'
@@ -27,6 +28,7 @@ const TABS: ProjectTab[] = [
   'storyboard',
   'capture',
   'footage',
+  'tiktok',
   'cut',
   'variants',
   'brand',

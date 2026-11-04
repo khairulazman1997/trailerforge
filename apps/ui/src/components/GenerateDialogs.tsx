@@ -9,7 +9,11 @@ import { ConfirmDialog } from './Dialog.js';
 import { Disclosure } from './Disclosure.js';
 
 export type Task =
-  'storyboard.generate' | 'storyboard.regenerate-section' | 'capture.tips' | 'critique.run';
+  | 'storyboard.generate'
+  | 'storyboard.regenerate-section'
+  | 'capture.tips'
+  | 'critique.run'
+  | 'tiktok.concepts';
 
 /** Loads the disclosure each time a dialog opens; null while loading. */
 export function usePreview(projectId: string, task: Task, open: boolean): LlmPreview | null {

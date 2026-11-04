@@ -144,6 +144,20 @@ class Fake {
     brandFile: async () => new Blob([]),
     exportPresets: async () => ({ presets: [], hardwareDraftEncoder: null }),
     createDefaultVariants: async () => ({ added: [] }),
+    shorts: async () => ({
+      shorts: [],
+      concepts: [],
+      voice: { status: 'absent' as const, disclosure: null },
+    }),
+    createShort: async () => ({ shortId: 'short_x', build: null }),
+    fillShort: async () => ({ assetId: 'a', input: 'gameplay' as const, target: 's' }),
+    claudeConceptsPreview: async () => ({
+      warning: '',
+      repo: '',
+      files: 0,
+      truncated: false,
+      prompt: '',
+    }),
     brand: async () => ({
       brand: null,
       warnings: [],

@@ -30,6 +30,11 @@ import { matchRoute } from './router.js';
 enablePatches();
 
 /** The slice of the service client the store uses; tests supply a fake. */
+export interface ShortsSnapshot {
+  view: Awaited<ReturnType<ServiceClient['shorts']>>;
+  version: number;
+}
+
 export interface FootageSnapshot {
   status: Awaited<ReturnType<ServiceClient['footage']>>;
   matches: Awaited<ReturnType<ServiceClient['footageMatches']>>;
@@ -107,6 +112,10 @@ export type ClientLike = Pick<
   | 'draft'
   | 'createDefaultVariants'
   | 'brand'
+  | 'shorts'
+  | 'createShort'
+  | 'fillShort'
+  | 'claudeConceptsPreview'
   | 'brandFile'
   | 'importBrandFile'
   | 'footage'
@@ -206,6 +215,8 @@ export interface AppState {
   captureTips: Record<string, { version: number; groups: CaptureView['tips']['groups'] }>;
   /** Recordings, import progress and match suggestions per project (read from the engine). */
   footage: Record<string, FootageSnapshot>;
+  /** The project's TikToks and waiting concepts (read from the engine). */
+  shorts: Record<string, ShortsSnapshot>;
   /** The versions (derived from the master cut) and the brand kit, per project. */
   versions: Record<string, VersionsSnapshot>;
   /** What is installed: graphics templates, transitions, effects and sounds (read once). */
@@ -266,6 +277,7 @@ const initial: AppState = {
   briefs: {},
   captureTips: {},
   footage: {},
+  shorts: {},
   versions: {},
   catalog: null,
   brands: {},
@@ -597,6 +609,7 @@ export class AppStore {
       const { [id]: _why, ...decisions } = s.decisions;
       const { [id]: _versions, ...versions } = s.versions;
       const { [id]: _brand, ...brands } = s.brands;
+      const { [id]: _shorts, ...shorts } = s.shorts;
       const { [id]: _review, ...review } = s.review;
       const { [id]: _assets, ...brandAssets } = s.brandAssets;
       const renderRuns = Object.fromEntries(
@@ -617,6 +630,7 @@ export class AppStore {
         gateOverrides,
         versions,
         brands,
+        shorts,
         projects,
         briefs,
         captureTips,
@@ -967,7 +981,9 @@ export class AppStore {
       | 'storyboard.regenerate-section'
       | 'brief.suggest'
       | 'capture.tips'
-      | 'critique.run',
+      | 'critique.run'
+      | 'tiktok.concepts'
+      | 'tiktok.wording',
   ): Promise<LlmPreview | null> {
     return (await this.run((c) => c.llmPreview(projectId, task))) ?? null;
   }
@@ -1261,6 +1277,51 @@ export class AppStore {
     await this.waitForVersion(projectId, (this.state.projects[projectId]?.version ?? 0) + 1);
     await this.refreshBrand(projectId);
     return true;
+  }
+
+  // ---- TikToks ----
+
+  /** Reads the TikToks and waiting concepts; a quiet failure keeps the old snapshot. */
+  async refreshShorts(projectId: string): Promise<void> {
+    const version = this.state.projects[projectId]?.version;
+    if (version === undefined || !this.client) return;
+    try {
+      const view = await this.client.shorts(projectId);
+      this.set((s) => ({ shorts: { ...s.shorts, [projectId]: { view, version } } }));
+    } catch {
+      // Busy or closed: keep what is shown.
+    }
+  }
+
+  /** Makes a TikTok from a waiting concept (template built, no AI wording). Returns its id. */
+  async createShort(
+    projectId: string,
+    body: Parameters<ClientLike['createShort']>[1],
+  ): Promise<string | null> {
+    const r = await this.run((c) => c.createShort(projectId, body));
+    if (!r) return null;
+    this.toast('info', 'TikTok made. Undo goes back.');
+    await this.waitForVersion(projectId, (this.state.projects[projectId]?.version ?? 0) + 1);
+    await this.refreshShorts(projectId);
+    return r.shortId;
+  }
+
+  /** Puts a file (a path on the computer running the engine, or a library asset) into a slot or voiceover line. */
+  async fillShort(
+    projectId: string,
+    shortId: string,
+    body: Parameters<ClientLike['fillShort']>[2],
+  ): Promise<boolean> {
+    const r = await this.run((c) => c.fillShort(projectId, shortId, body));
+    if (!r) return false;
+    await this.waitForVersion(projectId, (this.state.projects[projectId]?.version ?? 0) + 1);
+    await this.refreshShorts(projectId);
+    return true;
+  }
+
+  /** What "Ask Claude Code" for concepts would share; null if it failed (a toast says why). */
+  async claudeConceptsPreview(projectId: string, ideas: string[]) {
+    return (await this.run((c) => c.claudeConceptsPreview(projectId, { ideas }))) ?? null;
   }
 
   // ---- footage ----
