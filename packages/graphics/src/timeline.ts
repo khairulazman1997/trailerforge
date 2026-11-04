@@ -1,6 +1,14 @@
 import type { Brand, BrandFontResolution, Timeline } from '@trailerforge/schema';
 import type { Measure } from './text.js';
-import { brandTokens, buildScene, safeBox, type GraphicTemplate, type Scene } from './template.js';
+import {
+  TITLE_SAFE,
+  brandTokens,
+  buildScene,
+  safeBox,
+  type GraphicTemplate,
+  type SafeInsets,
+  type Scene,
+} from './template.js';
 
 /**
  * The scenes a timeline's graphics draw: one per graphic item (its template and params) and one
@@ -29,6 +37,8 @@ export interface TimelineScenesInput {
   fonts?: BrandFontResolution;
   logoPresent?: boolean;
   measure?: Measure;
+  /** Where text must stay; default title-safe. A short passes its platform's safe insets. */
+  safe?: SafeInsets;
 }
 
 export function timelineScenes(input: TimelineScenesInput): {
@@ -38,7 +48,7 @@ export function timelineScenes(input: TimelineScenesInput): {
   const { timeline } = input;
   const size = timeline.resolution;
   const brand = brandTokens(input.brand, input.fonts, size, input.logoPresent ?? true);
-  const safe = safeBox(size);
+  const safe = safeBox(size, input.safe ?? TITLE_SAFE);
   const scenes: TimelineScene[] = [];
   const warnings: string[] = [];
   for (const track of timeline.tracks)

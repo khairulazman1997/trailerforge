@@ -7,7 +7,10 @@ import {
   IsoDateTime,
   PluginRef,
   ProjectAssetRef,
+  CueEdit,
   ShortId,
+  ShortPlatform,
+  SubtitleStyle,
   Storyboard,
   Take,
   TakeInput,
@@ -131,6 +134,8 @@ export const addShort = defineCommand({
       concept: picked,
       ...(formatTargetId ? { formatTargetId } : {}),
       storyboard: null,
+      platform: 'tiktok',
+      subtitles: { enabled: false, style: 'lines', edits: [] },
       extensions: {},
     });
   },
@@ -376,6 +381,74 @@ export const clearShortSlot = defineCommand({
   },
 });
 
+/** Subtitles on or off, their style, and the app the short is made for. */
+export const setShortSubtitles = defineCommand({
+  type: 'core/shorts.set-subtitles',
+  payload: z
+    .strictObject({
+      shortId: Id,
+      enabled: z.boolean().optional(),
+      style: SubtitleStyle.optional(),
+      platform: ShortPlatform.optional(),
+    })
+    .refine((p) => p.enabled !== undefined || p.style !== undefined || p.platform !== undefined, {
+      message: 'change at least one of enabled, style and platform',
+    }),
+  label: (p) =>
+    p.enabled === false
+      ? 'Turn subtitles off'
+      : p.enabled
+        ? 'Turn subtitles on'
+        : 'Subtitle settings',
+  apply: (d, p) => {
+    const s = findShort(d, p.shortId, 'core/shorts.set-subtitles');
+    if (p.enabled !== undefined) s.subtitles.enabled = p.enabled;
+    if (p.style !== undefined) s.subtitles.style = p.style;
+    if (p.platform !== undefined) s.platform = p.platform;
+  },
+});
+
+/**
+ * Change one subtitle cue by hand: its text, or a nudge of its start or end. `null` clears that
+ * change; a cue with no changes left is forgotten. Quick repeats merge into one undo step.
+ */
+export const editCue = defineCommand({
+  type: 'core/shorts.edit-cue',
+  payload: z.strictObject({
+    shortId: Id,
+    key: CueEdit.shape.key,
+    words: CueEdit.shape.words,
+    text: CueEdit.shape.text.unwrap().nullable().optional(),
+    nudgeIn: CueEdit.shape.nudgeIn.unwrap().nullable().optional(),
+    nudgeOut: CueEdit.shape.nudgeOut.unwrap().nullable().optional(),
+  }),
+  label: () => 'Edit subtitle',
+  apply: (d, p) => {
+    const s = findShort(d, p.shortId, 'core/shorts.edit-cue');
+    const prior = s.subtitles.edits.find((e) => e.key === p.key);
+    const next: Record<string, unknown> = { ...(prior && prior.words === p.words ? prior : {}), key: p.key, words: p.words }; // prettier-ignore
+    for (const f of ['text', 'nudgeIn', 'nudgeOut'] as const) {
+      if (p[f] === null) delete next[f];
+      else if (p[f] !== undefined) next[f] = p[f];
+    }
+    s.subtitles.edits = s.subtitles.edits.filter((e) => e.key !== p.key);
+    if ('text' in next || 'nudgeIn' in next || 'nudgeOut' in next)
+      s.subtitles.edits.push(CueEdit.parse(next));
+  },
+  merge: { key: (p) => `${p.shortId}:${p.key}`, windowMs: 1500 },
+});
+
+/** Forget hand changes to some cues (by key), or to all of them. */
+export const resetCues = defineCommand({
+  type: 'core/shorts.reset-cues',
+  payload: z.strictObject({ shortId: Id, keys: z.array(CueEdit.shape.key).optional() }),
+  label: () => 'Reset subtitles',
+  apply: (d, p) => {
+    const s = findShort(d, p.shortId, 'core/shorts.reset-cues');
+    s.subtitles.edits = p.keys ? s.subtitles.edits.filter((e) => !p.keys!.includes(e.key)) : [];
+  },
+});
+
 export const shortsCommands = [
   addConcepts,
   removeConcepts,
@@ -388,4 +461,7 @@ export const shortsCommands = [
   fillShortSlot,
   fillShortVoice,
   clearShortSlot,
+  setShortSubtitles,
+  editCue,
+  resetCues,
 ] as unknown as readonly CommandDef<unknown>[];

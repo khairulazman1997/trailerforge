@@ -299,6 +299,13 @@ describe('FrameRenderer', () => {
 
 /** Full parameters, so the parity sweep draws every part of each built-in template. */
 const PARITY_PARAMS: Record<string, unknown> = {
+  // At mid-point the second word is lit: its highlight layer is drawn over the phrase.
+  'core/word-caption': {
+    words: [
+      { text: 'Ember', start: 0, end: 352_800_000 },
+      { text: 'Knight', start: 352_800_000, end: 705_600_000 },
+    ],
+  },
   'core/title-card': { text: 'Ember Knight', subtitle: 'A dark fantasy action RPG' },
   'core/date-card': { text: '14 March 2027', label: 'Coming', platforms: 'PC and consoles' },
   'core/laurels-card': { text: 'Best Indie Game', score: '9/10', source: 'Pixel Weekly' },

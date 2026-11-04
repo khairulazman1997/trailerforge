@@ -165,6 +165,50 @@ describe('buildShortCut, voice-led', () => {
   });
 });
 
+describe('buildShortCut with subtitles', () => {
+  // What the transcription heard in the voiceover file, in the file's own time.
+  const heard = new Map([
+    ['vo', [
+      { start: 0.1 * S, end: 0.4 * S, text: 'This' }, { start: 0.45 * S, end: 0.7 * S, text: 'boss' },
+      { start: 0.75 * S, end: 1.0 * S, text: 'has' }, { start: 1.05 * S, end: 1.2 * S, text: 'one' },
+      { start: 1.25 * S, end: 1.45 * S, text: 'tell.' },
+      { start: 2.1 * S, end: 2.5 * S, text: 'Miss' }, { start: 2.6 * S, end: 2.9 * S, text: 'it,' },
+    ]],
+  ]); // prettier-ignore
+
+  it('places cues on the words, in timeline time, on a Subtitles track', () => {
+    const r = buildShortCut(input({ subtitles: { style: 'lines', words: heard } }));
+    const vo1 = byId(r, 'rc_vo_vo1');
+    expect(r.cues[0]).toMatchObject({ key: 'vo1#0', text: 'This boss has one tell.' });
+    expect(r.cues[0]!.start).toBe(Math.round(Math.round((vo1.start + 0.1 * S) / fpf) * fpf));
+    const subs = items(r, 'trk_subtitles');
+    expect(subs[0]).toMatchObject({ kind: 'graphic', templateId: 'core/subtitle-line', start: r.cues[0]!.start }); // prettier-ignore
+    // vo2's take starts 2 s into the file: its words come from there.
+    expect(r.cues.find((c) => c.voLineId === 'vo2')!.text).toBe('Miss it,');
+  });
+
+  it('keeps a hand change while the words match and says when one no longer fits', () => {
+    const r = buildShortCut(
+      input({ subtitles: { style: 'lines', words: heard, edits: [
+        { key: 'vo1#0', words: 'this boss has one tell', text: 'This boss has ONE tell.' },
+        { key: 'vo2#0', words: 'something else', text: 'x' },
+      ] } }),
+    ); // prettier-ignore
+    expect(r.cues[0]!.text).toBe('This boss has ONE tell.');
+    expect(r.warnings.join('\n')).toMatch(/subtitle vo2#0 no longer fits/);
+  });
+
+  it('word-pop cues carry their word timings; without voice there are no subtitles, with a warning', () => {
+    const r = buildShortCut(input({ subtitles: { style: 'word-pop', words: heard } }));
+    expect(items(r, 'trk_subtitles')[0]).toMatchObject({ templateId: 'core/word-caption' });
+    const none = buildShortCut(
+      input({ storyboard: storyboard(false), subtitles: { style: 'lines' } }),
+    );
+    expect(none.cues).toEqual([]);
+    expect(none.warnings.join('\n')).toMatch(/subtitles follow the voiceover/);
+  });
+});
+
 describe('buildShortCut without voice', () => {
   const beats = Array.from({ length: 61 }, (_, k) => k * 0.5 * S);
   const grid: MusicGrid = {

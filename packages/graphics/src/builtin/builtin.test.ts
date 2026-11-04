@@ -15,6 +15,8 @@ const HD: Resolution = { width: 1920, height: 1080 };
 const VERTICAL: Resolution = { width: 1080, height: 1920 };
 const SQUARE: Resolution = { width: 1080, height: 1080 };
 const reg = builtinRegistry();
+/** Subtitles cut on and off with the voice and take other params: tested in `subtitles.test.ts`. */
+const generic = builtinTemplates.filter((t) => !t.serves.includes('subtitle'));
 
 const tokens = (size: Resolution, logo = false): BrandTokens =>
   brandTokens(
@@ -85,10 +87,15 @@ describe('built-in templates', () => {
     ])
       expect(reg.get(id), id).toBeDefined();
     expect(reg.ids().sort()).toEqual(builtinTemplates.map((t) => t.id).sort());
-    expect(reg.ids('overlay')).toEqual(['core/caption', 'core/lower-third']);
+    expect(reg.ids('overlay')).toEqual([
+      'core/caption',
+      'core/lower-third',
+      'core/subtitle-line',
+      'core/word-caption',
+    ]);
   });
 
-  for (const t of builtinTemplates) {
+  for (const t of generic) {
     describe(t.id, () => {
       const slug = t.id.replace('core/', '');
       const frames: [string, (d: number) => number][] = [
@@ -155,7 +162,7 @@ describe('built-in templates', () => {
       'Wishlist Ember Knight on Steam today and tell all of your friends about the best game of the year Supercalifragilisticexpialidocious';
     let seed = 11;
     const next = () => (seed = (seed * 48271) % 2147483647) / 2147483647;
-    for (const t of builtinTemplates)
+    for (const t of generic)
       for (const size of [HD, VERTICAL, SQUARE]) {
         const text = long.slice(0, Math.floor(next() * long.length) + 1).trim() || 'x';
         const params = {
@@ -191,7 +198,7 @@ describe('built-in templates', () => {
   });
 
   it('survives items shorter than their animations', () => {
-    for (const t of builtinTemplates) {
+    for (const t of generic) {
       const { scene } = build(t.id, HD, SAMPLE[t.id], { duration: Math.round(0.2 * SEC) });
       for (const at of [0, 1000, Math.round(0.1 * SEC), Math.round(0.2 * SEC)])
         expect(renderSvg(scene, at), t.id).not.toMatch(/NaN|Infinity/);

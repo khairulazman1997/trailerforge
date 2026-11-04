@@ -56,6 +56,7 @@ export const GATE_POLICY: Readonly<Record<string, GateTier>> = {
   'core/black-frames': 'override',
   'core/flash-frames': 'override',
   'core/safe-area': 'override',
+  'core/platform-safe-area': 'override',
   'core/av-sync': 'override',
   'core/jump-cut': 'warning',
   'core/read-time': 'warning',
@@ -280,9 +281,11 @@ export function checkPlan(input: PlanCheckInput): GateFinding[] {
     for (const m of g.messages) {
       const id = /outside the safe area/.test(m)
         ? 'core/safe-area'
-        : /reading it takes/.test(m)
-          ? 'core/read-time'
-          : undefined;
+        : /interface covers it/.test(m)
+          ? 'core/platform-safe-area'
+          : /reading it takes/.test(m)
+            ? 'core/read-time'
+            : undefined;
       if (!id) continue;
       out.push(finding(id, m, { ...(it ? { at: span(it) } : {}), itemId: g.itemId }));
     }

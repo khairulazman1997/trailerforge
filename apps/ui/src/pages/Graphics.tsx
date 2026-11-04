@@ -171,7 +171,10 @@ function Editor({
     return () => clearInterval(t);
   }, [playing, item.seconds]);
 
-  const templates = (catalog?.templates ?? []).filter((t) => t.kind === item.kind);
+  // Subtitle templates are placed by the TikTok cut from the voiceover, not picked by hand.
+  const templates = (catalog?.templates ?? []).filter(
+    (t) => t.kind === item.kind && !t.serves?.includes('subtitle'),
+  );
   const template: Template | undefined = (catalog?.templates ?? []).find(
     (t) => t.id === item.templateId,
   );

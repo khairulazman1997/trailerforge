@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Extensions, Id, IsoDateTime, PluginRef } from './common.js';
+import { FLICKS_PER_SECOND } from './time.js';
 import { ExportSettings, Storyboard } from './storyboard.js';
 
 /**
@@ -39,6 +40,38 @@ export const Concept = z.strictObject({
 export type Concept = z.infer<typeof Concept>;
 export type ConceptInput = z.input<typeof Concept>;
 
+/** The app a short is made for: decides where its own interface covers the picture. */
+export const ShortPlatform = z.enum(['tiktok', 'shorts', 'reels']);
+export type ShortPlatform = z.infer<typeof ShortPlatform>;
+
+/** Subtitles: the sentence (up to two lines) or a few big words with the spoken one highlighted. */
+export const SubtitleStyle = z.enum(['lines', 'word-pop']);
+export type SubtitleStyle = z.infer<typeof SubtitleStyle>;
+
+const Nudge = z.int().min(-FLICKS_PER_SECOND).max(FLICKS_PER_SECOND);
+
+/**
+ * A hand change to one subtitle cue. `key` names the cue (`<voLineId>#<n>`) and `words` holds
+ * its words as they were transcribed (normalised): when the voice is transcribed again and the
+ * cue's words still match, the change is kept; otherwise it is dropped with a warning.
+ */
+export const CueEdit = z.strictObject({
+  key: z.string().regex(/^[A-Za-z0-9_-]{1,64}#\d{1,3}$/),
+  words: z.string().max(500),
+  text: z.string().trim().min(1).max(200).optional(),
+  /** Move the cue's start or end, flicks (at most a second either way). */
+  nudgeIn: Nudge.optional(),
+  nudgeOut: Nudge.optional(),
+});
+export type CueEdit = z.infer<typeof CueEdit>;
+
+export const ShortSubtitles = z.strictObject({
+  enabled: z.boolean().default(false),
+  style: SubtitleStyle.default('lines'),
+  edits: z.array(CueEdit).max(500).default([]),
+});
+export type ShortSubtitles = z.infer<typeof ShortSubtitles>;
+
 /** Short ids leave room for the `tl_short_` timeline prefix within the 64-character id limit. */
 export const ShortId = Id.refine((id) => id.length <= 52, 'short ids are at most 52 characters');
 
@@ -53,6 +86,8 @@ export const Short = z.strictObject({
   /** Null until a template is built from the concept (10.3). */
   storyboard: Storyboard.nullable().default(null),
   export: ExportSettings.optional(),
+  platform: ShortPlatform.default('tiktok'),
+  subtitles: ShortSubtitles.default({ enabled: false, style: 'lines', edits: [] }),
   extensions: Extensions.default({}),
 });
 export type Short = z.infer<typeof Short>;

@@ -202,4 +202,38 @@ describe('core/shorts.fill-slot and clear-slot', () => {
     expect(() => store.dispatch('core/shorts.fill-voice', { shortId: 'short_parry', lines: [{ voLineId: 'svo_1', assetId: 'a', sourceIn: 5, sourceOut: 5 }] })).toThrow(); // prettier-ignore
     expect(() => store.dispatch('core/shorts.fill-voice', { shortId: 'short_parry', lines: [{ voLineId: 'sshot_parry', assetId: 'a', sourceIn: 0, sourceOut: 5 }] })).toThrow(/no voiceover line/); // prettier-ignore
   });
+
+  it('subtitles: on/off, style and platform; cue edits upsert, merge, clear and reset', () => {
+    expect(short().subtitles).toEqual({ enabled: false, style: 'lines', edits: [] });
+    expect(short().platform).toBe('tiktok');
+    store.dispatch('core/shorts.set-subtitles', { shortId: 'short_parry', enabled: true, style: 'word-pop', platform: 'reels' }); // prettier-ignore
+    expect(short()).toMatchObject({
+      platform: 'reels',
+      subtitles: { enabled: true, style: 'word-pop' },
+    });
+    expect(() => store.dispatch('core/shorts.set-subtitles', { shortId: 'short_parry' })).toThrow();
+
+    const edit = (o: object) => store.dispatch('core/shorts.edit-cue', { shortId: 'short_parry', key: 'svo_1#0', words: 'this boss has', ...o }); // prettier-ignore
+    edit({ text: 'This boss has' });
+    edit({ nudgeIn: -2000 });
+    expect(short().subtitles.edits).toEqual([{ key: 'svo_1#0', words: 'this boss has', text: 'This boss has', nudgeIn: -2000 }]); // prettier-ignore
+    edit({ text: null });
+    expect(short().subtitles.edits).toEqual([{ key: 'svo_1#0', words: 'this boss has', nudgeIn: -2000 }]); // prettier-ignore
+    edit({ nudgeIn: null });
+    expect(short().subtitles.edits).toEqual([]);
+    // Quick edits of one cue are one undo step.
+    store.undo();
+    expect(short().subtitles.edits).toEqual([]);
+    expect(short().subtitles.enabled).toBe(true);
+
+    edit({ text: 'A' });
+    store.dispatch('core/shorts.edit-cue', { shortId: 'short_parry', key: 'svo_2#1', words: 'x', text: 'B' }); // prettier-ignore
+    store.dispatch('core/shorts.reset-cues', { shortId: 'short_parry', keys: ['svo_2#1'] });
+    expect(short().subtitles.edits.map((e) => e.key)).toEqual(['svo_1#0']);
+    store.dispatch('core/shorts.reset-cues', { shortId: 'short_parry' });
+    expect(short().subtitles.edits).toEqual([]);
+    expect(() => edit({ nudgeOut: 10 * 705_600_000 })).toThrow();
+    expect(() => store.dispatch('core/shorts.edit-cue', { shortId: 'short_parry', key: 'bad key', words: '', text: 'x' })).toThrow(); // prettier-ignore
+    valid();
+  });
 });

@@ -12,3 +12,4 @@ export * from './drag.js';
 export * from './stills.js';
 export * from './voice-align.js';
 export * from './short-cut.js';
+export * from './subtitles.js';

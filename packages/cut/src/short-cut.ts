@@ -24,6 +24,16 @@ import {
   type TakeSource,
 } from './rough-cut.js';
 import { pickStillMotions, stillMotion } from './stills.js';
+import {
+  applyCueEdits,
+  buildCues,
+  placeSubtitles,
+  type Cue,
+  type CueEditInput,
+  type SubtitleLineInput,
+  type SubtitleStyleName,
+} from './subtitles.js';
+import type { AlignWord } from './voice-align.js';
 
 /**
  * The cut of a short (TikTok). With recorded voiceover the edit follows the voice: each slot
@@ -63,11 +73,20 @@ export interface ShortCutInput {
   timeline: { id: string; name?: string; frameRate: Rate; resolution: Resolution };
   now: Date;
   options?: ShortCutOptions;
+  /** Subtitles synced to the voiceover (absent: none). */
+  subtitles?: {
+    style: SubtitleStyleName;
+    edits?: readonly CueEditInput[];
+    /** Transcribed words per voiceover recording (asset id), in the recording's own time. */
+    words?: ReadonlyMap<string, readonly AlignWord[]>;
+  };
 }
 
 export interface ShortCut extends RoughCut {
   /** What set the timing. */
   mode: 'voice' | 'beat' | 'plain';
+  /** The subtitle cues on the timeline (for `.srt` / `.vtt`); empty without subtitles. */
+  cues: Cue[];
 }
 
 const S = FLICKS_PER_SECOND;
@@ -161,7 +180,7 @@ export function buildShortCut(input: ShortCutInput): ShortCut {
   );
   const moves = pickStillMotions(stills.map((i) => i.id));
   const motion = new Map(stills.map((i, k) => [i.id, moves[k]!]));
-  const timeline = Timeline.parse({
+  let timeline = Timeline.parse({
     ...cut.timeline,
     tracks: cut.timeline.tracks.map((t) => ({
       ...t,
@@ -186,7 +205,44 @@ export function buildShortCut(input: ShortCutInput): ShortCut {
     for (const i of t.items)
       if (i.kind === 'clip' && !sources.get(i.assetId)?.still && i.duration > maxShot + fpf)
         warnings.push(`"${i.label ?? i.id}" stays on screen ${secs(i.duration)} s; short-form viewers expect a change every ${secs(maxShot)} s or so`); // prettier-ignore
-  return { ...cut, timeline, warnings, mode };
+  let cues: Cue[] = [];
+  if (input.subtitles) {
+    const vo = timeline.tracks.find((t) => t.id === 'trk_voice')?.items ?? [];
+    if (vo.length === 0) warnings.push('subtitles follow the voiceover, and this cut has none yet');
+    else {
+      const lines: SubtitleLineInput[] = vo.flatMap((i) => {
+        if (i.kind !== 'clip') return [];
+        const line = sb.voLines.find((v) => `rc_vo_${v.id}` === i.id);
+        if (!line) return [];
+        const from = i.sourceIn;
+        const to = i.sourceIn + i.duration;
+        const all = input.subtitles!.words?.get(i.assetId);
+        const words = all
+          ?.filter((w) => w.end > from && w.start < to)
+          .map((w) => ({
+            start: i.start + Math.max(0, w.start - from),
+            end: i.start + Math.min(i.duration, w.end - from),
+            text: w.text,
+          }));
+        return [{ voLineId: line.id, text: line.text, start: i.start, end: i.start + i.duration, ...(words ? { words } : {}) }]; // prettier-ignore
+      });
+      const built = buildCues(lines, {
+        style: input.subtitles.style,
+        rate: input.timeline.frameRate,
+      });
+      const edited = applyCueEdits(
+        built.cues,
+        input.subtitles.edits ?? [],
+        input.timeline.frameRate,
+      );
+      cues = edited.cues;
+      warnings.push(...built.warnings);
+      for (const e of edited.dropped)
+        warnings.push(`a hand change to subtitle ${e.key} no longer fits the words heard there; it was left out`); // prettier-ignore
+      timeline = placeSubtitles(timeline, cues, input.subtitles.style);
+    }
+  }
+  return { ...cut, timeline, warnings, mode, cues };
 
   function voiceOrPlain(): RoughCut {
     const warnings: string[] = [];

@@ -41,7 +41,7 @@ describe('Engine', () => {
       ]);
       expect(engine.plugins.registries.platforms.get('core/tiktok')?.maxDuration).toBe(600);
       expect(engine.plugins.registries.graphicTemplates.get('core/title-card')?.kind).toBe('card');
-      expect(engine.plugins.registries.graphicTemplates.list().length).toBe(11);
+      expect(engine.plugins.registries.graphicTemplates.list().length).toBe(13); // 9 cards, 2 overlays, 2 subtitle styles;
       expect(engine.plugins.registries.transitions.get('core/whip')?.kind).toBe('transition');
       expect(engine.plugins.registries.effects.list().map((e) => e.id)).toContain('core/vignette');
 
