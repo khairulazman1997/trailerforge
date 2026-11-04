@@ -14,7 +14,10 @@ const Version = Id.nullable();
 
 function requireVersion(d: Draft<Project>, variantId: string | null, type: string) {
   if (variantId === null) return;
-  if (!d.storyboard?.variants.some((v) => v.id === variantId))
+  if (
+    !d.storyboard?.variants.some((v) => v.id === variantId) &&
+    !d.shorts.some((s) => s.id === variantId)
+  )
     throw new CommandError(type, `no version "${variantId}"`);
 }
 
@@ -28,6 +31,7 @@ const allIds = (d: Draft<Project>) =>
   new Set([
     ...d.review.comments.map((c) => c.id),
     ...(d.storyboard?.variants.map((v) => v.id) ?? []),
+    ...d.shorts.map((s) => s.id),
   ]);
 
 export const addComment = defineCommand({

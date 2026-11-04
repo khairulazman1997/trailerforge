@@ -25,6 +25,8 @@ export interface ExportPreset {
   size?: { aspect?: [number, number]; maxWidth?: number; maxHeight?: number; exact?: Resolution };
   /** Highest frame rate accepted, frames per second. */
   maxFps?: number;
+  /** Longest video accepted, seconds. */
+  maxSeconds?: number;
 }
 
 const X264 = ['-profile:v', 'high', '-preset', 'slow'];
@@ -71,6 +73,24 @@ export const EXPORT_PRESETS: readonly ExportPreset[] = [
     maxFps: 60,
   },
   {
+    id: 'core/tiktok',
+    name: 'TikTok',
+    platform: 'TikTok (also fine for Shorts and Reels)',
+    description:
+      '1080×1920 (9:16), H.264 High at a capped rate, AAC 192k, −14 LUFS; up to 10 minutes, 60 fps.',
+    container: 'mp4',
+    video: {
+      codec: 'libx264',
+      pixFmt: 'yuv420p',
+      args: [...X264, '-crf', '18', '-maxrate', '16M', '-bufsize', '32M'],
+    },
+    audio: ['-c:a', 'aac', '-b:a', '192k'],
+    loudness: { lufs: -14, truePeakDb: -1 },
+    size: { aspect: [9, 16], maxWidth: 1080, maxHeight: 1920 },
+    maxFps: 60,
+    maxSeconds: 600,
+  },
+  {
     id: 'core/x',
     name: 'X (Twitter)',
     platform: 'X',
@@ -108,9 +128,12 @@ export const presetById = (id: string): ExportPreset | undefined =>
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 
 /** The preset that suits a version's shape when the user has not chosen one. */
-export function defaultPresetFor(resolution: Resolution): ExportPreset {
+export function defaultPresetFor(
+  resolution: Resolution,
+  opts: { short?: boolean } = {},
+): ExportPreset {
   const r = resolution.width / resolution.height;
-  if (r < 0.7) return presetById('core/vertical')!;
+  if (r < 0.7) return presetById(opts.short ? 'core/tiktok' : 'core/vertical')!;
   return presetById('core/youtube')!;
 }
 
@@ -127,14 +150,14 @@ export interface ResolvedExport {
 /** Render settings for a preset, with the version's loudness override applied. */
 export function resolveExport(
   presetId: string | undefined,
-  version: { resolution: Resolution; frameRate: Rate },
+  version: { resolution: Resolution; frameRate: Rate; seconds?: number; short?: boolean },
   overrides: { loudnessLufs?: number } = {},
 ): ResolvedExport {
   const issues: string[] = [];
   let preset = presetId ? presetById(presetId) : undefined;
   if (presetId && !preset)
     issues.push(`export preset ${presetId} is not installed; using the default for this shape`);
-  preset ??= defaultPresetFor(version.resolution);
+  preset ??= defaultPresetFor(version.resolution, version.short ? { short: true } : {});
   issues.push(...presetIssues(preset, version));
   return {
     preset,
@@ -156,7 +179,7 @@ export function resolveExport(
 /** What about a version does not fit the preset (size, shape, frame rate). */
 export function presetIssues(
   preset: ExportPreset,
-  v: { resolution: Resolution; frameRate: Rate },
+  v: { resolution: Resolution; frameRate: Rate; seconds?: number },
 ): string[] {
   const out: string[] = [];
   const { width: w, height: h } = v.resolution;
@@ -177,6 +200,10 @@ export function presetIssues(
   if (preset.maxFps && fps > preset.maxFps + 0.01)
     out.push(
       `${preset.name} accepts up to ${preset.maxFps} fps; this version is ${fps.toFixed(2)}`,
+    );
+  if (preset.maxSeconds && v.seconds !== undefined && v.seconds > preset.maxSeconds)
+    out.push(
+      `${preset.name} accepts up to ${Math.round(preset.maxSeconds / 60)} minutes; this version is ${Math.round(v.seconds)} s`,
     );
   return out;
 }

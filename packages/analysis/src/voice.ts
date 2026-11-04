@@ -215,6 +215,18 @@ export async function readTranscript(
   return hit && hit.key === paramsKey(modelId, o) ? hit.transcript : null;
 }
 
+/** The latest transcript made of a recording with this model, whatever hint it was made with. */
+export async function readLatestTranscript(
+  modelId: string,
+  rec: { quickHash: string; analysisDir: string },
+): Promise<Transcript | null> {
+  const hit = await readAnalysisCache(
+    transcriptFile(rec.analysisDir, rec.quickHash, modelId),
+    TranscriptCache,
+  );
+  return hit?.transcript ?? null;
+}
+
 /** Words of a recording, cached by its quick hash, the model, the language and the prompt. */
 export async function transcribeRecording(
   t: Transcriber,

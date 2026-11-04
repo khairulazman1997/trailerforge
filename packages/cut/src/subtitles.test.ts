@@ -4,6 +4,7 @@ import { checkPlan } from './quality.js';
 import {
   applyCueEdits,
   buildCues,
+  cuesOf,
   cueWords,
   placeSubtitles,
   toSrt,
@@ -133,6 +134,8 @@ describe('placeSubtitles and files', () => {
     expect(lines.tracks.filter((t) => t.id === 'trk_subtitles')).toHaveLength(1);
     expect(lines.tracks.at(-1)!.items[0]).toMatchObject({ templateId: 'core/subtitle-line', params: { text: 'One tell.' } }); // prettier-ignore
     expect(placeSubtitles(lines, [], 'lines').tracks).toEqual([]);
+    // The cues come back from the timeline (for the files written at export).
+    expect(cuesOf(tl)).toEqual(cues.map(({ timing: _t, ...c }) => c));
   });
 
   it('writes SubRip and WebVTT', () => {

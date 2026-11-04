@@ -236,4 +236,24 @@ describe('core/shorts.fill-slot and clear-slot', () => {
     expect(() => store.dispatch('core/shorts.edit-cue', { shortId: 'short_parry', key: 'bad key', words: '', text: 'x' })).toThrow(); // prettier-ignore
     valid();
   });
+
+  it('a short is a version: export settings, comments and approvals use its id, and removing it drops them', () => {
+    store.dispatch('core/export.set', { variantId: 'short_parry', presetId: 'core/tiktok', fileName: '{project}-tiktok' }); // prettier-ignore
+    expect(short().export).toEqual({ presetId: 'core/tiktok', fileName: '{project}-tiktok' });
+    store.dispatch('core/export.reset', { variantId: 'short_parry' });
+    expect(short().export).toBeUndefined();
+    store.dispatch('core/review.comment', {
+      variantId: 'short_parry',
+      at: 0,
+      text: 'Hook is slow',
+    });
+    store.dispatch('core/review.approve', { variantId: 'short_parry', planHash: 'a'.repeat(64) });
+    expect(store.state.review.approvals.map((a) => a.variantId)).toEqual(['short_parry']);
+    valid();
+    expect(() => store.dispatch('core/review.comment', { variantId: 'short_nope', at: 0, text: 'x' })).toThrow(/no version/); // prettier-ignore
+    expect(() => store.dispatch('core/export.set', { variantId: 'short_nope', presetId: 'core/tiktok' })).toThrow(/no version/); // prettier-ignore
+    store.dispatch('core/shorts.remove', { shortId: 'short_parry' });
+    expect(store.state.review).toEqual({ comments: [], approvals: [] });
+    valid();
+  });
 });

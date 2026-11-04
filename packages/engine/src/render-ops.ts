@@ -22,6 +22,7 @@ import {
 import { appendDecisions, brandStatus, type ProjectStore } from '@trailerforge/core';
 import {
   checkPlan,
+  cuesOf,
   declaredFlashes,
   finding,
   gateVerdict,
@@ -31,7 +32,14 @@ import {
   type GateVerdict,
   type TakeSource,
 } from '@trailerforge/cut';
-import { checkScene, safeBox, timelineScenes, type TimelineScene } from '@trailerforge/graphics';
+import {
+  PLATFORM_SAFE,
+  checkScene,
+  platformIssues,
+  safeBox,
+  timelineScenes,
+  type TimelineScene,
+} from '@trailerforge/graphics';
 import { probe, runOutputGate, type Capabilities } from '@trailerforge/media';
 import { requireRenderTools } from './health-ops.js';
 import {
@@ -48,10 +56,13 @@ import {
   approvalState,
   checkBrandContrast,
   flicksPerFrame,
+  isMasterTimeline,
+  shortTimelineId,
   timelineDuration,
   type ApprovalState,
   type LibraryAsset,
   type MediaInfo,
+  type Short,
   type StoryboardVariant,
   type Timeline,
 } from '@trailerforge/schema';
@@ -59,6 +70,8 @@ import { readFootageAnalysis } from '@trailerforge/analysis';
 import type { Engine } from './engine.js';
 import { deriveVariantOp } from './graphics-ops.js';
 import { OpError } from './ops.js';
+import { STILL_SECONDS } from './still.js';
+import { toSrt, toVtt } from '@trailerforge/cut';
 
 /**
  * Review, render and export of a version of the trailer (`variantId` null = the master cut).
@@ -72,6 +85,18 @@ const FIXED_ENCODE = { ...DRAFT_ENCODE, threads: 1 };
 const DRAFT_HEIGHT = 720;
 const keyOf = (variantId: string | null) => variantId ?? 'master';
 
+/** The short a version id names (a short is a version of the project, by its id). */
+const shortOf = (project: { shorts: readonly Short[] }, id: string | null): Short | undefined =>
+  id === null ? undefined : project.shorts.find((x) => x.id === id);
+
+/** Export choices of a version: a trailer version's, or a short's. */
+function exportOf(project: ProjectStore['state'], id: string | null) {
+  const sh = shortOf(project, id);
+  if (sh) return { settings: sh.export, formatTargetId: sh.formatTargetId ?? null };
+  const v = project.storyboard?.variants.find((x) => x.id === id);
+  return { settings: v?.export, formatTargetId: v?.formatTargetId ?? null };
+}
+
 export interface Progress {
   phase: 'graphics' | 'segments' | 'audio' | 'mux' | 'checking' | 'done';
   /** 0..1 over the whole job. */
@@ -82,8 +107,7 @@ type OnProgress = (p: Progress) => void;
 
 // ---- building a version ---------------------------------------------------------------------
 
-/** How long an image may be shown, seconds: it has no running time, so this is only a ceiling. */
-export const STILL_SECONDS = 3600;
+export { STILL_SECONDS };
 
 export interface VersionBuild {
   variantId: string | null;
@@ -125,10 +149,17 @@ export async function buildVersion(
   let timeline: Timeline;
   let name: string;
   let exportSettings: StoryboardVariant['export'];
-  if (variantId === null) {
+  const short = shortOf(project, variantId);
+  if (short) {
+    const tl = project.timelines.find((t) => t.id === shortTimelineId(short.id));
+    if (!tl) throw new OpError('not-found', `"${short.name}" has no cut yet: build its cut first`);
+    timeline = tl;
+    name = short.name;
+    exportSettings = short.export;
+  } else if (variantId === null) {
     const master =
       project.timelines.find((t) => t.id === 'tl_rough') ??
-      project.timelines.find((t) => !t.variantId);
+      project.timelines.find(isMasterTimeline);
     if (!master) throw new OpError('not-found', 'there is no cut yet: build the rough cut first');
     timeline = master;
     name = 'Master';
@@ -187,10 +218,12 @@ export async function buildVersion(
     brand: project.brand,
     fonts: status.fonts,
     logoPresent,
+    // A short keeps its words clear of the app's own interface.
+    ...(short ? { safe: PLATFORM_SAFE[short.platform] } : {}),
   });
   warnings.push(...sceneWarnings);
   const fpf = flicksPerFrame(timeline.frameRate);
-  const safe = safeBox(timeline.resolution);
+  const safe = safeBox(timeline.resolution, short ? PLATFORM_SAFE[short.platform] : undefined);
   const graphics = new Map<string, GraphicFrames>();
   const sceneMessages: VersionBuild['sceneMessages'] = [];
   for (const s of scenes) {
@@ -208,9 +241,21 @@ export async function buildVersion(
       contentHash: hash,
       frames: Math.max(1, Math.round(s.scene.duration / fpf)),
     });
+    // Subtitles are read as they are spoken, so a short one is not "too brief to read".
+    const subtitle = s.templateId === 'core/subtitle-line' || s.templateId === 'core/word-caption';
+    const checked = checkScene(
+      s.scene,
+      safe,
+      subtitle ? undefined : s.duration / FLICKS_PER_SECOND,
+    );
     sceneMessages.push({
       itemId: s.itemId,
-      messages: checkScene(s.scene, safe, s.duration / FLICKS_PER_SECOND),
+      messages: short
+        ? [
+            ...checked.filter((m) => !/outside the safe area/.test(m)),
+            ...platformIssues(s.scene, short.platform),
+          ]
+        : checked,
     });
   }
   const contrastIssues = project.brand
@@ -220,7 +265,12 @@ export async function buildVersion(
   const beats = (await cutGridBeats(engine, store)) ?? undefined;
   const resolved = resolveExport(
     exportSettings?.presetId,
-    { resolution: timeline.resolution, frameRate: timeline.frameRate },
+    {
+      resolution: timeline.resolution,
+      frameRate: timeline.frameRate,
+      seconds: timelineDuration(timeline) / FLICKS_PER_SECOND,
+      ...(short ? { short: true } : {}),
+    },
     exportSettings?.loudnessLufs !== undefined ? { loudnessLufs: exportSettings.loudnessLufs } : {},
   );
 
@@ -375,8 +425,10 @@ export interface VersionReview {
 export async function reviewViewOp(engine: Engine, store: ProjectStore): Promise<VersionReview[]> {
   const project = store.state;
   const ids: (string | null)[] = [];
-  if (project.timelines.some((t) => t.id === 'tl_rough' || !t.variantId)) ids.push(null);
+  if (project.timelines.some(isMasterTimeline)) ids.push(null);
   for (const v of project.storyboard?.variants ?? []) ids.push(v.id);
+  for (const sh of project.shorts)
+    if (project.timelines.some((t) => t.id === shortTimelineId(sh.id))) ids.push(sh.id);
   const out: VersionReview[] = [];
   for (const id of ids) {
     let b: VersionBuild;
@@ -386,14 +438,14 @@ export async function reviewViewOp(engine: Engine, store: ProjectStore): Promise
       if (err instanceof OpError) continue;
       throw err;
     }
-    const v = project.storyboard?.variants.find((x) => x.id === id);
+    const ex = exportOf(project, id);
     const approval = project.review.approvals.find((a) => a.variantId === id);
     const comments = project.review.comments.filter((c) => c.variantId === id);
     const verdict = gateVerdict(planFindings(b));
     out.push({
       variantId: id,
       name: b.name,
-      formatTargetId: v?.formatTargetId ?? null,
+      formatTargetId: ex.formatTargetId,
       size: b.timeline.resolution,
       seconds: Math.round((timelineDuration(b.timeline) / FLICKS_PER_SECOND) * 100) / 100,
       contentHash: b.compileError ? null : b.contentHash,
@@ -405,7 +457,7 @@ export async function reviewViewOp(engine: Engine, store: ProjectStore): Promise
       export: {
         presetId: b.resolved.preset.id,
         presetName: b.resolved.preset.name,
-        fileName: fileNameFor(store, b, v?.export?.fileName),
+        fileName: fileNameFor(store, b, ex.settings?.fileName),
         issues: b.resolved.issues,
       },
       gate: {
@@ -620,10 +672,8 @@ async function renderBuild(store: ProjectStore, b: VersionBuild, o: RenderBuildO
 // ---- export ----------------------------------------------------------------------------------
 
 function fileNameFor(store: ProjectStore, b: VersionBuild, template: string | undefined): string {
-  const fmt = store.state.formatTargets.find((f) => {
-    const v = store.state.storyboard?.variants.find((x) => x.id === b.variantId);
-    return f.id === v?.formatTargetId;
-  });
+  const targetId = exportOf(store.state, b.variantId).formatTargetId;
+  const fmt = store.state.formatTargets.find((f) => f.id === targetId);
   return exportFileName(
     template,
     {
@@ -638,6 +688,8 @@ function fileNameFor(store: ProjectStore, b: VersionBuild, template: string | un
 
 export interface ExportResult {
   variantId: string | null;
+  /** `.srt` and `.vtt` written beside the video when the version has subtitles. */
+  subtitleFiles: string[];
   file: string;
   poster: string;
   record: string;
@@ -671,7 +723,7 @@ export async function exportVersionOp(
 ): Promise<ExportResult> {
   const overrides = o.overrides ?? [];
   const b = await buildVersion(engine, store, variantId);
-  const v = store.state.storyboard?.variants.find((x) => x.id === variantId);
+  const ex = exportOf(store.state, variantId);
   const planFound = planFindings(b);
   const planVerdict = gateVerdict(planFound, overrides);
   if (!planVerdict.allowed)
@@ -721,7 +773,7 @@ export async function exportVersionOp(
     ),
     writePoster(
       tmpOut,
-      posterTime(timelineDuration(b.timeline) / FLICKS_PER_SECOND, v?.export?.posterSeconds),
+      posterTime(timelineDuration(b.timeline) / FLICKS_PER_SECOND, ex.settings?.posterSeconds),
       posterTmp,
     ),
   ]);
@@ -739,7 +791,7 @@ export async function exportVersionOp(
   }
 
   // Deliver.
-  const name = fileNameFor(store, b, v?.export?.fileName);
+  const name = fileNameFor(store, b, ex.settings?.fileName);
   const dir = join(store.paths.exports, 'render', keyOf(variantId));
   const file = join(dir, name);
   await mkdir(dir, { recursive: true });
@@ -747,6 +799,19 @@ export async function exportVersionOp(
   const poster = file.replace(/\.[^.]+$/, '.png');
   await copyAtomic(posterTmp, poster);
   await rm(posterTmp, { force: true });
+  // Subtitles beside the video, so they can be uploaded instead of burned in (or as well).
+  const cues = cuesOf(b.timeline);
+  const subtitleFiles: string[] = [];
+  if (cues.length > 0) {
+    for (const [ext, text] of [
+      ['srt', toSrt(cues)],
+      ['vtt', toVtt(cues)],
+    ] as const) {
+      const f = file.replace(/\.[^.]+$/, `.${ext}`);
+      await writeAtomic(f, text);
+      subtitleFiles.push(f);
+    }
+  }
   const used = [...planVerdict.overridden, ...outVerdict.overridden];
   const now = (o.now ?? (() => new Date()))();
   const all = [...planFound, ...out.findings] as GateFinding[];
@@ -767,6 +832,7 @@ export async function exportVersionOp(
     variantId,
     file,
     poster,
+    subtitleFiles,
     record: file.replace(/\.[^.]+$/, '.export.json'),
     sha256: r.sha256,
     contentHash: b.contentHash,

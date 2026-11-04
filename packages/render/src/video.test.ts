@@ -222,6 +222,7 @@ describe('export presets, rendered', { timeout: 300_000 }, () => {
     'core/youtube': [640, 360],
     'core/steam': [1920, 1080],
     'core/vertical': [360, 640],
+    'core/tiktok': [360, 640],
     'core/x': [640, 360],
     'core/master': [640, 360],
   };

@@ -27,6 +27,7 @@ import {
 } from '@trailerforge/schema';
 import { z } from 'zod';
 import { CommandError, defineCommand, type CommandDef } from './commands.js';
+import { dropVersionReview } from './review-commands.js';
 
 /**
  * Short-form videos (TikToks): the concept list, the shorts made from concepts, and filling a
@@ -150,6 +151,7 @@ export const removeShort = defineCommand({
     findShort(d, shortId, 'core/shorts.remove');
     d.shorts = d.shorts.filter((s) => s.id !== shortId);
     d.timelines = d.timelines.filter((t) => t.id !== shortTimelineId(shortId));
+    dropVersionReview(d, shortId);
   },
 });
 

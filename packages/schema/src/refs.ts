@@ -73,7 +73,9 @@ export function validateProjectRefs(project: Project): RefIssue[] {
     if (!assetIds.has(id)) issue('brief.referenceAssetIds', `unknown asset "${id}"`);
   });
 
-  const versionOk = (v: string | null) => v === null || variantIds.has(v);
+  // A version is the master cut (null), a version of the trailer, or a short (by its id).
+  const versionOk = (v: string | null) =>
+    v === null || variantIds.has(v) || project.shorts.some((sh) => sh.id === v);
   project.review.comments.forEach((c, i) => {
     claim(c.id, `review.comments[${i}]`);
     if (!versionOk(c.variantId)) issue(`review.comments[${i}]`, `unknown variant "${c.variantId}"`);

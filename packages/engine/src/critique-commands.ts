@@ -36,7 +36,11 @@ export const addCritique = defineCommand({
   label: ({ notes }) => `Add ${notes.length} critique note${notes.length === 1 ? '' : 's'}`,
   apply: (d, { variantId, notes, createdAt }) => {
     const type = 'core/critique.add';
-    if (variantId !== null && !d.storyboard?.variants.some((v) => v.id === variantId))
+    if (
+      variantId !== null &&
+      !d.storyboard?.variants.some((v) => v.id === variantId) &&
+      !d.shorts.some((s) => s.id === variantId)
+    )
       throw new CommandError(type, `no version "${variantId}"`);
     d.review.comments = d.review.comments.filter(
       (c) => !(c.author === 'critique' && c.variantId === variantId && !c.resolved),

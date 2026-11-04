@@ -15,15 +15,16 @@ const hd = { resolution: { width: 1920, height: 1080 }, frameRate: rate(24) };
 const tall = { resolution: { width: 1080, height: 1920 }, frameRate: rate(30) };
 
 describe('export presets', () => {
-  it('has the five presets with unique ids, all in the −14/−16 LUFS, −1 dBTP family', () => {
+  it('has the six presets with unique ids, all in the −14/−16 LUFS, −1 dBTP family', () => {
     expect(EXPORT_PRESETS.map((p) => p.id)).toEqual([
       'core/youtube',
       'core/steam',
       'core/vertical',
+      'core/tiktok',
       'core/x',
       'core/master',
     ]);
-    expect(new Set(EXPORT_PRESETS.map((p) => p.id)).size).toBe(5);
+    expect(new Set(EXPORT_PRESETS.map((p) => p.id)).size).toBe(6);
     for (const p of EXPORT_PRESETS) {
       expect(p.loudness.truePeakDb).toBe(-1);
       expect(p.loudness.lufs).toBe(p.id === 'core/master' ? -16 : -14);
@@ -36,6 +37,19 @@ describe('export presets', () => {
     const r = resolveExport('acme/other', tall);
     expect(r.preset.id).toBe('core/vertical');
     expect(r.issues[0]).toMatch(/acme\/other is not installed/);
+    // A TikTok defaults to its own preset; the trailer's tall versions keep the general one.
+    expect(defaultPresetFor(tall.resolution, { short: true }).id).toBe('core/tiktok');
+    expect(resolveExport(undefined, { ...tall, short: true }).preset.id).toBe('core/tiktok');
+  });
+
+  it('the TikTok preset: 9:16 up to 1080×1920 and 60 fps, at most ten minutes', () => {
+    const t = presetById('core/tiktok')!;
+    expect(presetIssues(t, { ...tall, seconds: 30 })).toEqual([]);
+    expect(presetIssues(t, { ...tall, seconds: 700 })[0]).toMatch(
+      /up to 10 minutes; this version is 700 s/,
+    );
+    expect(presetIssues(t, hd)[0]).toMatch(/wants 9:16/);
+    expect(presetIssues(t, { ...tall, frameRate: rate(120) })[0]).toMatch(/up to 60 fps/);
   });
 
   it('resolves render settings and the loudness override', () => {

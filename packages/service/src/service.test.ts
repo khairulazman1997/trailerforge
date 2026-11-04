@@ -1393,6 +1393,7 @@ describe('review, quality and render tasks', { timeout: 120_000 }, () => {
       'core/youtube',
       'core/steam',
       'core/vertical',
+      'core/tiktok',
       'core/x',
       'core/master',
     ]);

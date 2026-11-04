@@ -96,3 +96,10 @@ export type Short = z.infer<typeof Short>;
 export function shortTimelineId(shortId: string): string {
   return `tl_short_${shortId}`;
 }
+
+/** Whether a timeline is a short's (see `shortTimelineId`). */
+export const isShortTimeline = (t: { id: string }): boolean => t.id.startsWith('tl_short_');
+
+/** Whether a timeline is the trailer's master cut: `tl_rough`, or a timeline of no version and no short. */
+export const isMasterTimeline = (t: { id: string; variantId?: string | undefined }): boolean =>
+  t.id === 'tl_rough' || (!t.variantId && !isShortTimeline(t));

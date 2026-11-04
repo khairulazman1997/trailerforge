@@ -32,6 +32,7 @@ import {
   type BrandFile,
   type FormatTarget,
   type Resolution,
+  isMasterTimeline,
 } from '@trailerforge/schema';
 import { z } from 'zod';
 import type { Engine } from './engine.js';
@@ -73,7 +74,7 @@ const caches = new WeakMap<Engine, VariantCache>();
 export async function variantsViewOp(engine: Engine, store: ProjectStore): Promise<VariantsView> {
   const project = store.state;
   const sb = project.storyboard;
-  const hasMaster = project.timelines.some((t) => t.id === 'tl_rough' || !t.variantId);
+  const hasMaster = project.timelines.some(isMasterTimeline);
   const cache = caches.get(engine) ?? caches.set(engine, new VariantCache(32)).get(engine)!;
   const sources = hasMaster ? await takeSources(engine, store) : undefined;
   const beats = hasMaster ? (await cutGridOp(engine, store))?.beats : undefined;

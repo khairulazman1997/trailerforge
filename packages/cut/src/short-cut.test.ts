@@ -187,6 +187,16 @@ describe('buildShortCut with subtitles', () => {
     expect(r.cues.find((c) => c.voLineId === 'vo2')!.text).toBe('Miss it,');
   });
 
+  it('a rebuild over an earlier cut with subtitles changes nothing (the subtitles overlap the picture)', () => {
+    const first = buildShortCut(input({ subtitles: { style: 'lines', words: heard } }));
+    const again = buildShortCut(input({ subtitles: { style: 'word-pop', words: heard } }));
+    const merged = mergeRoughCut(first.timeline, again.timeline, sources);
+    expect(merged.kept).toEqual([]);
+    expect(merged.timeline).toEqual(again.timeline);
+    const picture = (t: typeof first.timeline) => t.tracks.find((x) => x.id === 'trk_picture')!.items.map((i) => [i.id, i.start, i.duration]); // prettier-ignore
+    expect(picture(merged.timeline)).toEqual(picture(first.timeline));
+  });
+
   it('keeps a hand change while the words match and says when one no longer fits', () => {
     const r = buildShortCut(
       input({ subtitles: { style: 'lines', words: heard, edits: [

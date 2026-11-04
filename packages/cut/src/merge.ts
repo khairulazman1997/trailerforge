@@ -1,5 +1,6 @@
 import { Timeline, refitFadeOut, type TimelineItem, type Transition } from '@trailerforge/schema';
 import type { TakeSource } from './rough-cut.js';
+import { SUBTITLE_TRACK_ID } from './subtitles.js';
 
 /**
  * Regenerating a rough cut over one the user has worked on. Locked tracks stay exactly as they
@@ -21,6 +22,14 @@ export interface MergeResult {
 
 const PICTURE = new Set(['video', 'graphics']);
 
+/**
+ * Tracks whose items follow each other (the picture and the cards). The subtitles overlap the
+ * picture, one per spoken line, and are made again from the voiceover on every build, so they
+ * are not part of the sequence.
+ */
+const inSequence = (t: { id: string; kind: string }) =>
+  PICTURE.has(t.kind) && t.id !== SUBTITLE_TRACK_ID;
+
 export function mergeRoughCut(
   previous: Timeline | undefined,
   generated: Timeline,
@@ -34,7 +43,7 @@ export function mergeRoughCut(
   // Edited picture items by slot, from unlocked tracks (locked ones are kept whole below).
   const editedBySlot = new Map<string, { item: TimelineItem; trackId: string }[]>();
   for (const t of previous.tracks) {
-    if (!PICTURE.has(t.kind) || locked.has(t.id)) continue;
+    if (!inSequence(t) || locked.has(t.id)) continue;
     for (const item of [...t.items].sort((a, b) => a.start - b.start)) {
       if (!edited(item) || !item.slotId) continue;
       editedBySlot.set(item.slotId, [
@@ -46,7 +55,7 @@ export function mergeRoughCut(
 
   // The generated picture as one sequence, in time order.
   const seq = generated.tracks
-    .filter((t) => PICTURE.has(t.kind) && !locked.has(t.id))
+    .filter((t) => inSequence(t) && !locked.has(t.id))
     .flatMap((t) => t.items.map((item) => ({ item, trackId: t.id })))
     .sort((a, b) => a.item.start - b.item.start);
   const slotsInCut = new Set(seq.map((s) => s.item.slotId).filter(Boolean));
@@ -95,7 +104,7 @@ export function mergeRoughCut(
   const tracks = generated.tracks.map((t) => {
     if (locked.has(t.id)) return prevTracks.get(t.id)!;
     if (t.kind === 'audio') return keepSoundLengths(t, prevTracks.get(t.id));
-    if (!PICTURE.has(t.kind)) return t;
+    if (!inSequence(t)) return t;
     const items = out.filter((o) => o.trackId === t.id).map((o) => o.item);
     return {
       ...t,

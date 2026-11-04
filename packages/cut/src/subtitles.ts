@@ -70,9 +70,9 @@ export interface CueOptions {
 export interface CueEditInput {
   key: string;
   words: string;
-  text?: string;
-  nudgeIn?: number;
-  nudgeOut?: number;
+  text?: string | undefined;
+  nudgeIn?: number | undefined;
+  nudgeOut?: number | undefined;
 }
 
 const S = FLICKS_PER_SECOND;
@@ -253,7 +253,7 @@ export function placeSubtitles(
       templateId: words || style === 'lines' ? SUBTITLE_TEMPLATES[style] : SUBTITLE_TEMPLATES.lines,
       params: words ? { words } : { text: c.text },
       effects: [],
-      extensions: { core: { subtitle: { key: c.key, words: c.words } } },
+      extensions: { core: { subtitle: { key: c.key, words: c.words, text: c.text } } },
     };
   });
   const others = timeline.tracks.filter((t) => t.id !== SUBTITLE_TRACK_ID);
@@ -262,6 +262,25 @@ export function placeSubtitles(
     tracks: items.length
       ? [...others, { id: SUBTITLE_TRACK_ID, kind: 'graphics', name: 'Subtitles', muted: false, locked: false, items, transitions: [] }] // prettier-ignore
       : others,
+  });
+}
+
+/** The cues a timeline carries on its Subtitles track (what `.srt` and `.vtt` are written from). */
+export function cuesOf(timeline: Timeline): Cue[] {
+  const track = timeline.tracks.find((t) => t.id === SUBTITLE_TRACK_ID);
+  return (track?.items ?? []).flatMap((i) => {
+    const sub = (i.extensions.core as { subtitle?: { key?: string; words?: string; text?: string } } | undefined)?.subtitle; // prettier-ignore
+    if (i.kind !== 'graphic' || !sub?.key || !sub.text) return [];
+    return [
+      {
+        key: sub.key,
+        voLineId: sub.key.split('#')[0]!,
+        start: i.start,
+        end: i.start + i.duration,
+        text: sub.text,
+        words: sub.words ?? '',
+      },
+    ];
   });
 }
 
