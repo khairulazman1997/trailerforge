@@ -22,12 +22,17 @@ import {
   DecisionRecord,
   FLICKS_PER_SECOND,
   shortTimelineId,
+  timelineDuration,
+  type ConceptInput,
   type Short,
+  type SlotInput,
+  type TakeInput,
 } from '@trailerforge/schema';
 import { createHash } from 'node:crypto';
 import type { Engine } from './engine.js';
 import { OpError } from './ops.js';
 import { STILL_SECONDS } from './still.js';
+import { voiceStatusOp, type VoiceView } from './voice-ops.js';
 
 /**
  * TikTok templates. A short is made from a concept (`core/shorts.add`, which any caller can
@@ -260,4 +265,278 @@ export async function generateShortCutOp(
     keptEdits: merged.kept,
     warnings: [...new Set([...built.warnings, ...merged.warnings])],
   };
+}
+
+// ---- what the TikTok tab shows ---------------------------------------------------------------
+
+export interface ShortSlotView {
+  id: string;
+  sectionId: string;
+  sectionName: string;
+  locked: boolean;
+  kind: 'shot' | 'card';
+  title: string;
+  /** What may fill it (picture slots); cards are written, not filled. */
+  accepts: SlotInput[];
+  seconds: number;
+  takes: number;
+  chosen: { assetId: string; name: string; input: TakeInput | null } | null;
+}
+
+export interface ShortVoiceLineView {
+  id: string;
+  text: string;
+  linkedSlotIds: string[];
+  takes: number;
+  chosen: {
+    assetId: string;
+    name: string;
+    sourceIn: number | null;
+    sourceOut: number | null;
+  } | null;
+}
+
+export interface ShortView {
+  id: string;
+  name: string;
+  concept: {
+    title: string;
+    hook: string;
+    pitch: string;
+    formatId: string;
+    formatName: string;
+    targetSeconds: number;
+    source: string;
+  };
+  platform: Short['platform'];
+  subtitles: { enabled: boolean; style: Short['subtitles']['style']; edits: number };
+  hasTemplate: boolean;
+  slots: ShortSlotView[];
+  voiceLines: ShortVoiceLineView[];
+  musicAssetId: string | null;
+  /** Counts for the progress bar: picture slots with a file, voiceover lines with a recording. */
+  progress: { slots: number; slotsFilled: number; lines: number; linesRecorded: number };
+  cut: { built: boolean; mode: 'voice' | 'beat' | 'plain' | null; seconds: number | null };
+}
+
+export interface ShortsView {
+  shorts: ShortView[];
+  /** Concepts waiting to be picked. */
+  concepts: ConceptInput[];
+  voice: VoiceView;
+}
+
+/** Everything about the project's TikToks that a screen or an agent needs, from project state. */
+export async function shortsViewOp(engine: Engine, store: ProjectStore): Promise<ShortsView> {
+  await engine.library.reload();
+  const name = (assetId: string) => engine.library.get(assetId)?.originalName ?? assetId;
+  const project = store.state;
+  const shorts: ShortView[] = project.shorts.map((s) => {
+    const sb = s.storyboard;
+    const slots: ShortSlotView[] = (sb?.sections ?? []).flatMap((sec) =>
+      sec.slots.map((x): ShortSlotView => {
+        const takes = x.kind === 'shot' ? x.takes.filter((t) => !t.rejected) : [];
+        const chosen =
+          x.kind === 'shot'
+            ? (takes.find((t) => t.id === x.chosenTakeId) ?? takes.at(-1))
+            : undefined;
+        return {
+          id: x.id,
+          sectionId: sec.id,
+          sectionName: sec.name,
+          locked: sec.locked,
+          kind: x.kind,
+          title: x.title,
+          accepts: x.kind === 'shot' ? (x.accepts ?? ['gameplay']) : [],
+          seconds: x.duration.ideal,
+          takes: takes.length,
+          chosen: chosen
+            ? { assetId: chosen.assetId, name: name(chosen.assetId), input: chosen.input ?? null }
+            : null,
+        };
+      }),
+    );
+    const voiceLines: ShortVoiceLineView[] = (sb?.voLines ?? []).map((v) => {
+      const takes = v.takes.filter((t) => !t.rejected);
+      const chosen = takes.find((t) => t.id === v.chosenTakeId) ?? takes.at(-1);
+      return {
+        id: v.id,
+        text: v.text,
+        linkedSlotIds: v.linkedSlotIds,
+        takes: takes.length,
+        chosen: chosen
+          ? { assetId: chosen.assetId, name: name(chosen.assetId), sourceIn: chosen.sourceIn ?? null, sourceOut: chosen.sourceOut ?? null } // prettier-ignore
+          : null,
+      };
+    });
+    const picture = slots.filter((x) => x.kind === 'shot');
+    const tl = project.timelines.find((t) => t.id === shortTimelineId(s.id));
+    const mode = (tl?.extensions.core as { roughCut?: { mode?: string } } | undefined)?.roughCut
+      ?.mode;
+    return {
+      id: s.id,
+      name: s.name,
+      concept: {
+        title: s.concept.title,
+        hook: s.concept.hook,
+        pitch: s.concept.pitch,
+        formatId: s.concept.formatId,
+        formatName: tiktokFormat(s.concept.formatId)?.name ?? s.concept.formatId,
+        targetSeconds: s.concept.targetSeconds,
+        source: s.concept.source,
+      },
+      platform: s.platform,
+      subtitles: { enabled: s.subtitles.enabled, style: s.subtitles.style, edits: s.subtitles.edits.length }, // prettier-ignore
+      hasTemplate: sb !== null,
+      slots,
+      voiceLines,
+      musicAssetId: sb?.music.trackAssetId ?? null,
+      progress: {
+        slots: picture.length,
+        slotsFilled: picture.filter((x) => x.chosen).length,
+        lines: voiceLines.length,
+        linesRecorded: voiceLines.filter((v) => v.chosen).length,
+      },
+      cut: {
+        built: !!tl,
+        mode: mode === 'voice' || mode === 'beat' || mode === 'plain' ? mode : null,
+        seconds: tl ? Math.round((timelineDuration(tl) / FLICKS_PER_SECOND) * 10) / 10 : null,
+      },
+    };
+  });
+  return { shorts, concepts: project.concepts, voice: await voiceStatusOp(engine) };
+}
+
+// ---- making a TikTok and filling it ------------------------------------------------------------
+
+export interface CreateShortOptions extends Pick<BuildShortOptions, 'wording' | 'signal'> {
+  /** Pick a waiting concept… */
+  conceptId?: string | undefined;
+  /** …or give your own. */
+  concept?: Omit<ConceptInput, 'id' | 'createdAt'> | undefined;
+  name?: string | undefined;
+  formatTargetId?: string | undefined;
+  /** Build the template straight away (default true). */
+  build?: boolean | undefined;
+}
+
+export async function createShortOp(
+  engine: Engine,
+  store: ProjectStore,
+  opts: CreateShortOptions,
+): Promise<{ shortId: string; build: BuildShortOutcome | null }> {
+  const had = new Set(store.state.shorts.map((s) => s.id));
+  if ((opts.conceptId === undefined) === (opts.concept === undefined))
+    throw new OpError('usage', 'give exactly one of a concept id and a concept');
+  try {
+    store.dispatch('core/shorts.add', {
+      ...(opts.conceptId ? { conceptId: opts.conceptId } : {}),
+      ...(opts.concept ? { concept: opts.concept } : {}),
+      ...(opts.name ? { name: opts.name } : {}),
+      ...(opts.formatTargetId ? { formatTargetId: opts.formatTargetId } : {}),
+    });
+  } catch (err) {
+    throw new OpError('usage', err instanceof Error ? err.message : String(err));
+  }
+  const made = store.state.shorts.find((s) => !had.has(s.id))!;
+  const build =
+    opts.build === false
+      ? null
+      : await buildShortOp(engine, store, made.id, {
+          ...(opts.wording !== undefined ? { wording: opts.wording } : {}),
+          ...(opts.signal ? { signal: opts.signal } : {}),
+        });
+  return { shortId: made.id, build };
+}
+
+export interface FillSlotOptions {
+  slotId?: string | undefined;
+  voLineId?: string | undefined;
+  /** A file already in the library… */
+  assetId?: string | undefined;
+  /** …or one to import first (a path on this computer). */
+  path?: string | undefined;
+  /** Gameplay, image, video or voiceover; default from the file and what the slot takes. */
+  input?: TakeInput | undefined;
+  sourceIn?: number | undefined;
+  sourceOut?: number | undefined;
+  signal?: AbortSignal | undefined;
+}
+
+async function importOne(engine: Engine, store: ProjectStore, path: string, signal?: AbortSignal) {
+  const r = await engine.ingestor.importPaths([path], {
+    projectId: store.state.id,
+    ...(signal ? { signal } : {}),
+  });
+  const job = r.jobs[0];
+  if (!job)
+    throw new OpError(
+      'usage',
+      `cannot import "${path}": ${r.skipped[0]?.reason ?? 'not a media file'}`,
+    );
+  const end = Date.now() + 120_000;
+  for (;;) {
+    signal?.throwIfAborted();
+    const j = engine.jobs.get(job.jobId);
+    if (j?.status === 'succeeded') return (j.output as { assetId: string }).assetId;
+    if (j?.status === 'failed')
+      throw new OpError('usage', `cannot import "${path}": ${j.error?.message ?? 'failed'}`);
+    if (Date.now() > end) throw new OpError('usage', `importing "${path}" took too long`);
+    await new Promise((res) => setTimeout(res, 100));
+  }
+}
+
+/** Put a file into a picture slot or a voiceover line of a TikTok (importing it first if given a path). */
+export async function fillSlotOp(
+  engine: Engine,
+  store: ProjectStore,
+  shortId: string,
+  opts: FillSlotOptions,
+): Promise<{ assetId: string; input: TakeInput; target: string }> {
+  const short = findShort(store, shortId);
+  if ((opts.slotId === undefined) === (opts.voLineId === undefined))
+    throw new OpError('usage', 'give exactly one of a slot id and a voiceover line id');
+  if ((opts.assetId === undefined) === (opts.path === undefined))
+    throw new OpError('usage', 'give exactly one of a library file id and a path');
+  const assetId = opts.assetId ?? (await importOne(engine, store, opts.path!, opts.signal));
+  await engine.library.reload();
+  const asset = engine.library.get(assetId);
+  if (!asset) throw new OpError('not-found', `no library file "${assetId}"`);
+
+  let input = opts.input;
+  if (!input) {
+    if (opts.voLineId) input = 'voiceover';
+    else {
+      const slot = short.storyboard?.sections
+        .flatMap((s) => s.slots)
+        .find((x) => x.id === opts.slotId);
+      const accepts = slot?.kind === 'shot' ? (slot.accepts ?? ['gameplay']) : [];
+      input =
+        asset.kind === 'image'
+          ? 'image'
+          : asset.kind === 'video'
+            ? accepts.includes('gameplay')
+              ? 'gameplay'
+              : 'video'
+            : undefined;
+      if (!input)
+        throw new OpError(
+          'usage',
+          `"${asset.originalName}" is ${asset.kind}: a picture slot takes video or images`,
+        );
+    }
+  }
+  try {
+    store.dispatch('core/shorts.fill-slot', {
+      shortId,
+      target: opts.voLineId ? { voLineId: opts.voLineId } : { slotId: opts.slotId! },
+      assetId,
+      input,
+      ...(opts.sourceIn !== undefined ? { sourceIn: opts.sourceIn } : {}),
+      ...(opts.sourceOut !== undefined ? { sourceOut: opts.sourceOut } : {}),
+    });
+  } catch (err) {
+    throw new OpError('usage', err instanceof Error ? err.message : String(err));
+  }
+  return { assetId, input, target: opts.voLineId ?? opts.slotId! };
 }

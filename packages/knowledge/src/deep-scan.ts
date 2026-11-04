@@ -71,26 +71,50 @@ export interface DeepScanResult {
  * only the files the scanner accepted (so .gitignore, size caps and secret exclusion apply by
  * construction; a secret file isn't in the sandbox to be read), with Read/Grep/Glob only.
  */
-export async function deepScan(opts: DeepScanOptions): Promise<DeepScanResult> {
-  if (opts.consent !== true) throw new DeepScanConsentError();
-  const sandbox = await mkdtemp(join(tmpdir(), 'tforge-deepscan-'));
+export interface ScanSandbox {
+  /** The throwaway folder Claude Code works in. */
+  dir: string;
+  /** Repo-relative paths copied into it: everything Claude Code could read. */
+  shared: string[];
+  /** The copy hit the size cap and some files were left out. */
+  truncated: boolean;
+}
+
+/**
+ * Copy the files a scan accepted (so .gitignore, size caps and secret exclusion already apply)
+ * into a throwaway folder, run `fn` there, and delete the folder, whatever happens.
+ */
+export async function withScanSandbox<T>(
+  scan: Pick<ScanResult, 'root' | 'files' | 'manifest'>,
+  signal: AbortSignal | undefined,
+  fn: (sandbox: ScanSandbox) => Promise<T>,
+): Promise<T> {
+  const dir = await mkdtemp(join(tmpdir(), 'tforge-deepscan-'));
   try {
     let bytes = 0;
     let truncated = false;
     const shared: string[] = [];
-    for (const rel of opts.scan.files) {
-      opts.signal?.throwIfAborted();
-      const size = opts.scan.manifest[rel]?.size ?? 0;
+    for (const rel of scan.files) {
+      signal?.throwIfAborted();
+      const size = scan.manifest[rel]?.size ?? 0;
       if (bytes + size > MAX_COPY_BYTES) {
         truncated = true;
         continue;
       }
-      await mkdir(dirname(join(sandbox, rel)), { recursive: true });
-      await copyFile(join(opts.scan.root, rel), join(sandbox, rel));
+      await mkdir(dirname(join(dir, rel)), { recursive: true });
+      await copyFile(join(scan.root, rel), join(dir, rel));
       bytes += size;
       shared.push(rel);
     }
+    return await fn({ dir, shared, truncated });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
 
+export async function deepScan(opts: DeepScanOptions): Promise<DeepScanResult> {
+  if (opts.consent !== true) throw new DeepScanConsentError();
+  return withScanSandbox(opts.scan, opts.signal, async ({ dir: sandbox, shared, truncated }) => {
     const provider =
       opts.makeProvider?.(sandbox) ??
       createClaudeCodeProvider({
@@ -126,7 +150,5 @@ export async function deepScan(opts: DeepScanOptions): Promise<DeepScanResult> {
       confidence: DEEP_SCAN_CONFIDENCE,
     }));
     return { entities, filesShared: shared.length, truncated };
-  } finally {
-    await rm(sandbox, { recursive: true, force: true });
-  }
+  });
 }

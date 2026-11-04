@@ -25,6 +25,7 @@ import {
   qcCommand,
   reviewCommand,
 } from './render.js';
+import { tiktokCommand } from './tiktok.js';
 import { briefCheck, knowledgeScan, storyboardGenerate, type CmdCtx } from './m2.js';
 import { typesCommand } from './types.js';
 
@@ -88,6 +89,23 @@ Usage:
                                                           Files for an editor: FCPXML, OpenTimelineIO, EDL, with alpha clips for cards and captions
   tforge review list|comment|resolve|reopen|approve|revoke <dir> [<commentId>] [--version <id|master>] [--at <s>] [--text <t>] [--note <t>]
                                                           Comments on a version and approval (goes stale when the version changes)
+  tforge tiktok concepts <dir> [--idea <text>]... [--count <n>]
+                                                          Ask the AI for TikTok concepts from the brief, the game facts and your ideas
+  tforge tiktok ask-claude <dir> [--idea <text>]... [--count <n>] [--yes]
+                                                          Let Claude Code read the game's files (a read-only copy) and suggest concepts; shows the request first, --yes runs it
+  tforge tiktok list <dir>                                Waiting concepts, your TikToks, what is filled and what is not
+  tforge tiktok new <dir> --concept <id> [--name <t>] [--no-wording]
+  tforge tiktok new <dir> --title <t> --hook <t> --format <formatId> [--seconds <s>] [--shot <t>]... [--say <line>]...
+                                                          Make a TikTok from a concept (or your own) and build its template
+  tforge tiktok build <dir> <short> [--section <id>]... [--no-wording]
+                                                          Rebuild the template: keeps filled and hand-edited slots
+  tforge tiktok fill <dir> <short> (--slot <id>|--line <id>) (--file <path>|--asset <id>) [--input gameplay|image|video|voiceover] [--from <s> --to <s>]
+                                                          Put a recording, image, clip or voiceover into a slot
+  tforge tiktok voice [--yes]                             The local voice model (about 485 MB, downloaded once with --yes)
+  tforge tiktok transcribe <dir> <short> [--asset <id>] [--language <xx>]
+                                                          Find each voiceover line in its recording (one long take works with the voice model)
+  tforge tiktok subtitles <dir> <short> [--on|--off] [--style lines|word-pop] [--platform tiktok|shorts|reels]
+  tforge tiktok generate <dir> <short>                    Build the TikTok's cut; then draft/export it with --version <short>
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
   tforge serve [--ui <dist>] [--port <n>] [--allow-origin <url>]...
                                                           Run the local engine service (and serve the built UI)
@@ -178,6 +196,28 @@ export async function main(
         at: { type: 'string' },
         text: { type: 'string' },
         todo: { type: 'boolean', default: false },
+        idea: { type: 'string', multiple: true },
+        count: { type: 'string' },
+        concept: { type: 'string' },
+        title: { type: 'string' },
+        hook: { type: 'string' },
+        seconds: { type: 'string' },
+        shot: { type: 'string', multiple: true },
+        say: { type: 'string', multiple: true },
+        section: { type: 'string', multiple: true },
+        'no-wording': { type: 'boolean', default: false },
+        file: { type: 'string' },
+        asset: { type: 'string' },
+        line: { type: 'string' },
+        input: { type: 'string' },
+        from: { type: 'string' },
+        to: { type: 'string' },
+        language: { type: 'string' },
+        on: { type: 'boolean', default: false },
+        off: { type: 'boolean', default: false },
+        style: { type: 'string' },
+        platform: { type: 'string' },
+        yes: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
     });
@@ -197,6 +237,7 @@ export async function main(
     'sfx',
     'review',
     'types',
+    'tiktok',
   ].includes(positionals[0] ?? '');
   const cmd = twoWord ? `${positionals[0]} ${positionals[1] ?? ''}`.trim() : positionals[0];
   const arg = positionals[twoWord ? 2 : 1];
@@ -422,6 +463,44 @@ export async function main(
         return need(arg, '<dir>')
           ? await reviewCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
           : 2;
+      case 'tiktok concepts':
+      case 'tiktok list':
+      case 'tiktok new':
+      case 'tiktok build':
+      case 'tiktok fill':
+      case 'tiktok voice':
+      case 'tiktok transcribe':
+      case 'tiktok subtitles':
+      case 'tiktok generate':
+      case 'tiktok ask-claude':
+        return await tiktokCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3], {
+          idea: o.idea ?? [],
+          count: o.count,
+          concept: o.concept,
+          title: o.title,
+          hook: o.hook,
+          format: o.format,
+          seconds: o.seconds,
+          shot: o.shot ?? [],
+          say: o.say ?? [],
+          name: o.name,
+          section: o.section ?? [],
+          noWording: o['no-wording'],
+          file: o.file,
+          asset: o.asset,
+          slot: o.slot,
+          line: o.line,
+          input: o.input,
+          from: o.from,
+          to: o.to,
+          language: o.language,
+          on: o.on,
+          off: o.off,
+          style: o.style,
+          platform: o.platform,
+          yes: o.yes,
+          show: o.show,
+        });
       case 'types':
       case 'types list':
       case 'types save':

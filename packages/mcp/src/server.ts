@@ -15,6 +15,14 @@ import {
   captureStatusOp,
   captureTipsOp,
   captureViewOp,
+  buildShortOp,
+  conceptsOp,
+  createShortOp,
+  fillSlotOp,
+  generateShortCutOp,
+  placeVoiceOp,
+  proposeConceptsOp,
+  shortsViewOp,
   footageStatusOp,
   brandViewOp,
   createDefaultVariantsOp,
@@ -768,6 +776,246 @@ export function createMcpServer(opts: McpServerOptions): Server {
           : undefined,
         omitExcluded: args.omitExcluded === true,
       });
+    },
+  });
+
+  // ---------------------------------------------------------------- TikToks
+  const SHORT_PROP = {
+    type: 'string',
+    description: 'A TikTok id from tiktok_status.',
+  };
+  const shortArg = (args: Args): string => {
+    if (typeof args.short !== 'string' || !args.short)
+      throw new OpError('usage', 'short is required');
+    return args.short;
+  };
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'tiktok_status',
+      description:
+        "The project's TikToks and the concepts waiting to be picked. For each TikTok: its concept and format, the platform it is made for, subtitle settings, every slot (what it accepts: gameplay, image or video; what fills it) and voiceover line (recorded or not), progress counts, and whether its cut is built. Also whether the local voice model is available. Edit with the core_shorts_* and core_concepts_remove tools; make and fill with tiktok_create, tiktok_fill, tiktok_build, tiktok_place_voice and tiktok_cut. Review and export a TikTok with render_status, qc_report, draft_start and export_start, using its id as the version.",
+      inputSchema: object({}),
+      annotations: ReadOnly,
+    },
+    async run(args) {
+      return shortsViewOp(engine, await project(args));
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_concepts_propose',
+      description:
+        'Propose TikTok concepts for this game. Read the game first (knowledge_list for facts, the repo itself if you can) and ground every concept in what is really in the game: a real mechanic, boss, level or moment. A good concept has a hook that stops the scroll in the first one or two seconds (a moment, a question or a surprise, never a logo or "Hi, we are..."), a format, a pitch (why a stranger would watch), a shotList of things a small team can film or gather this week, optional spoken voiceover lines, and a length (usually 15 to 35 seconds, never over 60). Put the ids of the game facts it features in entityIds (only ids from knowledge_list). Formats: game-trailer/tiktok-montage (hook + fast gameplay cuts), -voiceover (the developer talks over gameplay, images and clips), -list ("3 things"), -progress (before/after), -pov (the viewer is the player), -wishlist (tease, then reveal). Concepts are checked: a wrong format, an unknown fact id, text over the limits, a repeated title, or anything about knowledge the user excluded from AI use is rejected with the reason, so fix those and propose again. Accepted ones wait in the list for the user to pick one; nothing is applied without that.',
+      inputSchema: object(
+        {
+          concepts: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 20,
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string', maxLength: 120 },
+                hook: { type: 'string', maxLength: 300 },
+                formatId: {
+                  type: 'string',
+                  enum: [
+                    'game-trailer/tiktok-montage',
+                    'game-trailer/tiktok-voiceover',
+                    'game-trailer/tiktok-list',
+                    'game-trailer/tiktok-progress',
+                    'game-trailer/tiktok-pov',
+                    'game-trailer/tiktok-wishlist',
+                  ],
+                },
+                pitch: { type: 'string', maxLength: 1000 },
+                shotList: {
+                  type: 'array',
+                  maxItems: 12,
+                  items: { type: 'string', maxLength: 300 },
+                },
+                voiceover: {
+                  type: 'array',
+                  maxItems: 20,
+                  items: { type: 'string', maxLength: 500 },
+                },
+                targetSeconds: { type: 'number', minimum: 5, maximum: 180 },
+                entityIds: { type: 'array', maxItems: 20, items: { type: 'string' } },
+              },
+              required: ['title', 'hook', 'formatId', 'targetSeconds'],
+              additionalProperties: false,
+            },
+          },
+        },
+        ['concepts'],
+      ),
+    },
+    async run(args) {
+      const list = Array.isArray(args.concepts) ? args.concepts : [];
+      return proposeConceptsOp(engine, await project(args), list);
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_concepts_generate',
+      description:
+        "Ask TrailerForge's own AI for TikTok concepts from the brief, the game facts and the user's ideas (the same request the app makes: knowledge excluded from AI use is never sent, and the user's disclosure setting applies). Accepted concepts wait in the list for the user to pick. Prefer tiktok_concepts_propose when you can suggest good ones yourself.",
+      inputSchema: object({
+        ideas: {
+          type: 'array',
+          maxItems: 10,
+          items: { type: 'string', maxLength: 500 },
+          description: "The developer's own ideas, if they gave any.",
+        },
+        count: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 10,
+          description: 'How many to ask for (default 5).',
+        },
+      }),
+    },
+    async run(args) {
+      return conceptsOp(engine, await project(args), {
+        ...(Array.isArray(args.ideas) ? { ideas: args.ideas.map(String) } : {}),
+        ...(typeof args.count === 'number' ? { count: args.count } : {}),
+      });
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_create',
+      description:
+        "Make a TikTok from a waiting concept (conceptId, from tiktok_status) or from a concept you give, and build its template: the format fixes the structure and the concept's shot list, hook and voiceover seed the slots. One undo step. Fill the slots next with tiktok_fill. The AI wording pass is off unless you ask for it (it sends the brief and game facts to the AI).",
+      inputSchema: object({
+        conceptId: { type: 'string', description: 'A waiting concept to pick.' },
+        concept: {
+          type: 'object',
+          description:
+            'Or your own concept: title, hook, formatId, targetSeconds, and optionally pitch, shotList, voiceover.',
+          additionalProperties: true,
+        },
+        name: { type: 'string', maxLength: 120 },
+        wording: {
+          type: 'boolean',
+          description: 'Also let the AI improve the wording of the slots (default false).',
+        },
+      }),
+    },
+    async run(args) {
+      return createShortOp(engine, await project(args), {
+        ...(typeof args.conceptId === 'string' ? { conceptId: args.conceptId } : {}),
+        ...(args.concept && typeof args.concept === 'object'
+          ? { concept: { source: 'claude-code', ...(args.concept as object) } as never }
+          : {}),
+        ...(typeof args.name === 'string' ? { name: args.name } : {}),
+        wording: args.wording === true,
+      });
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_build',
+      description:
+        "Rebuild a TikTok's template from its concept: refreshes only what the user has not filled or edited (locked sections, slots with files or hand edits and recorded voiceover are kept). Optionally only some sections. Use it after changing the concept with core_shorts_set-concept.",
+      inputSchema: object(
+        {
+          short: SHORT_PROP,
+          sectionIds: { type: 'array', items: { type: 'string' } },
+          wording: {
+            type: 'boolean',
+            description: 'Also let the AI improve the wording (default false).',
+          },
+        },
+        ['short'],
+      ),
+    },
+    async run(args) {
+      return buildShortOp(engine, await project(args), shortArg(args), {
+        ...(Array.isArray(args.sectionIds) ? { sectionIds: args.sectionIds.map(String) } : {}),
+        wording: args.wording === true,
+      });
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_fill',
+      description:
+        "Put a file that is already in the library (assetId, from footage_status) into a picture slot (slotId: gameplay, an image or any video, as the slot accepts) or a voiceover line (voLineId: a voiceover recording). Importing files is the user's job (the app or `tforge tiktok fill --file`). One undo step.",
+      inputSchema: object(
+        {
+          short: SHORT_PROP,
+          slotId: { type: 'string' },
+          voLineId: { type: 'string' },
+          assetId: { type: 'string' },
+          input: {
+            type: 'string',
+            enum: ['gameplay', 'image', 'video', 'voiceover'],
+            description: 'Default from the file and what the slot accepts.',
+          },
+        },
+        ['short', 'assetId'],
+      ),
+    },
+    async run(args) {
+      return fillSlotOp(engine, await project(args), shortArg(args), {
+        ...(typeof args.slotId === 'string' ? { slotId: args.slotId } : {}),
+        ...(typeof args.voLineId === 'string' ? { voLineId: args.voLineId } : {}),
+        ...(typeof args.assetId === 'string' ? { assetId: args.assetId } : {}),
+        ...(typeof args.input === 'string' ? { input: args.input as never } : {}),
+      });
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_place_voice',
+      description:
+        'Find each voiceover line in its recording: one long take of the whole script is split into the lines by the words heard (needs the local voice model, which the user downloads in the app: see tiktok_status), a file per line is trimmed of its silence. Says which lines matched, which differ (and how) and which words belong to no line. One undo step.',
+      inputSchema: object(
+        {
+          short: SHORT_PROP,
+          assetId: {
+            type: 'string',
+            description:
+              "One recording holding every line, in order (default: each line's own recording).",
+          },
+          language: { type: 'string', description: 'ISO 639-1 code, e.g. en (default: detected).' },
+        },
+        ['short'],
+      ),
+    },
+    async run(args) {
+      return placeVoiceOp(engine, await project(args), shortArg(args), {
+        ...(typeof args.assetId === 'string' ? { assetId: args.assetId } : {}),
+        ...(typeof args.language === 'string' ? { language: args.language } : {}),
+      });
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_cut',
+      description:
+        "Build (or rebuild) a TikTok's cut: with recorded voiceover the edit follows the voice (quick hook, shots under about 2.5 s, music lowered under the voice, images with a slow move); otherwise it follows the analysed music, else the storyboard's lengths. Subtitles come from the voiceover words when they are on. Rebuilding keeps hand edits and locked tracks. One undo step. Then review it like any version (render_status, qc_report, draft_start, export_start with version = the TikTok's id).",
+      inputSchema: object({ short: SHORT_PROP }, ['short']),
+    },
+    async run(args) {
+      return generateShortCutOp(engine, await project(args), shortArg(args));
     },
   });
 

@@ -104,6 +104,19 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
   'core/storyboard.resolve-comment': 'Mark a storyboard comment as dealt with.',
   'core/storyboard.reopen-comment': 'Reopen a resolved storyboard comment.',
   'core/storyboard.delete-comment': 'Delete a storyboard comment.',
+  'core/concepts.remove': 'Remove waiting TikTok concepts (by id) the user does not want.',
+  'core/shorts.remove': 'Remove a TikTok with its cut, comments and approval.',
+  'core/shorts.rename': 'Rename a TikTok.',
+  'core/shorts.set-concept':
+    "Change fields of a TikTok's concept (title, hook, pitch, shotList, voiceover, targetSeconds, formatId). Rebuild the template with tiktok_build to refresh the slots the user has not filled or edited.",
+  'core/shorts.set-export':
+    'Choose how a TikTok is exported (preset such as core/tiktok, file name pattern, loudness, poster frame); null clears it.',
+  'core/shorts.clear-slot': 'Take a file (or every file) out of a TikTok slot or voiceover line.',
+  'core/shorts.set-subtitles':
+    'Turn subtitles on or off for a TikTok, choose lines or word-pop, and the app it is made for (tiktok, shorts, reels: where the app covers the picture). Rebuild the cut with tiktok_cut afterwards.',
+  'core/shorts.edit-cue':
+    'Change one subtitle by hand: its text, or move its start or end (flicks, at most a second). Kept while the words heard there stay the same.',
+  'core/shorts.reset-cues': 'Forget hand changes to some subtitles (by key) or all of them.',
 };
 
 /**
@@ -124,4 +137,12 @@ export const HIDDEN_COMMANDS = new Set([
   'core/knowledge.apply-scan',
   'core/storyboard.set',
   'core/storyboard.replace-section',
+  // Concepts are added by `tiktok_concepts_propose` (checked against the schema, the formats, the
+  // game facts and the exclusions); a TikTok is made by `tiktok_create` and its files are filled
+  // by `tiktok_fill` (library files only), so the bulk commands behind them are not offered.
+  'core/concepts.add',
+  'core/shorts.add',
+  'core/shorts.set-storyboard',
+  'core/shorts.fill-slot',
+  'core/shorts.fill-voice',
 ]);

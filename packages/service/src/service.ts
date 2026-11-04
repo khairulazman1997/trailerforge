@@ -52,8 +52,17 @@ import {
   matchAcceptOp,
   matchSuggestOp,
   buildShortOp,
+  claudeCodeConceptsOp,
+  claudeCodeConceptsPreviewOp,
   conceptsOp,
+  createShortOp,
+  fillSlotOp,
+  generateShortCutOp,
+  placeVoiceOp,
   rankTakesOp,
+  shortsViewOp,
+  voiceDownloadOp,
+  voiceStatusOp,
   approveVersionOp,
   draftFileOp,
   exportVersionOp,
@@ -329,6 +338,31 @@ const TaskRequest = z.discriminatedUnion('kind', [
       .default({}),
   }),
   z.strictObject({
+    kind: z.literal('place-voice'),
+    options: z.strictObject({
+      shortId: z.string().min(1),
+      assetId: z.string().min(1).optional(),
+      language: z
+        .string()
+        .regex(/^[a-z]{2,3}$/)
+        .optional(),
+    }),
+  }),
+  z.strictObject({
+    kind: z.literal('short-cut'),
+    options: z.strictObject({ shortId: z.string().min(1) }),
+  }),
+  z.strictObject({
+    kind: z.literal('claude-code-concepts'),
+    options: z.strictObject({
+      /** The user's explicit yes to the warning the preview shows. */
+      allow: z.literal(true),
+      ideas: z.array(z.string().max(500)).max(10).optional(),
+      count: z.int().min(1).max(10).optional(),
+      repo: z.string().optional(),
+    }),
+  }),
+  z.strictObject({
     kind: z.literal('build-short'),
     options: z.strictObject({
       shortId: z.string().min(1),
@@ -417,6 +451,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     events.emit('settings.changed', { what });
 
   let visionTaskId: string | undefined;
+  let voiceTaskId: string | undefined;
   let setupTaskId: string | undefined;
   let demoTaskId: string | undefined;
   // Read at each request: the port is only known once the server listens.
@@ -658,6 +693,100 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         );
         visionTaskId = task.id;
         return task;
+      },
+    ],
+    ['GET', /^\/v1\/voice$/, async () => voiceStatusOp(engine)],
+    [
+      'POST',
+      /^\/v1\/voice\/download$/,
+      async ({ body, res }) => {
+        // Only an explicit `true` counts; the dialog shows the disclosure from GET /v1/voice first.
+        const { consent } = z.strictObject({ consent: z.literal(true) }).parse(await body());
+        const running = voiceTaskId ? tasks.get(voiceTaskId) : undefined;
+        res.statusCode = 202;
+        if (running?.status === 'running') return running;
+        let last = 0;
+        const task = tasks.start('voice-download', APP_TASK, (signal) =>
+          voiceDownloadOp(engine, {
+            consent,
+            signal,
+            onProgress: (fraction) => {
+              if (fraction < 1 && fraction - last < 0.01) return;
+              last = fraction;
+              events.emit('voice.progress', { taskId: task.id, fraction });
+            },
+          }),
+        );
+        voiceTaskId = task.id;
+        return task;
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/shorts$/,
+      async ({ params }) => shortsViewOp(engine, storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/shorts$/,
+      async ({ params, body, res }) => {
+        const store = storeById(params.id!);
+        const o = z
+          .strictObject({
+            conceptId: z.string().min(1).optional(),
+            concept: z.record(z.string(), z.unknown()).optional(),
+            name: z.string().min(1).max(120).optional(),
+            formatTargetId: z.string().min(1).optional(),
+            build: z.boolean().default(true),
+            /** The AI wording pass is slow: off unless asked for (or run `build-short` as a task). */
+            wording: z.boolean().default(false),
+          })
+          .parse(await body());
+        notBusy(store);
+        res.statusCode = 201;
+        return createShortOp(engine, store, {
+          ...(o.conceptId ? { conceptId: o.conceptId } : {}),
+          ...(o.concept ? { concept: o.concept as never } : {}),
+          ...(o.name ? { name: o.name } : {}),
+          ...(o.formatTargetId ? { formatTargetId: o.formatTargetId } : {}),
+          build: o.build,
+          wording: o.wording,
+        });
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/shorts\/(?<short>[^/]+)\/fill$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        const o = z
+          .strictObject({
+            slotId: z.string().min(1).optional(),
+            voLineId: z.string().min(1).optional(),
+            assetId: z.string().min(1).optional(),
+            path: z.string().min(1).optional(),
+            input: z.enum(['gameplay', 'image', 'video', 'voiceover']).optional(),
+            sourceIn: z.int().nonnegative().optional(),
+            sourceOut: z.int().nonnegative().optional(),
+          })
+          .parse(await body());
+        notBusy(store);
+        return fillSlotOp(engine, store, decodeURIComponent(params.short!), o);
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/claude-concepts$/,
+      async ({ params, query }) => {
+        const count = query.get('count');
+        const n = count === null ? undefined : Number(count);
+        if (n !== undefined && (!Number.isInteger(n) || n < 1 || n > 10))
+          throw new HttpError(400, 'bad-request', 'count must be 1 to 10');
+        return claudeCodeConceptsPreviewOp(engine, storeById(params.id!), {
+          ideas: query.getAll('idea'),
+          ...(n !== undefined ? { count: n } : {}),
+          ...(query.get('repo') ? { repo: query.get('repo')! } : {}),
+        });
       },
     ],
     ['GET', /^\/v1\/health$/, async () => healthOp(engine)],
@@ -1219,6 +1348,22 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await refineStoryboardOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'capture-tips')
             out = await captureTipsOp(engine, store, { ...t.options, signal });
+          else if (t.kind === 'place-voice')
+            out = await placeVoiceOp(engine, store, t.options.shortId, {
+              ...(t.options.assetId ? { assetId: t.options.assetId } : {}),
+              ...(t.options.language ? { language: t.options.language } : {}),
+              signal,
+            });
+          else if (t.kind === 'short-cut')
+            out = await generateShortCutOp(engine, store, t.options.shortId, { signal });
+          else if (t.kind === 'claude-code-concepts')
+            out = await claudeCodeConceptsOp(engine, store, {
+              ...t.options,
+              signal,
+              ...(opts.claudeBin ? { claudeBin: opts.claudeBin } : {}),
+              onNotice: (message) =>
+                events.emit('task.notice', { projectId: store.state.id, message }),
+            });
           else if (t.kind === 'build-short')
             out = await buildShortOp(engine, store, t.options.shortId, {
               ...(t.options.sectionIds ? { sectionIds: t.options.sectionIds } : {}),

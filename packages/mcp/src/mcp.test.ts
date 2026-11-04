@@ -156,6 +156,12 @@ describe('tool surface', () => {
         'core_review_comment',
         'core_export_set',
         'core_timeline_set-clip-audio',
+        'tiktok_status',
+        'tiktok_concepts_propose',
+        'tiktok_create',
+        'tiktok_fill',
+        'tiktok_cut',
+        'core_shorts_rename',
       ]),
     );
     // Bulk-result commands are reachable only through the action tools.
@@ -171,11 +177,20 @@ describe('tool surface', () => {
     // Applying an AI critique's fix is the user's decision; Claude can ask for the critique.
     expect(names).not.toContain('core_critique_apply-fix');
     expect(names).not.toContain('core_critique_add');
+    // Concepts and TikToks come in through the checked tools; files are filled from the library only.
+    for (const n of [
+      'core_concepts_add',
+      'core_shorts_add',
+      'core_shorts_fill-slot',
+      'core_shorts_fill-voice',
+      'core_shorts_set-storyboard',
+    ])
+      expect(names).not.toContain(n);
     expect(JSON.stringify(tools.find((t) => t.name === 'export_start')!.inputSchema)).not.toContain(
       'override',
     );
     // Every registered command is exposed except those, and each schema is an object.
-    expect(engine.commands.types().length - 8).toBe(
+    expect(engine.commands.types().length - 13).toBe(
       names.filter((n) => n.startsWith('core_') || n.startsWith('game-trailer_')).length,
     );
     for (const t of tools) {
@@ -456,4 +471,45 @@ describe('review, quality and render tools', () => {
     expect(done.error.message).toMatch(/Quality Gate stopped the export/);
     expect((await call(client, 'render_cancel')).data).toEqual({ cancelled: false });
   }, 60_000);
+});
+
+describe('tiktok tools', () => {
+  it('proposes concepts with reasons for rejections, makes a short and reads it back', async () => {
+    const proposed = await call(client, 'tiktok_concepts_propose', {
+      concepts: [
+        {
+          title: 'Parry in one second',
+          hook: 'The Ash Warden swings. You parry.',
+          formatId: 'game-trailer/tiktok-montage',
+          targetSeconds: 20,
+          shotList: ['Parry the first swing', 'Counter hit'],
+        },
+        {
+          title: 'Bad format',
+          hook: 'x',
+          formatId: 'game-trailer/nope',
+          targetSeconds: 20,
+        },
+      ],
+    });
+    expect(proposed.isError).toBe(false);
+    expect(proposed.data.rejected.length).toBeGreaterThan(0);
+    const status = await call(client, 'tiktok_status');
+    const concept = status.data.concepts.find(
+      (c: { title: string }) => c.title === 'Parry in one second',
+    );
+    expect(concept).toBeTruthy();
+
+    const made = await call(client, 'tiktok_create', { conceptId: concept.id });
+    expect(made.isError).toBe(false);
+    const after = await call(client, 'tiktok_status');
+    expect(after.data.shorts).toHaveLength(1);
+    expect(after.data.shorts[0].slots.length).toBeGreaterThan(0);
+
+    // No footage is attached yet: the cut still builds, with placeholders.
+    const cut = await call(client, 'tiktok_cut', { short: after.data.shorts[0].id });
+    expect(cut.isError).toBe(false);
+    expect(cut.data.timelineId).toMatch(/^tl_short_/);
+    expect((await call(client, 'tiktok_cut', { short: 'nope' })).isError).toBe(true);
+  }, 30_000);
 });

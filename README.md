@@ -66,6 +66,10 @@ Takes are written into a hidden `.tfpartial` folder first and moved into place w
 
 The sections below go into each step in more detail, for the command line and for developers.
 
+### TikToks from the command line or Claude Code
+
+`tforge tiktok concepts|create|fill|build|voice|cut|…` and the MCP `tiktok_*` tools make and fill short videos. "Ask Claude Code" for concepts shows its prompt and the files it may read first, and runs in a read-only copy of your game files (secrets excluded). Nothing leaves the machine except through the AI route you chose.
+
 ## From source and the command line
 
 Requirements: **Node 22+**, **pnpm 10**, **FFmpeg + ffprobe** on `PATH` (or set `TFORGE_FFMPEG_DIR`), and **Python 3.11+ with [uv](https://docs.astral.sh/uv/)** for the analysis sidecar.

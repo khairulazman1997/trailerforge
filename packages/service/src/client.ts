@@ -66,6 +66,11 @@ import type {
   matchAcceptOp,
   matchSuggestOp,
   approveVersionOp,
+  claudeCodeConceptsPreviewOp,
+  createShortOp,
+  fillSlotOp,
+  shortsViewOp,
+  voiceStatusOp,
   presetsViewOp,
   qualityOp,
   reviewViewOp,
@@ -140,6 +145,15 @@ export type TaskRequest =
   /** Ask the AI for TikTok concepts (from the brief, the game knowledge and `ideas`); they land in the waiting list. */
   | { kind: 'tiktok-concepts'; options?: { ideas?: string[]; count?: number } }
   /** Build (or rebuild) a TikTok's template from its format and concept; `wording: false` skips the AI pass. */
+  /** Find each voiceover line in its recording (or split one long take); needs the voice model for a long take. */
+  | { kind: 'place-voice'; options: { shortId: string; assetId?: string; language?: string } }
+  /** Build (or rebuild) a TikTok's cut; subtitle words come from the last transcript. */
+  | { kind: 'short-cut'; options: { shortId: string } }
+  /** Let Claude Code read the game and suggest concepts. `allow` must be the user's explicit yes to the preview's warning. */
+  | {
+      kind: 'claude-code-concepts';
+      options: { allow: true; ideas?: string[]; count?: number; repo?: string };
+    }
   | { kind: 'build-short'; options: { shortId: string; sectionIds?: string[]; wording?: boolean } }
   /** Ask the AI to critique a version (`variantId` null = the master cut); notes land on the Review tab. */
   | { kind: 'critique'; options: { variantId: string | null } }
@@ -318,6 +332,70 @@ export class ServiceClient {
   /** Start the one-time model download (a task; progress arrives as `vision.progress` events). */
   downloadVision() {
     return this.request<TaskView>('POST', '/v1/vision/download', { consent: true });
+  }
+  /** The voice transcription model's state and what downloading it would do. */
+  voice() {
+    return this.request<Result<typeof voiceStatusOp>>('GET', '/v1/voice');
+  }
+  /** Start the one-time voice model download (progress arrives as `voice.progress` events). */
+  downloadVoice() {
+    return this.request<TaskView>('POST', '/v1/voice/download', { consent: true });
+  }
+  /** The project's TikToks (slots, voiceover lines, progress, cut) and the concepts waiting to be picked. */
+  shorts(id: string) {
+    return this.request<Result<typeof shortsViewOp>>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/shorts`,
+    );
+  }
+  /** Make a TikTok from a waiting concept or your own, and build its template (no AI wording unless `wording`). */
+  createShort(
+    id: string,
+    body: {
+      conceptId?: string;
+      concept?: Record<string, unknown>;
+      name?: string;
+      formatTargetId?: string;
+      build?: boolean;
+      wording?: boolean;
+    },
+  ) {
+    return this.request<Result<typeof createShortOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/shorts`,
+      body,
+    );
+  }
+  /** Put a file (a library id, or a path to import) into a picture slot or a voiceover line. */
+  fillShort(
+    id: string,
+    shortId: string,
+    body: {
+      slotId?: string;
+      voLineId?: string;
+      assetId?: string;
+      path?: string;
+      input?: 'gameplay' | 'image' | 'video' | 'voiceover';
+      sourceIn?: number;
+      sourceOut?: number;
+    },
+  ) {
+    return this.request<Result<typeof fillSlotOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/shorts/${encodeURIComponent(shortId)}/fill`,
+      body,
+    );
+  }
+  /** What "Ask Claude Code" would send (the request text and the number of files), before anything is. */
+  claudeConceptsPreview(id: string, o: { ideas?: string[]; count?: number; repo?: string } = {}) {
+    const q = new URLSearchParams();
+    for (const i of o.ideas ?? []) q.append('idea', i);
+    if (o.count !== undefined) q.set('count', String(o.count));
+    if (o.repo) q.set('repo', o.repo);
+    return this.request<Result<typeof claudeCodeConceptsPreviewOp>>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/claude-concepts?${q}`,
+    );
   }
   /** Build the demo project from generated footage and music (a task; its result has the project id). */
   startDemo() {

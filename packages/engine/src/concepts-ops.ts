@@ -1,6 +1,10 @@
 import { appendDecisions, type ProjectStore } from '@trailerforge/core';
+import { createClaudeCodeProvider } from '@trailerforge/llm';
+import { scanSource, withScanSandbox } from '@trailerforge/knowledge';
 import {
   CONCEPTS_TASK,
+  GeneratedConcepts,
+  conceptsPrompt,
   generateConcepts,
   vetConcepts,
   type RejectedConcept,
@@ -123,4 +127,134 @@ export async function proposeConceptsOp(
     strictEntities: true,
   });
   return addVetted(store, vetted, { task: 'claude-code' });
+}
+
+// ---- "Ask Claude Code": concepts from reading the game itself ----------------------------------
+
+export const CLAUDE_CODE_CONCEPTS_WARNING =
+  'Asking Claude Code sends the text files of your game project (the ones the scan accepts: ' +
+  'nothing ignored, no secrets, no huge files) and your brief to Anthropic through Claude Code, ' +
+  'so it can read the game and suggest TikTok concepts. It works in a throwaway copy with ' +
+  'read-only tools and changes nothing. Confirm explicitly to run it.';
+
+export interface ClaudeCodeConceptsOptions extends ConceptsOptions {
+  /** The user's explicit yes to `CLAUDE_CODE_CONCEPTS_WARNING`. */
+  allow?: boolean | undefined;
+  claudeBin?: string | undefined;
+  onNotice?: ((message: string) => void) | undefined;
+  /** Which repo, when the project has several. */
+  repo?: string | undefined;
+}
+
+function sourceOf(store: ProjectStore, repo?: string) {
+  const sources = store.state.sources;
+  const s = repo ? sources.find((x) => x.path === repo) : sources[0];
+  if (!s)
+    throw new OpError(
+      'usage',
+      'this project has no game repo yet: scan one first (knowledge scan)',
+    );
+  if (!repo && sources.length > 1)
+    throw new OpError('usage', 'this project has several sources; say which repo to use');
+  return s;
+}
+
+async function scanOf(engine: Engine, source: ReturnType<typeof sourceOf>, signal?: AbortSignal) {
+  try {
+    return (
+      await scanSource(source, (id) => engine.plugins.registries.knowledgeExtractors.get(id), {
+        skipIfDigest: null,
+        ...(signal ? { signal } : {}),
+      })
+    ).scan;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT')
+      throw new OpError('not-found', `the game repo ${source.path} was not found on this computer`);
+    throw err;
+  }
+}
+
+/** What "Ask Claude Code" would send, before anything is: the request text and the files. */
+export async function claudeCodeConceptsPreviewOp(
+  engine: Engine,
+  store: ProjectStore,
+  opts: ConceptsOptions & { repo?: string | undefined } = {},
+) {
+  requireBrief(store);
+  const source = sourceOf(store, opts.repo);
+  const scan = { scan: await scanOf(engine, source) };
+  const prompt = await conceptsPrompt(
+    store.state,
+    {
+      ...(opts.ideas ? { ideas: opts.ideas } : {}),
+      ...(opts.count !== undefined ? { count: opts.count } : {}),
+    },
+    'claude-code',
+  );
+  return {
+    warning: CLAUDE_CODE_CONCEPTS_WARNING,
+    repo: source.path,
+    files: scan.scan.files.length,
+    truncated: scan.scan.truncated,
+    prompt,
+  };
+}
+
+/**
+ * Let Claude Code read the game (a read-only sandbox copy) and propose concepts. The answer goes
+ * through the same checks as any proposal, as source `claude-code`; the user still picks one.
+ */
+export async function claudeCodeConceptsOp(
+  engine: Engine,
+  store: ProjectStore,
+  opts: ClaudeCodeConceptsOptions = {},
+): Promise<ConceptsOutcome & { filesShared: number }> {
+  if (opts.allow !== true) throw new OpError('usage', CLAUDE_CODE_CONCEPTS_WARNING);
+  requireBrief(store);
+  const source = sourceOf(store, opts.repo);
+  const scan = await scanOf(engine, source, opts.signal);
+  const prompt = await conceptsPrompt(
+    store.state,
+    {
+      ...(opts.ideas ? { ideas: opts.ideas } : {}),
+      ...(opts.count !== undefined ? { count: opts.count } : {}),
+    },
+    'claude-code',
+  );
+  opts.onNotice?.(`Claude Code will read ${scan.files.length} text files from a temporary copy.`);
+  // Claude Code reaches the network itself: the hand-off is logged by Egress, under a purpose.
+  const found = await engine.egress.scope(
+    { purpose: 'TikTok concepts from the game (Claude Code)' },
+    () =>
+      withScanSandbox(scan, opts.signal, async ({ dir, shared }) => {
+        const provider = createClaudeCodeProvider({
+          ...(opts.claudeBin ? { bin: opts.claudeBin } : {}),
+          tools: ['Read', 'Grep', 'Glob'],
+          cwd: dir,
+          handOff: (text) => engine.egress.handOff({ provider: 'core/claude-code', tool: 'claude-code', text }), // prettier-ignore
+        });
+        const r = await provider.generate(
+          {
+            task: CONCEPTS_TASK,
+            system:
+              'You are a careful creative strategist. You only read files; you never modify anything.',
+            prompt,
+            schema: GeneratedConcepts,
+            effort: 'medium',
+          },
+          opts.signal ?? new AbortController().signal,
+        );
+        return { concepts: r.value.concepts, shared: shared.length, model: r.model };
+      }),
+  );
+  opts.signal?.throwIfAborted();
+  const vetted = vetConcepts(store.state, found.concepts, {
+    source: 'claude-code',
+    strictEntities: false,
+  });
+  const out = await addVetted(store, vetted, {
+    task: 'claude-code-read',
+    provider: 'core/claude-code',
+  });
+  return { ...out, filesShared: found.shared };
 }

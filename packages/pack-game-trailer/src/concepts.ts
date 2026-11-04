@@ -184,11 +184,8 @@ function formatLines(): string {
  * Ask the model for concepts. The client's disclosure gate runs before anything leaves the
  * machine. Works with any provider, including Mock, Ollama and Chat Handoff.
  */
-export async function generateConcepts(
-  deps: GenerateConceptsDeps,
-  project: Project,
-  opts: GenerateConceptsOptions = {},
-): Promise<GenerateConceptsResult> {
+/** The words that fill a concepts prompt: what the model is told about the game. */
+function promptVars(project: Project, opts: GenerateConceptsOptions) {
   const count = Math.min(
     MAX_CONCEPT_COUNT,
     Math.max(1, Math.round(opts.count ?? DEFAULT_CONCEPT_COUNT)),
@@ -205,13 +202,9 @@ export async function generateConcepts(
     .map((e) => `- ${e.id}: ${e.kind}: ${e.name}${e.description ? ` — ${e.description}` : ''}`)
     .join('\n');
   const existing = existingConceptTitles(project);
-
-  const system = await loadPrompt('system.trailer-craft', { projectName: project.name }, [
-    BUILTIN_PROMPTS_DIR,
-  ]);
-  const prompt = await loadPrompt(
-    CONCEPTS_TASK,
-    {
+  return {
+    count,
+    vars: {
       count: String(count),
       formats: formatLines(),
       ideas: ideas.length
@@ -221,8 +214,37 @@ export async function generateConcepts(
       brief: redact(JSON.stringify(brief, null, 2)),
       knowledge: knowledge || '(none)',
     },
+  };
+}
+
+/**
+ * The exact request for concepts, as text. `claude-code` is the variant for Claude Code, which
+ * may also read the game's files in its working folder.
+ */
+export async function conceptsPrompt(
+  project: Project,
+  opts: GenerateConceptsOptions = {},
+  variant: 'app' | 'claude-code' = 'app',
+): Promise<string> {
+  return loadPrompt(
+    variant === 'app' ? CONCEPTS_TASK : CLAUDE_CODE_CONCEPTS_PROMPT,
+    promptVars(project, opts).vars,
     [CAPTURE_TIPS_PROMPTS_DIR],
   );
+}
+
+/** What Claude Code is told to be (it reads, it never changes anything). */
+export const CLAUDE_CODE_CONCEPTS_PROMPT = 'tiktok.claude-code-concepts';
+
+export async function generateConcepts(
+  deps: GenerateConceptsDeps,
+  project: Project,
+  opts: GenerateConceptsOptions = {},
+): Promise<GenerateConceptsResult> {
+  const system = await loadPrompt('system.trailer-craft', { projectName: project.name }, [
+    BUILTIN_PROMPTS_DIR,
+  ]);
+  const prompt = await conceptsPrompt(project, opts);
   opts.signal?.throwIfAborted();
   const r = await deps.llm.generate(
     CONCEPTS_TASK,

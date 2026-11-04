@@ -1068,6 +1068,67 @@ describe('settings routes', () => {
   });
 });
 
+describe('TikToks', () => {
+  const ID = 'proj_tiktok';
+  const concept = { source: 'user', title: 'Parry the Ash Warden', hook: 'A boss swing stops dead.', formatId: 'game-trailer/tiktok-montage', targetSeconds: 20 }; // prettier-ignore
+  beforeAll(async () => {
+    await engine.createProject(join(root, 'TikTok.tforge'), {
+      ...sampleProject(),
+      id: ID,
+    } as never);
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=2', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', join(root, 'tt-clip.mp4')]); // prettier-ignore
+  });
+
+  it('needs the token', async () => {
+    expect((await raw({ path: `/v1/projects/${ID}/shorts` })).status).toBe(401);
+    expect((await raw({ path: '/v1/voice' })).status).toBe(401);
+  });
+
+  it('makes a TikTok from your own concept, shows it, and fills a slot from a path', async () => {
+    expect(await client.shorts(ID)).toMatchObject({ shorts: [], concepts: [], voice: { status: expect.any(String) } }); // prettier-ignore
+    const made = await client.createShort(ID, { concept, name: 'Parry' });
+    expect(made).toMatchObject({ shortId: 'short_parry', build: { wording: { status: 'off' } } });
+    const view = await client.shorts(ID);
+    expect(view.shorts[0]).toMatchObject({ id: 'short_parry', hasTemplate: true, progress: { slotsFilled: 0 } }); // prettier-ignore
+    const hook = view.shorts[0]!.slots[0]!;
+    const r = await client.fillShort(ID, 'short_parry', {
+      slotId: hook.id,
+      path: join(root, 'tt-clip.mp4'),
+    });
+    expect(r).toMatchObject({ input: 'gameplay', target: hook.id });
+    expect((await client.shorts(ID)).shorts[0]!.progress.slotsFilled).toBe(1);
+    await expect(client.fillShort(ID, 'short_parry', { slotId: hook.id })).rejects.toMatchObject({ status: 400 }); // prettier-ignore
+    await expect(client.fillShort(ID, 'short_nope', { slotId: 'a', assetId: 'b' })).rejects.toMatchObject({ status: 404 }); // prettier-ignore
+    await expect(client.createShort(ID, {})).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('the voice model needs a yes; Claude Code needs one too, and its preview shows what it would send', async () => {
+    expect(await client.voice()).toMatchObject({
+      status: 'absent',
+      disclosure: { license: 'MIT' },
+    });
+    await expect(raw2('POST', '/v1/voice/download', { consent: false })).resolves.toBe(400);
+    await expect(client.startTask(ID, { kind: 'claude-code-concepts', options: { allow: false as never } })).rejects.toMatchObject({ status: 400 }); // prettier-ignore
+    await expect(client.claudeConceptsPreview(ID, { count: 99 })).rejects.toMatchObject({
+      status: 400,
+    });
+    // The sample project has a source, but it is not on this machine: the preview says what is wrong.
+    await expect(client.claudeConceptsPreview(ID)).rejects.toBeInstanceOf(ServiceError);
+  });
+
+  it('place-voice and short-cut are tasks; their problems come back as failures', async () => {
+    const bad = await client.waitForTask((await client.startTask(ID, { kind: 'place-voice', options: { shortId: 'short_parry' } })).id); // prettier-ignore
+    expect(bad).toMatchObject({ status: 'failed', error: { code: 'usage' } }); // the montage has no voiceover lines
+    const cut = await client.waitForTask((await client.startTask(ID, { kind: 'short-cut', options: { shortId: 'short_parry' } })).id); // prettier-ignore
+    expect(cut).toMatchObject({ status: 'succeeded', result: { timelineId: 'tl_short_short_parry', mode: 'plain' } }); // prettier-ignore
+    expect((await client.shorts(ID)).shorts[0]!.cut).toMatchObject({ built: true, mode: 'plain' });
+  });
+
+  async function raw2(method: string, path: string, body: unknown) {
+    return (await raw({ method, path, headers: { authorization: `Bearer ${svc.token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) })).status; // prettier-ignore
+  }
+});
+
 describe('capture', () => {
   const ID = 'proj_capture';
   let dir: string;
