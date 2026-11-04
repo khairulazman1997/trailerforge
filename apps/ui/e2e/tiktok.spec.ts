@@ -116,4 +116,12 @@ test('tiktok: record the voiceover in the app, line by line', async ({ page }) =
   await expect(dialog.getByRole('button', { name: 'Record again' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Done' }).click();
   await expect(page.getByText('1 of 2 voiceover lines recorded')).toBeVisible();
+
+  // Voice clean-up is on by default; the levels are measured on request.
+  await expect(page.getByLabel(/Clean up the voice/)).toBeChecked();
+  await page.getByRole('button', { name: 'Show voice levels' }).click();
+  await expect(page.getByRole('list', { name: 'Voice levels' })).toContainText(/LUFS after clean-up/, { timeout: 30_000 }); // prettier-ignore
+  await page.getByLabel(/Clean up the voice/).uncheck();
+  await expect(page.getByLabel(/Clean up the voice/)).not.toBeChecked();
+  expect(await axe(page)).toEqual([]);
 });

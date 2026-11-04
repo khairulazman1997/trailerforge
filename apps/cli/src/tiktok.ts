@@ -9,6 +9,7 @@ import {
   generateShortCutOp,
   placeVoiceOp,
   tapTempo,
+  voiceCleanReportOp,
   shortsViewOp,
   voiceDownloadOp,
   voiceStatusOp,
@@ -62,6 +63,7 @@ export const TIKTOK_SUBS = [
   'transcribe',
   'subtitles',
   'music',
+  'clean',
   'generate',
   'ask-claude',
 ] as const;
@@ -307,6 +309,25 @@ export async function tiktokCommand(
             ...(tapped?.ok ? [`  tapped: ${tapped.tempo} BPM from ${tapped.used} intervals, steadiness ${tapped.steadiness}`] : []), // prettier-ignore
           ].join('\n'),
           { music: s.music, export: mode },
+        );
+        return 0;
+      }
+      case 'clean': {
+        if (o.on && o.off) throw new OpError('usage', 'choose --on or --off');
+        if (o.on || o.off)
+          store.dispatch('core/shorts.set-voice-clean', { shortId: sid(), enabled: !!o.on });
+        const r = await voiceCleanReportOp(e, store, sid());
+        const db = (x: number | null) => (x === null ? '?' : x.toFixed(1));
+        ctx.emit(
+          [
+            `Voice clean-up ${r.enabled ? 'on' : 'off'} (voice brought to ${r.targetLufs} LUFS; recordings are not changed)`,
+            ...r.lines.map((l) =>
+              !l.info
+                ? `  ${l.voLineId.padEnd(30)} ${l.error ?? 'not recorded'}`
+                : `  ${l.voLineId.padEnd(30)} ${db(l.info.before.lufs)} → ${db(l.info.after.lufs)} LUFS, then ${l.info.gainDb >= 0 ? '+' : ''}${l.info.gainDb} dB; noise floor ${l.info.noiseFloorDb} dBFS`,
+            ),
+          ].join('\n'),
+          r,
         );
         return 0;
       }

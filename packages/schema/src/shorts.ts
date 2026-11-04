@@ -88,6 +88,8 @@ export const Short = z.strictObject({
   export: ExportSettings.optional(),
   platform: ShortPlatform.default('tiktok'),
   subtitles: ShortSubtitles.default({ enabled: false, style: 'lines', edits: [] }),
+  /** Clean up the voiceover at render (high-pass, noise reduction, de-esser, compression, level); the files are untouched. */
+  voiceClean: z.boolean().default(true),
   extensions: Extensions.default({}),
 });
 export type Short = z.infer<typeof Short>;

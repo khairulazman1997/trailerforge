@@ -58,6 +58,7 @@ import {
   createShortOp,
   fillSlotOp,
   recordVoiceTakeOp,
+  voiceCleanReportOp,
   recordingExtension,
   MAX_RECORDING_BYTES,
   generateShortCutOp,
@@ -794,6 +795,13 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         notBusy(store);
         return fillSlotOp(engine, store, decodeURIComponent(params.short!), o);
       },
+    ],
+    [
+      // Before/after loudness and noise floor of each voiceover recording (measured once, cached).
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/shorts\/(?<short>[^/]+)\/voice-clean$/,
+      async ({ params }) =>
+        voiceCleanReportOp(engine, storeById(params.id!), decodeURIComponent(params.short!)),
     ],
     [
       // A voiceover take recorded in the app: raw audio in the body, `?line=<voiceover line id>`.

@@ -116,6 +116,8 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
     "Choose the music a TikTok's cut follows (a library asset id, or null for none). timingOnly: the file only gives the beat (a reference song): it is never put on the timeline or exported. Rebuild the cut with tiktok_cut afterwards.",
   'core/shorts.set-grid':
     'Beat grid for a TikTok: tempo (BPM; no music file needed, e.g. from tap tempo), offset in flicks (at most a second), downbeatShift, beatsPerBar, barsPerPhrase. null clears tempo or beatsPerBar. Rebuild the cut with tiktok_cut afterwards.',
+  'core/shorts.set-voice-clean':
+    "Voice clean-up on or off for a TikTok (on by default): high-pass, noise reduction tuned to the recording's own noise floor, de-esser, gentle compression and a level to -16 LUFS, applied when it renders; the recordings are not changed.",
   'core/shorts.set-subtitles':
     'Turn subtitles on or off for a TikTok, choose lines or word-pop, and the app it is made for (tiktok, shorts, reels: where the app covers the picture). Rebuild the cut with tiktok_cut afterwards.',
   'core/shorts.edit-cue':

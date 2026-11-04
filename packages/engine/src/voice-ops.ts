@@ -12,6 +12,7 @@ import type { ProjectStore } from '@trailerforge/core';
 import { alignScript, voiceSpan, type Difference, type LineStatus } from '@trailerforge/cut';
 import type { Take, VoLine } from '@trailerforge/schema';
 import type { Engine } from './engine.js';
+import { voiceCleanFor, voiceCleanOn } from './voice-clean.js';
 import { OpError } from './ops.js';
 import { findShort } from './shorts-ops.js';
 
@@ -120,6 +121,19 @@ export async function placeVoiceOp(
       throw new OpError('not-found', `the recording "${a.originalName}" is missing or changed`);
     return { path: a.uri, quickHash: a.quickHash, analysisDir };
   };
+  // With clean-up on, the words are heard in the cleaned audio (the same length as the original).
+  const clean = voiceCleanOn(short);
+  const forTranscript = async (assetId: string) => {
+    const rec = await recording(assetId);
+    if (!clean) return rec;
+    try {
+      const c = await voiceCleanFor(engine, store, assetId, opts.signal);
+      return { path: c.cleanedPath, quickHash: c.quickHash, analysisDir };
+    } catch {
+      opts.signal?.throwIfAborted();
+      return rec; // the clean-up could not run: transcribe the original
+    }
+  };
 
   // Which recording each line comes from.
   const groups = new Map<string, VoLine[]>();
@@ -138,7 +152,7 @@ export async function placeVoiceOp(
     opts.signal?.throwIfAborted();
     const rec = await recording(assetId);
     if (transcriber) {
-      const { transcript } = await transcribeRecording(transcriber, rec, {
+      const { transcript } = await transcribeRecording(transcriber, await forTranscript(assetId), {
         prompt: group
           .map((v) => v.text)
           .join(' ')

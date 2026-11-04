@@ -112,6 +112,10 @@ describe('tforge tiktok', { timeout: 120_000 }, () => {
     expect(mu.out).toMatch(/tapped: 120 BPM/);
     expect((await run(['tiktok', 'music', project, 'short_parry', '--taps', '0,1'])).code).toBe(2);
 
+    const cl = await run(['tiktok', 'clean', project, 'short_parry', '--off']);
+    expect(cl.out).toMatch(/^Voice clean-up off/);
+    expect((await run(['tiktok', 'clean', project, 'short_parry', '--on'])).out).toMatch(/^Voice clean-up on/); // prettier-ignore
+
     const g = await run(['tiktok', 'generate', project, 'short_parry']);
     expect(g.code).toBe(1); // most slots are still empty: placeholders
     expect(g.out).toMatch(/Cut built \(on the beat\): \d+ items, \d+ placeholders/);

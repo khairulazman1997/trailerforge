@@ -138,6 +138,7 @@ export const addShort = defineCommand({
       storyboard: null,
       platform: 'tiktok',
       subtitles: { enabled: false, style: 'lines', edits: [] },
+      voiceClean: true,
       extensions: {},
     });
   },
@@ -496,6 +497,16 @@ export const setShortGrid = defineCommand({
   merge: { key: ({ shortId }) => `${shortId}:grid`, windowMs: 1500 },
 });
 
+/** Voice clean-up on or off for a TikTok (applied when it renders; the recordings stay as they are). */
+export const setShortVoiceClean = defineCommand({
+  type: 'core/shorts.set-voice-clean',
+  payload: z.strictObject({ shortId: Id, enabled: z.boolean() }),
+  label: ({ enabled }) => (enabled ? 'Turn voice clean-up on' : 'Turn voice clean-up off'),
+  apply: (d, { shortId, enabled }) => {
+    findShort(d, shortId, 'core/shorts.set-voice-clean').voiceClean = enabled;
+  },
+});
+
 export const shortsCommands = [
   addConcepts,
   removeConcepts,
@@ -511,6 +522,7 @@ export const shortsCommands = [
   setShortMusic,
   setShortGrid,
   setShortSubtitles,
+  setShortVoiceClean,
   editCue,
   resetCues,
 ] as unknown as readonly CommandDef<unknown>[];

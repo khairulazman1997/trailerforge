@@ -150,6 +150,7 @@ class Fake {
       voice: { status: 'absent' as const, disclosure: null },
     }),
     createShort: async () => ({ shortId: 'short_x', build: null }),
+    voiceClean: async () => ({ shortId: 's', enabled: true, targetLufs: -16, lines: [] }),
     recordVoiceTake: async () => ({ assetId: 'a', file: 'f.wav', take: 1, seconds: 1 }),
     fillShort: async () => ({ assetId: 'a', input: 'gameplay' as const, target: 's' }),
     claudeConceptsPreview: async () => ({

@@ -22,6 +22,7 @@ import {
 } from './render-ops.js';
 import { buildShortOp, generateShortCutOp } from './shorts-ops.js';
 import { placeVoiceOp } from './voice-ops.js';
+import { VOICE_TARGET_LUFS, voiceCleanReportOp } from './voice-clean.js';
 import { OpError } from './ops.js';
 
 /** A TikTok through the whole chain: template, files, voiceover, cut, subtitles, review, export. */
@@ -41,17 +42,18 @@ const manifest: ModelManifest = {
 const say = (text: string, at: number): [number, number, string][] =>
   text.split(' ').map((w, i) => [at + i * 0.35, at + i * 0.35 + 0.3, w]);
 const heard = [...say('This boss has one tell.', 0.5), ...say('Miss it and you are done.', 3.0)];
-const stub = stubTranscriber(
-  () =>
-    ({
-      duration: 6,
-      language: 'en',
-      languageProbability: 0.99,
-      segments: [],
-      words: heard.map(([start, end, text]) => ({ start, end, text, p: 0.9 })),
-      envelope: { hop: 0.01, db: [] },
-    }) satisfies RawTranscript,
-);
+const heardFrom: string[] = [];
+const stub = stubTranscriber((path) => {
+  heardFrom.push(path);
+  return {
+    duration: 6,
+    language: 'en',
+    languageProbability: 0.99,
+    segments: [],
+    words: heard.map(([start, end, text]) => ({ start, end, text, p: 0.9 })),
+    envelope: { hop: 0.01, db: [] },
+  } satisfies RawTranscript;
+});
 
 let root: string;
 let engine: Engine;
@@ -135,6 +137,27 @@ describe('a TikTok, end to end', { timeout: 300_000 }, () => {
     store.undo();
     expect(store.state.timelines).toHaveLength(before);
     await generateShortCutOp(engine, store, SHORT);
+  });
+
+  it('cleans the voice at render: heard from the cleaned copy, measured, and switchable', async () => {
+    expect(heardFrom[0]).toMatch(/voice-clean[\\/].+-v1\.wav$/);
+    const report = await voiceCleanReportOp(engine, store, SHORT);
+    expect(report).toMatchObject({ enabled: true, targetLufs: VOICE_TARGET_LUFS });
+    const info = report.lines[0]!.info!;
+    expect(info.after.lufs).not.toBeNull();
+    expect(info.noiseFloorDb).toBe(-80); // the test voice is digital silence between words
+    expect(Math.abs(info.after.lufs! + info.gainDb - VOICE_TARGET_LUFS)).toBeLessThan(0.1);
+    const on = await buildVersion(engine, store, SHORT);
+    const vo = on.timeline.tracks.find((t) => t.id === 'trk_voice')!.items[0]!;
+    expect((vo.extensions.core as { voiceClean?: unknown }).voiceClean).toEqual({ version: 1, gainDb: info.gainDb, noiseFloorDb: -80 }); // prettier-ignore
+    // The stored cut is not touched.
+    const stored = store.state.timelines.find((t) => t.id === `tl_short_${SHORT}`)!;
+    expect(JSON.stringify(stored)).not.toContain('voiceClean');
+    store.dispatch('core/shorts.set-voice-clean', { shortId: SHORT, enabled: false });
+    const off = await buildVersion(engine, store, SHORT);
+    expect(off.contentHash).not.toBe(on.contentHash);
+    store.dispatch('core/shorts.set-voice-clean', { shortId: SHORT, enabled: true });
+    expect((await buildVersion(engine, store, SHORT)).contentHash).toBe(on.contentHash);
   });
 
   it('is a version of the project: listed, built with the platform’s safe area, TikTok preset by default', async () => {

@@ -71,6 +71,7 @@ import type { Engine } from './engine.js';
 import { deriveVariantOp } from './graphics-ops.js';
 import { OpError } from './ops.js';
 import { STILL_SECONDS } from './still.js';
+import { voiceCleanOn, withVoiceClean } from './voice-clean.js';
 import { toSrt, toVtt } from '@trailerforge/cut';
 
 /**
@@ -175,6 +176,12 @@ export async function buildVersion(
   if (short && (o.withoutMusic || short.storyboard?.music.timingOnly))
     timeline = { ...timeline, tracks: timeline.tracks.filter((t) => t.id !== 'trk_music') };
   const warnings: string[] = [];
+  // Voice clean-up is applied at render, tuned to each recording; the stored cut stays as it is.
+  if (short && voiceCleanOn(short)) {
+    const c = await withVoiceClean(engine, store, timeline);
+    timeline = c.timeline;
+    warnings.push(...c.warnings);
+  }
 
   // The files the timeline uses, as the renderer and the checks need them.
   await engine.library.reload();

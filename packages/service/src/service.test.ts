@@ -1113,6 +1113,13 @@ describe('TikToks', () => {
     expect((await client.shorts(ID)).shorts.find((x) => x.id === 'short_spoken')!.progress.linesRecorded).toBe(1); // prettier-ignore
     await expect(client.recordVoiceTake(ID, 'short_spoken', line.id, new Blob(['x'], { type: 'text/plain' }))).rejects.toMatchObject({ status: 415 }); // prettier-ignore
     await expect(client.recordVoiceTake(ID, 'short_spoken', 'nope', audio)).rejects.toMatchObject({ status: 404 }); // prettier-ignore
+    const levels = await client.voiceClean(ID, 'short_spoken');
+    expect(levels).toMatchObject({
+      enabled: true,
+      targetLufs: -16,
+      lines: [{ voLineId: line.id }],
+    });
+    expect(levels.lines[0]!.info?.after.lufs).toEqual(expect.any(Number));
     const noToken = await fetch(`${svc.url}/v1/projects/${ID}/shorts/short_spoken/record?line=${line.id}`, { method: 'POST', headers: { 'Content-Type': 'audio/webm' }, body: 'x' }); // prettier-ignore
     expect(noToken.status).toBe(401);
   });

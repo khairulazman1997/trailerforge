@@ -107,6 +107,7 @@ Usage:
   tforge tiktok subtitles <dir> <short> [--on|--off] [--style lines|word-pop] [--platform tiktok|shorts|reels]
   tforge tiktok music <dir> <short> [--asset <id>|--none] [--timing-only] [--tempo <bpm>|--taps <s,s,s,s…>] [--export with|without|both]
                                                           Music for the cut (a reference song can give the beat only); tap tempo; export with/without music
+  tforge tiktok clean <dir> <short> [--on|--off]        Voice clean-up at render, with each recording's loudness before and after
   tforge tiktok generate <dir> <short>                    Build the TikTok's cut; then draft/export it with --version <short>
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
   tforge serve [--ui <dist>] [--port <n>] [--allow-origin <url>]...
@@ -479,6 +480,7 @@ export async function main(
       case 'tiktok transcribe':
       case 'tiktok subtitles':
       case 'tiktok music':
+      case 'tiktok clean':
       case 'tiktok generate':
       case 'tiktok ask-claude':
         return await tiktokCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3], {

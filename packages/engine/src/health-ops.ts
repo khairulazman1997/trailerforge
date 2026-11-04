@@ -45,7 +45,7 @@ export const REQUIRED_FILTERS = [
   'scale', 'crop', 'overlay', 'blend', 'fps', 'settb', 'setpts', 'tpad', 'trim', 'concat',
   'format', 'color', 'split', 'xfade', 'boxblur', 'pad', 'setsar', 'setparams', 'gblur',
   'vignette', 'rgbashift', 'noise', 'geq', 'volume', 'atrim', 'atempo', 'aresample', 'aformat',
-  'asetpts', 'apad', 'adelay', 'amix', 'alimiter',
+  'asetpts', 'apad', 'adelay', 'amix', 'alimiter', 'highpass', 'afftdn', 'deesser', 'acompressor',
 ] as const; // prettier-ignore
 /** Encoders the export presets and the handoff clips use. */
 export const REQUIRED_ENCODERS = ['libx264', 'prores_ks', 'aac', 'pcm_s24le'] as const;

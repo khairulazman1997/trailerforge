@@ -508,6 +508,8 @@ function ShortEditor({ id, short, disabled }: { id: string; short: Short; disabl
         </>
       )}
 
+      {short.voiceLines.length > 0 && <VoiceCleanPanel id={id} short={short} disabled={disabled} />}
+
       <Teleprompter
         id={id}
         shortId={short.id}
@@ -751,5 +753,70 @@ function MusicPanel({ id, short, disabled }: { id: string; short: Short; disable
         )}
       </div>
     </section>
+  );
+}
+
+/** Voice clean-up switch, and each recording's loudness before and after (measured on request). */
+function VoiceCleanPanel({ id, short, disabled }: { id: string; short: Short; disabled: boolean }) {
+  const store = useStore();
+  const [on, setOn] = usePending(
+    useAppState(
+      (st) =>
+        st.projects[id]!.project.shorts.find((x) => x.id === short.id)?.voiceClean ??
+        short.voiceClean,
+    ),
+  );
+  const [report, setReport] = useState<Awaited<ReturnType<typeof store.voiceClean>>>(null);
+  const [loading, setLoading] = useState(false);
+  const db = (x: number | null) => (x === null ? '?' : x.toFixed(1));
+  return (
+    <div className="stack">
+      <div className="row">
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={on}
+            disabled={disabled}
+            onChange={(e) =>
+              void setOn(e.target.checked, () =>
+                store.command(id, 'core/shorts.set-voice-clean', {
+                  shortId: short.id,
+                  enabled: e.target.checked,
+                }),
+              )
+            }
+          />
+          <span>
+            Clean up the voice (less hiss and harsh “s” sounds, even level; your files are not
+            changed)
+          </span>
+        </label>
+        <button
+          type="button"
+          disabled={disabled || loading || short.progress.linesRecorded === 0}
+          onClick={() => {
+            setLoading(true);
+            void store
+              .voiceClean(id, short.id)
+              .then(setReport)
+              .finally(() => setLoading(false));
+          }}
+        >
+          {loading ? 'Measuring…' : 'Show voice levels'}
+        </button>
+      </div>
+      {report && (
+        <ul className="tt-cues" aria-label="Voice levels">
+          {report.lines.map((l) => (
+            <li key={l.voLineId}>
+              <span className="muted">{l.text}</span>{' '}
+              {l.info
+                ? `${db(l.info.before.lufs)} → ${db(l.info.after.lufs)} LUFS after clean-up, then ${l.info.gainDb >= 0 ? '+' : ''}${l.info.gainDb} dB to ${report.targetLufs} LUFS`
+                : (l.error ?? 'not recorded')}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

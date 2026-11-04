@@ -11,6 +11,9 @@ import {
   compileAudio,
   ffmpegAudioArgs,
   masterFor,
+  voiceChain,
+  voiceCleanOf,
+  VOICE_CLEAN_VERSION,
   type MasterSettings,
 } from './audio.js';
 import type { SourceMedia } from './compile.js';
@@ -34,6 +37,7 @@ const base = { width: 320, height: 180, frameRate: R30, variableFrameRate: false
 let music: SourceMedia;
 let sfx: SourceMedia;
 let clip: SourceMedia;
+let voice: SourceMedia;
 
 beforeAll(() => {
   mkdirSync(dir, { recursive: true });
@@ -64,6 +68,9 @@ beforeAll(() => {
   ]);
   const c = make('clip.mkv', ['-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=3', '-f', 'lavfi', '-i',
     'sine=f=880:r=48000:d=3', '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'pcm_s16le', '-shortest']); // prettier-ignore
+  // A "voice": a tone from 0.5 s to 1.5 s over steady hiss for the whole two seconds.
+  const v = make('voice.wav', ['-f', 'lavfi', '-i', 'aevalsrc=0.3*sin(2*PI*300*t)*between(t\\,0.5\\,1.5):s=48000:d=2', '-f', 'lavfi', '-i', 'anoisesrc=d=2:a=0.03:seed=3:r=48000', '-filter_complex', '[0:a][1:a]amix=inputs=2:normalize=0', '-c:a', 'pcm_s16le']); // prettier-ignore
+  voice = { ...base, path: v, contentHash: '4'.repeat(64), duration: 2, hasAudio: true };
   music = { ...base, path: m, contentHash: '1'.repeat(64), duration: 4, hasAudio: true };
   sfx = { ...base, path: x, contentHash: '2'.repeat(64), duration: 0.3, hasAudio: true };
   clip = { ...base, path: c, contentHash: '3'.repeat(64), duration: 3, hasAudio: true };
@@ -194,6 +201,56 @@ describe('audio mix', { timeout: 60_000 }, () => {
     expect(Math.abs(m.integratedLufs - target.lufs)).toBeLessThanOrEqual(0.5);
     expect(m.truePeakDb).toBeLessThanOrEqual(-1);
     expect(done.samples.length).toBe(raw.samples.length);
+  });
+});
+
+describe('voice clean-up', { timeout: 60_000 }, () => {
+  const t = (ext: object) =>
+    tl([audioTrack('trk_voice', [aclip('vo', 'v', 0, s(2), { extensions: { core: ext } })])]);
+  let sources: Map<string, SourceMedia>;
+  beforeAll(() => void (sources = new Map([['v', voice]])));
+
+  it('lowers the hiss between words, is byte-identical twice, and only touches the clip that asks', () => {
+    const plain = mix(t({}), sources);
+    const clean = mix(
+      t({ voiceClean: { version: VOICE_CLEAN_VERSION, gainDb: 0, noiseFloorDb: -35 } }),
+      sources,
+    );
+    expect(plain.plan.filtergraph).not.toContain('afftdn');
+    expect(clean.plan.filtergraph).toContain(voiceChain({ noiseFloorDb: -35 }));
+    expect(clean.plan.planHash).not.toBe(plain.plan.planHash);
+    // Hiss before the tone (0–0.4 s): the clean-up takes several dB off.
+    expect(rmsDb(clean.samples, 0.05, 0.4)).toBeLessThan(rmsDb(plain.samples, 0.05, 0.4) - 6);
+    // The tone itself survives within a few dB (compression, no makeup).
+    expect(Math.abs(rmsDb(clean.samples, 0.7, 1.3) - rmsDb(plain.samples, 0.7, 1.3))).toBeLessThan(
+      6,
+    );
+    expect(mix(t({ voiceClean: { version: VOICE_CLEAN_VERSION, gainDb: 0, noiseFloorDb: -35 } }), sources).hash).toBe(clean.hash); // prettier-ignore
+  });
+
+  it('applies the level gain', () => {
+    const a = mix(
+      t({ voiceClean: { version: VOICE_CLEAN_VERSION, gainDb: 0, noiseFloorDb: -35 } }),
+      sources,
+    );
+    const b = mix(
+      t({ voiceClean: { version: VOICE_CLEAN_VERSION, gainDb: 6, noiseFloorDb: -35 } }),
+      sources,
+    );
+    expect(rmsDb(b.samples, 0.7, 1.3) - rmsDb(a.samples, 0.7, 1.3)).toBeCloseTo(6, 0);
+  });
+
+  it('reads the settings, clamping the gain, and warns about an unknown version', () => {
+    const clip = (core: object) => ({ extensions: { core } }) as never;
+    expect(voiceCleanOf(clip({}))).toBeUndefined();
+    expect(voiceCleanOf(clip({ voiceClean: { version: 1, gainDb: 99 } }))).toEqual({ version: 1, gainDb: 24, noiseFloorDb: -50 }); // prettier-ignore
+    expect(voiceCleanOf(clip({ voiceClean: { version: 1 } }))).toEqual({
+      version: 1,
+      gainDb: 0,
+      noiseFloorDb: -50,
+    });
+    const plan = compileAudio({ timeline: t({ voiceClean: { version: 99, gainDb: 0 } }), sources });
+    expect(plan.warnings.join(' ')).toMatch(/v99 is not known/);
   });
 });
 

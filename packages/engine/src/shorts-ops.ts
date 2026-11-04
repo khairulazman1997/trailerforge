@@ -36,6 +36,7 @@ import { join } from 'node:path';
 import type { Engine } from './engine.js';
 import { OpError } from './ops.js';
 import { STILL_SECONDS } from './still.js';
+import { transcriptHash, voiceCleanOn } from './voice-clean.js';
 import { voiceStatusOp, type VoiceView } from './voice-ops.js';
 
 /**
@@ -242,7 +243,7 @@ export async function generateShortCutOp(
         v.takes.find((t) => t.id === v.chosenTakeId) ?? v.takes.filter((t) => !t.rejected).at(-1);
       const a = take ? engine.library.get(take.assetId) : undefined;
       if (!take || !a || words.has(take.assetId)) continue;
-      const t = await readLatestTranscript(model.id, { quickHash: a.quickHash, analysisDir: store.paths.analysisCache }); // prettier-ignore
+      const t = await readLatestTranscript(model.id, { quickHash: transcriptHash(a.quickHash, voiceCleanOn(short)), analysisDir: store.paths.analysisCache }); // prettier-ignore
       if (t) words.set(take.assetId, t.words);
     }
   }
@@ -326,6 +327,8 @@ export interface ShortView {
   };
   platform: Short['platform'];
   subtitles: { enabled: boolean; style: Short['subtitles']['style']; edits: number };
+  /** Voice clean-up at render (on by default). */
+  voiceClean: boolean;
   hasTemplate: boolean;
   slots: ShortSlotView[];
   voiceLines: ShortVoiceLineView[];
@@ -405,6 +408,7 @@ export async function shortsViewOp(engine: Engine, store: ProjectStore): Promise
       },
       platform: s.platform,
       subtitles: { enabled: s.subtitles.enabled, style: s.subtitles.style, edits: s.subtitles.edits.length }, // prettier-ignore
+      voiceClean: voiceCleanOn(s),
       hasTemplate: sb !== null,
       slots,
       voiceLines,

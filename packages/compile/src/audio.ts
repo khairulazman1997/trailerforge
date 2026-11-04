@@ -57,6 +57,47 @@ export interface LoudnessTarget {
   truePeakDb: number;
 }
 
+/**
+ * Voice clean-up (TikTok voiceover): high-pass, FFT noise reduction against a fixed floor (no
+ * adaptive tracking, so the result depends only on the input), de-esser, gentle compression and
+ * a level gain. Runs on mono at 48 kHz. Deterministic: the same input gives the same samples.
+ * Change any number and `VOICE_CLEAN_VERSION` with it: cached cleaned files are keyed by it.
+ */
+export const VOICE_CLEAN_VERSION = 1;
+
+export function voiceChain(o: { gainDb?: number; noiseFloorDb?: number } = {}): string {
+  const nf = Math.round(Math.max(-80, Math.min(-20, o.noiseFloorDb ?? -50)));
+  return [
+    'highpass=f=80:poles=2',
+    `afftdn=nr=12:nf=${nf}:tn=0`,
+    'deesser=i=0.4:m=0.5:f=0.5:s=o',
+    'acompressor=threshold=0.125:ratio=3:attack=10:release=150:makeup=1:knee=2.8',
+    ...(o.gainDb ? [`volume=${esc(`${n(o.gainDb)}dB`)}`] : []),
+  ].join(',');
+}
+
+/** Voice clean-up on a clip, stored at `extensions.core.voiceClean` (set by the engine at render). */
+export interface VoiceClean {
+  version: number;
+  /** Level gain after the chain, dB (brings the cleaned voice to the voice target). */
+  gainDb: number;
+  /** The recording's own noise floor, dBFS (measured between words); what noise reduction removes. */
+  noiseFloorDb: number;
+}
+
+export function voiceCleanOf(item: TimelineItem): VoiceClean | undefined {
+  const raw = (item.extensions.core as { voiceClean?: Partial<VoiceClean> } | undefined)
+    ?.voiceClean;
+  if (!raw || typeof raw.version !== 'number') return undefined;
+  const g = typeof raw.gainDb === 'number' && Number.isFinite(raw.gainDb) ? raw.gainDb : 0;
+  const nf = typeof raw.noiseFloorDb === 'number' && Number.isFinite(raw.noiseFloorDb) ? raw.noiseFloorDb : -50; // prettier-ignore
+  return {
+    version: raw.version,
+    gainDb: Math.max(-24, Math.min(24, g)),
+    noiseFloorDb: Math.max(-80, Math.min(-20, nf)),
+  };
+}
+
 export interface MasterSettings {
   /** Linear gain applied to the whole mix, dB. */
   gainDb: number;
@@ -155,8 +196,12 @@ export function compileAudio(input: AudioCompileInput): AudioPlan {
         seek: n(Math.floor(srcStart * 1e6) / 1e6),
         duration: n(Math.ceil((needSec + 0.05) * 1e6) / 1e6),
       });
+      const clean = audio ? voiceCleanOf(it) : undefined;
+      if (clean && clean.version !== VOICE_CLEAN_VERSION)
+        warnings.push(`audio of "${it.id}": voice clean-up v${clean.version} is not known; cleaned with v${VOICE_CLEAN_VERSION}`); // prettier-ignore
       const parts = [
         `aresample=${MIX_RATE}`,
+        ...(clean ? ['aformat=sample_fmts=fltp:channel_layouts=mono', voiceChain(clean)] : []),
         'aformat=sample_fmts=fltp:channel_layouts=stereo',
         'asetpts=PTS-STARTPTS',
         ...tempo(speed),

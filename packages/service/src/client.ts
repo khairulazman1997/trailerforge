@@ -71,6 +71,7 @@ import type {
   fillSlotOp,
   shortsViewOp,
   voiceStatusOp,
+  voiceCleanReportOp,
   presetsViewOp,
   qualityOp,
   reviewViewOp,
@@ -384,6 +385,13 @@ export class ServiceClient {
       'POST',
       `/v1/projects/${encodeURIComponent(id)}/shorts/${encodeURIComponent(shortId)}/fill`,
       body,
+    );
+  }
+  /** Before/after loudness and the noise floor of each voiceover line's recording (voice clean-up). */
+  voiceClean(id: string, shortId: string) {
+    return this.request<Result<typeof voiceCleanReportOp>>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/shorts/${encodeURIComponent(shortId)}/voice-clean`,
     );
   }
   /** Add a voiceover take recorded in the browser (raw audio over the loopback service; nothing is sent elsewhere). */
