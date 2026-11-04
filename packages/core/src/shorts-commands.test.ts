@@ -335,4 +335,37 @@ describe('core/shorts.fill-slot and clear-slot', () => {
     expect(() => store.dispatch('core/shorts.set-cover', { shortId: sid })).toThrow();
     valid();
   });
+
+  it('series: episodes are shorts linked to it, take its look and the next number; removing it leaves them as they are', () => {
+    store.dispatch('core/series.add', { name: 'Boss in 30 seconds', premise: 'One boss, one tell.', subtitleStyle: 'word-pop', platform: 'reels', cadencePerWeek: 3 }); // prettier-ignore
+    const series = store.state.series[0]!;
+    expect(series).toMatchObject({ id: 'series_boss_in_30_seconds', formatId: 'game-trailer/tiktok-montage', subtitleStyle: 'word-pop', platform: 'reels', cadencePerWeek: 3 }); // prettier-ignore
+    expect(() => store.dispatch('core/series.add', { name: 'x', formatId: 'game-trailer/release-trailer' })).toThrow(); // prettier-ignore
+    const { id: _i, createdAt: _c, ...rest } = sampleConcept();
+    store.dispatch('core/concepts.add', { concepts: [{ ...rest, title: 'Warden', seriesId: series.id }, { ...rest, title: 'Forest', seriesId: series.id }] }); // prettier-ignore
+    store.dispatch('core/shorts.add', { conceptId: 'con_warden' });
+    store.dispatch('core/shorts.add', { conceptId: 'con_forest' });
+    const eps = store.state.shorts.filter((x) => x.seriesId === series.id);
+    expect(eps.map((x) => [x.episode, x.platform, x.subtitles.style])).toEqual([[1, 'reels', 'word-pop'], [2, 'reels', 'word-pop']]); // prettier-ignore
+    expect(() =>
+      store.dispatch('core/concepts.add', {
+        concepts: [{ ...rest, title: 'Ghost', seriesId: 'series_nope' }],
+      }),
+    ).toThrow(/unknown series/);
+
+    // Another TikTok joins as episode 3 and leaves again; editing the look can reach the episodes.
+    store.dispatch('core/shorts.set-series', { shortId: 'short_parry', seriesId: series.id });
+    expect(short().episode).toBe(3);
+    store.dispatch('core/shorts.set-series', { shortId: 'short_parry', seriesId: null });
+    expect(short().seriesId).toBeUndefined();
+    store.dispatch('core/series.edit', { seriesId: series.id, patch: { subtitleStyle: 'lines', platform: 'shorts' }, applyToEpisodes: true }); // prettier-ignore
+    expect(store.state.shorts.filter((x) => x.seriesId === series.id).map((x) => [x.platform, x.subtitles.style])).toEqual([['shorts', 'lines'], ['shorts', 'lines']]); // prettier-ignore
+    store.dispatch('core/series.edit', { seriesId: series.id, patch: { cadencePerWeek: null } });
+    expect(store.state.series[0]!.cadencePerWeek).toBeUndefined();
+    valid();
+    store.dispatch('core/series.remove', { seriesId: series.id });
+    expect(store.state.series).toEqual([]);
+    expect(store.state.shorts.every((x) => x.seriesId === undefined && x.episode === undefined)).toBe(true); // prettier-ignore
+    valid();
+  });
 });

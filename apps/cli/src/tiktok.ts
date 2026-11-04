@@ -12,6 +12,8 @@ import {
   voiceCleanReportOp,
   generateHooksOp,
   postCopyOp,
+  seriesConceptsOp,
+  exportSeriesOp,
   shortsViewOp,
   voiceDownloadOp,
   voiceStatusOp,
@@ -23,6 +25,12 @@ import { fail, type CmdCtx } from './m2.js';
 /** Options of `tforge tiktok …` (parsed in `main.ts`). */
 export interface TikTokOpts {
   none?: boolean | undefined;
+  new?: boolean | undefined;
+  queue?: boolean | undefined;
+  apply?: boolean | undefined;
+  drop?: boolean | undefined;
+  premise?: string | undefined;
+  cadence?: string | undefined;
   hashtags?: string | undefined;
   comment?: string | undefined;
   cover?: string | undefined;
@@ -80,6 +88,7 @@ export const TIKTOK_SUBS = [
   'clean',
   'hooks',
   'post',
+  'series',
   'generate',
   'ask-claude',
 ] as const;
@@ -345,6 +354,87 @@ export async function tiktokCommand(
           ].join('\n'),
           r,
         );
+        return 0;
+      }
+      case 'series': {
+        // `shortId` is the series id here.
+        const dispatch = (type: string, payload: Record<string, unknown>) => {
+          try {
+            store.dispatch(type, payload);
+          } catch (err) {
+            throw new OpError('usage', err instanceof Error ? err.message : String(err));
+          }
+        };
+        const list = () =>
+          store.state.series.length
+            ? store.state.series
+                .map((x) => {
+                  const eps = store.state.shorts.filter((sh) => sh.seriesId === x.id).length;
+                  return `${x.id.padEnd(28)} ${x.name}: ${eps} episode${eps === 1 ? '' : 's'}, ${x.formatId.replace('game-trailer/tiktok-', '')}, ${x.subtitleStyle}, ${x.platform}${x.cadencePerWeek ? `, ${x.cadencePerWeek}/week` : ''}`; // prettier-ignore
+                })
+                .join('\n')
+            : 'No series. Start one with --new --name <name> [--premise <text>].';
+        if (o.new) {
+          dispatch('core/series.add', {
+            name: need(o.name, '--name'),
+            ...(o.premise ? { premise: o.premise } : {}),
+            ...(o.format ? { formatId: o.format.includes('/') ? o.format : `game-trailer/tiktok-${o.format}` } : {}), // prettier-ignore
+            ...(o.style ? { subtitleStyle: o.style } : {}),
+            ...(o.platform ? { platform: o.platform } : {}),
+            ...(o.cadence ? { cadencePerWeek: Number(o.cadence) } : {}),
+          });
+          ctx.emit(list(), { series: store.state.series });
+          return 0;
+        }
+        if (!shortId) {
+          ctx.emit(list(), { series: store.state.series });
+          return 0;
+        }
+        const id = shortId;
+        if (o.generate) {
+          const r = await seriesConceptsOp(e, store, id, { ...(o.count ? { count: num('--count', o.count)! } : {}) }); // prettier-ignore
+          ctx.emit(
+            [
+              `${r.added.length} episode idea${r.added.length === 1 ? '' : 's'} added (make one with: tforge tiktok new <dir> --concept <id>)`,
+              ...r.added.map((c) => `  ${c.id}  ${c.title}`),
+              ...r.rejected.map((x) => `  ! "${x.title}" left out: ${x.reasons.join('; ')}`),
+            ].join('\n'),
+            r,
+          );
+          return 0;
+        }
+        if (o.queue) {
+          const r = await exportSeriesOp(e, store, id, {
+            onProgress: (p) =>
+              ctx.io.err(`${Math.round(p.fraction * 100)}% ${p.message ?? p.phase}`),
+          });
+          ctx.emit(
+            r.entries
+              .map(
+                (x) =>
+                  `  ${x.versionId}${x.episode ? ` (episode ${x.episode})` : ''}: ${x.status}${x.file ? ` → ${x.file}` : ''}${x.reason ? ` (${x.reason.split('\n')[0]})` : ''}`,
+              ) // prettier-ignore
+              .join('\n'),
+            r,
+          );
+          return r.entries.every((x) => x.status === 'exported' || x.status === 'skipped') ? 0 : 1;
+        }
+        if (o.drop) dispatch('core/series.remove', { seriesId: id });
+        else if (o.name || o.premise || o.style || o.platform || o.cadence || o.apply)
+          dispatch('core/series.edit', {
+            seriesId: id,
+            patch: {
+              ...(o.name ? { name: o.name } : {}),
+              ...(o.premise !== undefined ? { premise: o.premise } : {}),
+              ...(o.style ? { subtitleStyle: o.style } : {}),
+              ...(o.platform ? { platform: o.platform } : {}),
+              ...(o.cadence
+                ? { cadencePerWeek: o.cadence === 'none' ? null : Number(o.cadence) }
+                : {}),
+            },
+            ...(o.apply ? { applyToEpisodes: true } : {}),
+          });
+        ctx.emit(list(), { series: store.state.series });
         return 0;
       }
       case 'post': {

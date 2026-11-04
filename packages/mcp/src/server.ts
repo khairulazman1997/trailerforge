@@ -21,6 +21,7 @@ import {
   fillSlotOp,
   generateHooksOp,
   postCopyOp,
+  seriesConceptsOp,
   generateShortCutOp,
   placeVoiceOp,
   proposeConceptsOp,
@@ -920,6 +921,28 @@ export function createMcpServer(opts: McpServerOptions): Server {
           : {}),
         ...(typeof args.name === 'string' ? { name: args.name } : {}),
         wording: args.wording === true,
+      });
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_series_concepts',
+      description:
+        "Ask TrailerForge's own AI for 5 to 10 episode ideas for a series (core_series_add makes one: name, premise, format, subtitle style). The ideas wait in the concept list linked to the series, none repeating an existing episode; make each with tiktok_create (the episode takes the series' format, subtitle style and platform and the next number). You can also propose episodes yourself with tiktok_concepts_propose. Export each episode with export_start, using its id as the version. The request sends the series premise, the brief and the game facts not excluded from AI use.",
+      inputSchema: object(
+        {
+          series: { type: 'string', description: 'A series id from tiktok_status.' },
+          count: { type: 'integer', minimum: 5, maximum: 10, description: 'How many (default 6).' },
+        },
+        ['series'],
+      ),
+    },
+    async run(args) {
+      if (typeof args.series !== 'string' || !args.series) throw new Error('series is required');
+      return seriesConceptsOp(engine, await project(args), args.series, {
+        ...(typeof args.count === 'number' ? { count: args.count } : {}),
       });
     },
   });

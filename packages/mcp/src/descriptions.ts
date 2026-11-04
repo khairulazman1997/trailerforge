@@ -118,6 +118,13 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
     'Beat grid for a TikTok: tempo (BPM; no music file needed, e.g. from tap tempo), offset in flicks (at most a second), downbeatShift, beatsPerBar, barsPerPhrase. null clears tempo or beatsPerBar. Rebuild the cut with tiktok_cut afterwards.',
   'core/shorts.set-voice-clean':
     "Voice clean-up on or off for a TikTok (on by default): high-pass, noise reduction tuned to the recording's own noise floor, de-esser, gentle compression and a level to -16 LUFS, applied when it renders; the recordings are not changed.",
+  'core/series.add':
+    'Start a series of TikToks: name, premise (what every episode is about), formatId (a short-form format), subtitleStyle, platform and cadencePerWeek (kept for the planner). Episodes are ordinary TikToks linked to it.',
+  'core/series.edit':
+    'Change a series. applyToEpisodes: true also sets its subtitle style and platform on every episode. cadencePerWeek null clears it.',
+  'core/series.remove': 'Remove a series; its episodes stay as ordinary TikToks.',
+  'core/shorts.set-series':
+    "Make a TikTok an episode of a series (it gets the next number and the series' subtitle style and platform), or take it out with seriesId null.",
   'core/shorts.set-post-copy':
     'The text that goes with a posted TikTok: caption (up to 2200 characters), hashtags (tidied: no #, one word each), pinned comment (up to 150) and coverTitle. Fields you leave out stay. Written beside the export as <name>.post.txt.',
   'core/shorts.set-cover':

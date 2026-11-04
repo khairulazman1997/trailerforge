@@ -33,6 +33,7 @@ import {
 import { z } from 'zod';
 import { CommandError, defineCommand, type CommandDef } from './commands.js';
 import { GridPatch, applyGridPatch } from './music-commands.js';
+import { joinSeries } from './series-commands.js';
 import { dropVersionReview } from './review-commands.js';
 
 /**
@@ -134,6 +135,8 @@ export const addShort = defineCommand({
         throw new CommandError(type, `id "${shortTimelineId(p.id)}" is used`);
     }
     const id = p.id ?? mintId('short', p.name ?? picked.title, taken);
+    if (picked.seriesId && !d.series.some((x) => x.id === picked.seriesId))
+      throw new CommandError(type, `no series "${picked.seriesId}"`);
     d.shorts.push({
       id,
       name: p.name ?? picked.title,
@@ -149,6 +152,8 @@ export const addShort = defineCommand({
       cover: { title: '' },
       extensions: {},
     });
+    // An episode takes its series' look and the next number.
+    if (picked.seriesId) joinSeries(d, id, picked.seriesId);
   },
 });
 

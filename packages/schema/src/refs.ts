@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import { MigrationError, migrateProject } from './migrations.js';
 import { Project } from './project.js';
+const TIKTOK_FORMAT_PREFIX = /^[a-z0-9-]+\/tiktok-/;
 import type { Storyboard, Take } from './storyboard.js';
 import { hookVersionId, shortVersionOf } from './shorts.js';
 
@@ -59,9 +60,19 @@ export function validateProjectRefs(project: Project): RefIssue[] {
   if (project.storyboard) checkStoryboard(project.storyboard, 'storyboard', ctx);
 
   project.concepts.forEach((c, i) => claim(c.id, `concepts[${i}]`));
+  const seriesIds = new Set(project.series.map((x) => x.id));
+  project.series.forEach((x, i) => {
+    claim(x.id, `series[${i}]`);
+    if (!TIKTOK_FORMAT_PREFIX.test(x.formatId)) issue(`series[${i}]`, `"${x.formatId}" is not a short-form format`); // prettier-ignore
+  });
+  project.concepts.forEach((c, i) => {
+    if (c.seriesId && !seriesIds.has(c.seriesId))
+      issue(`concepts[${i}]`, `unknown series "${c.seriesId}"`);
+  });
   project.shorts.forEach((sh, i) => {
     const p = `shorts[${i}]`;
     claim(sh.id, p);
+    if (sh.seriesId && !seriesIds.has(sh.seriesId)) issue(p, `unknown series "${sh.seriesId}"`);
     if (sh.formatTargetId && !formatIds.has(sh.formatTargetId))
       issue(p, `unknown format target "${sh.formatTargetId}"`);
     const hookIds = new Set<string>();

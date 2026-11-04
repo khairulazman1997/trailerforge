@@ -331,6 +331,9 @@ export interface ShortView {
   subtitles: { enabled: boolean; style: Short['subtitles']['style']; edits: number };
   /** Voice clean-up at render (on by default). */
   voiceClean: boolean;
+  /** The series this is an episode of, and its number. */
+  seriesId: string | null;
+  episode: number | null;
   hasTemplate: boolean;
   /** Caption, hashtags and pinned comment, and the cover (frame time and title). */
   post: Short['post'];
@@ -349,7 +352,21 @@ export interface ShortView {
   cut: { built: boolean; mode: 'voice' | 'beat' | 'plain' | null; seconds: number | null };
 }
 
+export interface SeriesView {
+  id: string;
+  name: string;
+  premise: string;
+  formatId: string;
+  subtitleStyle: Short['subtitles']['style'];
+  platform: Short['platform'];
+  cadencePerWeek: number | null;
+  episodes: { shortId: string; name: string; episode: number | null; cutBuilt: boolean }[];
+  /** Episode ideas waiting to be made. */
+  waiting: number;
+}
+
 export interface ShortsView {
+  series: SeriesView[];
   shorts: ShortView[];
   /** Concepts waiting to be picked. */
   concepts: ConceptInput[];
@@ -418,6 +435,8 @@ export async function shortsViewOp(engine: Engine, store: ProjectStore): Promise
       platform: s.platform,
       subtitles: { enabled: s.subtitles.enabled, style: s.subtitles.style, edits: s.subtitles.edits.length }, // prettier-ignore
       voiceClean: voiceCleanOn(s),
+      seriesId: s.seriesId ?? null,
+      episode: s.episode ?? null,
       hasTemplate: sb !== null,
       post: s.post,
       cover: s.cover,
@@ -456,7 +475,26 @@ export async function shortsViewOp(engine: Engine, store: ProjectStore): Promise
       },
     };
   });
-  return { shorts, concepts: project.concepts, voice: await voiceStatusOp(engine) };
+  const series: SeriesView[] = project.series.map((x) => ({
+    id: x.id,
+    name: x.name,
+    premise: x.premise,
+    formatId: x.formatId,
+    subtitleStyle: x.subtitleStyle,
+    platform: x.platform,
+    cadencePerWeek: x.cadencePerWeek ?? null,
+    episodes: project.shorts
+      .filter((sh) => sh.seriesId === x.id)
+      .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))
+      .map((sh) => ({
+        shortId: sh.id,
+        name: sh.name,
+        episode: sh.episode ?? null,
+        cutBuilt: project.timelines.some((t) => t.id === shortTimelineId(sh.id)),
+      })),
+    waiting: project.concepts.filter((c) => c.seriesId === x.id).length,
+  }));
+  return { series, shorts, concepts: project.concepts, voice: await voiceStatusOp(engine) };
 }
 
 // ---- making a TikTok and filling it ------------------------------------------------------------

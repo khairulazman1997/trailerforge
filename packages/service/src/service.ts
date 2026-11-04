@@ -60,6 +60,8 @@ import {
   recordVoiceTakeOp,
   generateHooksOp,
   postCopyOp,
+  seriesConceptsOp,
+  exportSeriesOp,
   voiceCleanReportOp,
   recordingExtension,
   MAX_RECORDING_BYTES,
@@ -385,6 +387,17 @@ const TaskRequest = z.discriminatedUnion('kind', [
       count: z.int().min(1).max(10).optional(),
       repo: z.string().optional(),
     }),
+  }),
+  z.strictObject({
+    kind: z.literal('series-concepts'),
+    options: z.strictObject({
+      seriesId: z.string().min(1),
+      count: z.int().min(5).max(10).optional(),
+    }),
+  }),
+  z.strictObject({
+    kind: z.literal('export-series'),
+    options: z.strictObject({ seriesId: z.string().min(1) }),
   }),
   z.strictObject({
     kind: z.literal('post-copy'),
@@ -1364,12 +1377,11 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       async ({ params, body, res }) => {
         const store = storeById(params.id!);
         const t = TaskRequest.parse(await body());
-        const isRender = t.kind === 'render-draft' || t.kind === 'export' || t.kind === 'handoff';
+        const RENDER_KINDS = ['render-draft', 'export', 'export-series', 'handoff'];
+        const isRender = RENDER_KINDS.includes(t.kind);
         if (isRender) {
           // Renders read the project when they start, so editing may go on; one at a time.
-          const other = tasks
-            .running(store.state.id)
-            .find((x) => x.kind === 'render-draft' || x.kind === 'export' || x.kind === 'handoff');
+          const other = tasks.running(store.state.id).find((x) => RENDER_KINDS.includes(x.kind));
           if (other)
             throw new HttpError(409, 'busy', `a ${other.kind} is already running for this project`);
         } else notBusy(store);
@@ -1391,6 +1403,11 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
               signal,
               onProgress: progress,
               ...(t.options.overrides ? { overrides: t.options.overrides } : {}),
+            });
+          if (t.kind === 'export-series')
+            return exportSeriesOp(engine, store, t.options.seriesId, {
+              signal,
+              onProgress: progress,
             });
           if (t.kind === 'handoff')
             return handoffOp(engine, store, t.options.variantId, {
@@ -1426,6 +1443,11 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await buildShortOp(engine, store, t.options.shortId, {
               ...(t.options.sectionIds ? { sectionIds: t.options.sectionIds } : {}),
               ...(t.options.wording !== undefined ? { wording: t.options.wording } : {}),
+              signal,
+            });
+          else if (t.kind === 'series-concepts')
+            out = await seriesConceptsOp(engine, store, t.options.seriesId, {
+              ...(t.options.count !== undefined ? { count: t.options.count } : {}),
               signal,
             });
           else if (t.kind === 'post-copy')

@@ -8,6 +8,7 @@ import { takeCommands } from './take-commands.js';
 import { timelineCommands } from './timeline-commands.js';
 import { exportCommands } from './export-commands.js';
 import { reviewCommands } from './review-commands.js';
+import { seriesCommands } from './series-commands.js';
 import { shortsCommands } from './shorts-commands.js';
 import { variantCommands } from './variant-commands.js';
 
@@ -57,6 +58,7 @@ export function coreCommands(registry = new CommandRegistry()): CommandRegistry 
     ...reviewCommands,
     ...brandCommands,
     ...shortsCommands,
+    ...seriesCommands,
   ])
     registry.register(c);
   return registry;

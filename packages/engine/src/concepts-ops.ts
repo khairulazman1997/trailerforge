@@ -11,7 +11,7 @@ import {
   type VetResult,
   type VettedConcept,
 } from '@trailerforge/pack-game-trailer';
-import { DecisionRecord } from '@trailerforge/schema';
+import { DecisionRecord, type Series } from '@trailerforge/schema';
 import { createHash } from 'node:crypto';
 import type { Engine } from './engine.js';
 import { OpError } from './ops.js';
@@ -34,6 +34,8 @@ export interface ConceptsOutcome {
 }
 
 export interface ConceptsOptions {
+  /** Write episodes of this series (they link to it and use its format). */
+  series?: Pick<Series, 'id' | 'name' | 'premise' | 'formatId'> | undefined;
   ideas?: readonly string[] | undefined;
   count?: number | undefined;
   signal?: AbortSignal | undefined;
@@ -98,6 +100,7 @@ export async function conceptsOp(
 ): Promise<ConceptsOutcome> {
   requireBrief(store);
   const r = await generateConcepts({ llm: engine.llmFor(store) }, store.state, {
+    ...(opts.series ? { series: opts.series } : {}),
     ...(opts.ideas ? { ideas: opts.ideas } : {}),
     ...(opts.count !== undefined ? { count: opts.count } : {}),
     ...(opts.signal ? { signal: opts.signal } : {}),

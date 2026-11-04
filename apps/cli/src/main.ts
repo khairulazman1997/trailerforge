@@ -108,6 +108,8 @@ Usage:
   tforge tiktok music <dir> <short> [--asset <id>|--none] [--timing-only] [--tempo <bpm>|--taps <s,s,s,s…>] [--export with|without|both]
                                                           Music for the cut (a reference song can give the beat only); tap tempo; export with/without music
   tforge tiktok clean <dir> <short> [--on|--off]        Voice clean-up at render, with each recording's loudness before and after
+  tforge tiktok series <dir> [<series>] [--new --name <n> [--premise <t>] [--format montage|voiceover|…] [--style lines|word-pop] [--platform …] [--cadence <per week>]|--generate [--count 5-10]|--queue|--apply|--drop]
+                                                          Series of TikToks: episode ideas from the AI, one look for all, export them as a queue
   tforge tiktok post <dir> <short> [--generate] [--caption <t>] [--hashtags <a,b,c>] [--comment <t>] [--cover <title>] [--at <s>|poster]
                                                           Caption, hashtags, pinned comment and cover; written beside the export as .post.txt and .cover.png
   tforge tiktok hooks <dir> <short> [--generate [--count n]|--add --name <n> [--caption <t>] [--kind cold-open|text|question|custom] [--take <id>]|--edit <id> …|--remove <id>]
@@ -221,6 +223,11 @@ export async function main(
         to: { type: 'string' },
         language: { type: 'string' },
         none: { type: 'boolean', default: false },
+        new: { type: 'boolean', default: false },
+        queue: { type: 'boolean', default: false },
+        apply: { type: 'boolean', default: false },
+        premise: { type: 'string' },
+        cadence: { type: 'string' },
         hashtags: { type: 'string' },
         comment: { type: 'string' },
         cover: { type: 'string' },
@@ -497,6 +504,7 @@ export async function main(
       case 'tiktok clean':
       case 'tiktok hooks':
       case 'tiktok post':
+      case 'tiktok series':
       case 'tiktok generate':
       case 'tiktok ask-claude':
         return await tiktokCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3], {
@@ -525,6 +533,12 @@ export async function main(
           style: o.style,
           platform: o.platform,
           none: o.none,
+          new: o.new,
+          queue: o.queue,
+          apply: o.apply,
+          drop: o.drop,
+          premise: o.premise,
+          cadence: o.cadence,
           hashtags: o.hashtags,
           comment: o.comment,
           cover: o.cover,

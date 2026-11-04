@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { tapTempo } from '@trailerforge/cut';
 import { PLATFORM_NAMES, PLATFORM_SAFE } from '@trailerforge/graphics';
+import { TIKTOK_FORMATS } from '@trailerforge/pack-game-trailer/browser';
 import { useAppState, useStore } from '../app-context.js';
 import { Teleprompter } from '../components/Teleprompter.js';
 import { BrowseButton } from '../components/BrowseButton.js';
@@ -62,6 +63,8 @@ export function TikTokPage({ id }: { id: string }) {
         on the Review and Export tabs, where it appears as its own version.
       </p>
 
+      <SeriesPanel id={id} disabled={disabled} />
+
       <section aria-labelledby="tt-ideas">
         <h2 id="tt-ideas">Concepts</h2>
         <label className="field">
@@ -91,6 +94,11 @@ export function TikTokPage({ id }: { id: string }) {
                 <h3>{c.title}</h3>
                 <p>
                   <span className="chip">{c.source ?? 'user'}</span>{' '}
+                  {c.seriesId && (
+                    <span className="chip">
+                      series: {view?.series.find((x) => x.id === c.seriesId)?.name ?? c.seriesId}
+                    </span>
+                  )}{' '}
                   <span className="muted">
                     {c.formatId.replace('game-trailer/tiktok-', '')} · about {c.targetSeconds} s
                   </span>
@@ -1139,6 +1147,271 @@ function PostDialog({
             {preview.model ? ` (${preview.model})` : ''}: the concept, the shot titles, the
             voiceover script, the brief and the game facts not excluded from AI use. Never
             recordings or game files.
+          </p>
+        )}
+      </div>
+    </ConfirmDialog>
+  );
+}
+
+/** Series: TikToks that share a format and a look; episode ideas from the AI; export them as a queue. */
+function SeriesPanel({ id, disabled }: { id: string; disabled: boolean }) {
+  const store = useStore();
+  const view = useAppState((s) => s.shorts[id]?.view);
+  const progress = useAppState((s) => s.renderProgress[id]);
+  const tasks = useAppState((s) => s.tasks);
+  const [name, setName] = useState('');
+  const [premise, setPremise] = useState('');
+  const [formatId, setFormatId] = useState(TIKTOK_FORMATS[0]!.id);
+  const [ask, setAsk] = useState<string | null>(null);
+  const series = view?.series ?? [];
+  const run = (type: string, payload: Record<string, unknown>) => store.command(id, type, payload);
+  const queue = Object.values(tasks).find(
+    (t) => t.projectId === id && t.kind === 'export-series' && t.status === 'running',
+  );
+  const lastQueue = Object.values(tasks)
+    .filter((t) => t.projectId === id && t.kind === 'export-series' && t.status !== 'running')
+    .at(-1);
+  const entries =
+    (
+      lastQueue?.result as
+        { entries?: { versionId: string; status: string; reason?: string }[] } | undefined
+    )?.entries ?? [];
+  return (
+    <section aria-labelledby="tt-series">
+      <h2 id="tt-series">Series</h2>
+      <p className="muted">
+        A series is TikToks that belong together: one format and subtitle style, a premise each
+        episode plays out differently. The AI can suggest episodes, and you can export them all at
+        once.
+      </p>
+      <div className="row">
+        <label className="field">
+          <span>Series name</span>
+          <input
+            type="text"
+            value={name}
+            disabled={disabled}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>What every episode is about</span>
+          <input
+            type="text"
+            value={premise}
+            disabled={disabled}
+            onChange={(e) => setPremise(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>Format</span>
+          <select
+            value={formatId}
+            disabled={disabled}
+            onChange={(e) => setFormatId(e.target.value)}
+          >
+            {TIKTOK_FORMATS.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          disabled={disabled || !name.trim()}
+          onClick={() =>
+            void run('core/series.add', {
+              name: name.trim(),
+              premise: premise.trim(),
+              formatId,
+            }).then(() => {
+              setName('');
+              setPremise('');
+            })
+          }
+        >
+          Start the series
+        </button>
+      </div>
+      {series.map((x) => (
+        <div key={x.id} className="card" role="group" aria-label={`Series ${x.name}`}>
+          <h3>{x.name}</h3>
+          <label className="field">
+            <span>Premise</span>
+            <input
+              key={`p:${x.premise}`}
+              type="text"
+              defaultValue={x.premise}
+              disabled={disabled}
+              onBlur={(e) =>
+                e.target.value.trim() !== x.premise &&
+                void run('core/series.edit', { seriesId: x.id, patch: { premise: e.target.value } })
+              }
+            />
+          </label>
+          <div className="row">
+            <label className="field">
+              <span>Subtitles</span>
+              <select
+                value={x.subtitleStyle}
+                disabled={disabled}
+                onChange={
+                  (e) =>
+                  void run('core/series.edit', { seriesId: x.id, patch: { subtitleStyle: e.target.value }, applyToEpisodes: true }) // prettier-ignore
+                }
+              >
+                <option value="lines">Sentence lines</option>
+                <option value="word-pop">Big words, spoken one lit</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Made for</span>
+              <select
+                value={x.platform}
+                disabled={disabled}
+                onChange={
+                  (e) =>
+                  void run('core/series.edit', { seriesId: x.id, patch: { platform: e.target.value }, applyToEpisodes: true }) // prettier-ignore
+                }
+              >
+                <option value="tiktok">TikTok</option>
+                <option value="shorts">YouTube Shorts</option>
+                <option value="reels">Instagram Reels</option>
+              </select>
+            </label>
+          </div>
+          <p className="muted">Changing the subtitles or the app here changes every episode.</p>
+          <ol aria-label={`Episodes of ${x.name}`}>
+            {x.episodes.map((ep) => (
+              <li key={ep.shortId}>
+                {ep.name}{' '}
+                <span className="muted">{ep.cutBuilt ? '(cut built)' : '(no cut yet)'}</span>
+              </li>
+            ))}
+          </ol>
+          {x.episodes.length === 0 && (
+            <p className="muted">
+              No episodes yet.
+              {x.waiting > 0
+                ? ` ${x.waiting} idea${x.waiting === 1 ? '' : 's'} waiting below.`
+                : ''}
+            </p>
+          )}
+          {x.episodes.length > 0 && x.waiting > 0 && (
+            <p className="muted">
+              {x.waiting} more idea{x.waiting === 1 ? '' : 's'} waiting below.
+            </p>
+          )}
+          <div className="row">
+            <button type="button" disabled={disabled} onClick={() => setAsk(x.id)}>
+              Suggest episodes
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={disabled || !!queue || x.episodes.length === 0}
+              onClick={() =>
+                void store.startTask(id, { kind: 'export-series', options: { seriesId: x.id } })
+              }
+            >
+              Export all episodes
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              aria-label={`Remove series ${x.name}`}
+              onClick={() => void run('core/series.remove', { seriesId: x.id })}
+            >
+              Remove series
+            </button>
+          </div>
+        </div>
+      ))}
+      {queue && (
+        <p role="status">
+          Exporting the series… {Math.round((progress?.fraction ?? 0) * 100)}%
+          {progress?.message ? ` ${progress.message}` : ''}{' '}
+          <button type="button" onClick={() => void store.cancelTask(queue.id)}>
+            Cancel
+          </button>
+        </p>
+      )}
+      {!queue && entries.length > 0 && (
+        <ul className="findings" aria-label="Series export results">
+          {entries.map((e) => (
+            <li key={e.versionId}>
+              <span>
+                <code>{e.versionId}</code>: {e.status}
+                {e.reason ? ` (${e.reason.split('\n')[0]})` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <SeriesDialog id={id} seriesId={ask} onClose={() => setAsk(null)} />
+    </section>
+  );
+}
+
+function SeriesDialog({
+  id,
+  seriesId,
+  onClose,
+}: {
+  id: string;
+  seriesId: string | null;
+  onClose: () => void;
+}) {
+  const store = useStore();
+  const [count, setCount] = useState(6);
+  const open = seriesId !== null;
+  const preview = usePreview(id, 'tiktok.concepts', open);
+  const provider = preview?.provider;
+  return (
+    <ConfirmDialog
+      open={open}
+      title="Suggest episodes"
+      confirmLabel="Suggest"
+      confirmDisabled={!preview?.available}
+      {...(needsConsent(preview) && provider
+        ? { acknowledge: `I understand this information is sent to ${provider.name}.` }
+        : {})}
+      onCancel={onClose}
+      onConfirm={async () => {
+        if (!preview?.available || !seriesId) return;
+        if (provider?.sendsDataOffDevice) giveConsent(provider.id);
+        await store.startTask(id, { kind: 'series-concepts', options: { seriesId, count } });
+        onClose();
+      }}
+    >
+      <div className="stack">
+        <p>
+          The AI proposes episodes that follow the series' premise and do not repeat the ones you
+          have. They wait in the concept list; pick each with "Make this TikTok".
+        </p>
+        <label className="field">
+          <span>How many (5 to 10)</span>
+          <input
+            type="number"
+            min={5}
+            max={10}
+            value={count}
+            onChange={(e) => setCount(Math.max(5, Math.min(10, Number(e.target.value) || 6)))}
+          />
+        </label>
+        {!preview ? (
+          <p role="status">Checking which AI provider will be used…</p>
+        ) : !preview.available || !provider ? (
+          <p className="error" role="alert">
+            No AI provider is available: {preview.reason}.
+          </p>
+        ) : (
+          <p data-testid="disclosure">
+            Sent to <strong>{provider.name}</strong>
+            {preview.model ? ` (${preview.model})` : ''}: the series name and premise, the brief and
+            the game facts not excluded from AI use. Never recordings or game files.
           </p>
         )}
       </div>

@@ -20,6 +20,7 @@ import {
   renderDraftOp,
   reviewViewOp,
 } from './render-ops.js';
+import { exportSeriesOp } from './series-ops.js';
 import { buildShortOp, generateShortCutOp } from './shorts-ops.js';
 import { placeVoiceOp } from './voice-ops.js';
 import { VOICE_TARGET_LUFS, voiceCleanReportOp } from './voice-clean.js';
@@ -321,6 +322,24 @@ describe('a TikTok, end to end', { timeout: 300_000 }, () => {
     const none = await exportVersionOp(engine, store, SHORT);
     expect(none.postFile).toBeUndefined();
     expect(none.coverFile).toBeUndefined();
+  });
+
+  it('exports a series as a queue: every episode and its hook versions in order, progress across them', async () => {
+    store.dispatch('core/series.add', {
+      name: 'Parry series',
+      formatId: 'game-trailer/tiktok-voiceover',
+    });
+    const sid = store.state.series[0]!.id;
+    store.dispatch('core/shorts.set-series', { shortId: SHORT, seriesId: sid });
+    store.dispatch('core/shorts.add-hook', { shortId: SHORT, hook: { name: 'Question', caption: 'Can you parry this?' } }); // prettier-ignore
+    const fractions: number[] = [];
+    const r = await exportSeriesOp(engine, store, sid, { onProgress: (p) => fractions.push(p.fraction) }); // prettier-ignore
+    expect(r.entries.map((e) => [e.versionId, e.episode, e.status])).toEqual([[SHORT, 1, 'exported'], [`${SHORT}_hk_a`, 1, 'exported']]); // prettier-ignore
+    for (const e of r.entries) expect(existsSync(e.file!)).toBe(true);
+    expect(Math.max(...fractions)).toBe(1);
+    expect(fractions.some((f) => f > 0.5 && f < 1)).toBe(true);
+    store.dispatch('core/shorts.remove-hook', { shortId: SHORT, hookId: 'a' });
+    store.dispatch('core/series.remove', { seriesId: sid });
   });
 
   it('hands off to an editor, and dropping the short drops its review', async () => {

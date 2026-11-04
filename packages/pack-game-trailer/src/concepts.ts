@@ -1,5 +1,5 @@
 import { BUILTIN_PROMPTS_DIR, loadPrompt, type LlmClient } from '@trailerforge/llm';
-import { Concept, type ConceptSource, type Project } from '@trailerforge/schema';
+import { Concept, type ConceptSource, type Project, type Series } from '@trailerforge/schema';
 import { z } from 'zod';
 import { CAPTURE_TIPS_PROMPTS_DIR, excludedTerms, redactor, textLeaves } from './capture-tips.js';
 import { TIKTOK_FORMAT_IDS, TIKTOK_FORMATS } from './tiktok-formats.js';
@@ -166,6 +166,8 @@ export interface GenerateConceptsOptions {
   ideas?: readonly string[];
   /** How many to ask for (1 to 10, default 5). */
   count?: number;
+  /** Write episodes of this series: its premise guides them, its format is used, they link to it. */
+  series?: Pick<Series, 'id' | 'name' | 'premise' | 'formatId'>;
   signal?: AbortSignal;
 }
 
@@ -236,6 +238,23 @@ export async function conceptsPrompt(
 /** What Claude Code is told to be (it reads, it never changes anything). */
 export const CLAUDE_CODE_CONCEPTS_PROMPT = 'tiktok.claude-code-concepts';
 
+/** The series brief as extra ideas: what it is, what not to repeat, that each episode stands alone. */
+function withSeriesIdeas(project: Project, opts: GenerateConceptsOptions): GenerateConceptsOptions {
+  const sr = opts.series;
+  if (!sr) return opts;
+  const done = project.shorts.filter((x) => x.seriesId === sr.id).map((x) => x.concept.title);
+  const waiting = project.concepts.filter((x) => x.seriesId === sr.id).map((x) => x.title);
+  const have = [...done, ...waiting];
+  return {
+    ...opts,
+    ideas: [
+      `Episodes of the series "${sr.name}"${sr.premise ? `: ${sr.premise}` : ''}. Each episode stands alone, follows the same idea in a new way, and must not repeat another episode.`,
+      ...(have.length ? [`Episodes that already exist (do not repeat): ${have.join('; ')}`] : []),
+      ...(opts.ideas ?? []),
+    ],
+  };
+}
+
 export async function generateConcepts(
   deps: GenerateConceptsDeps,
   project: Project,
@@ -244,7 +263,7 @@ export async function generateConcepts(
   const system = await loadPrompt('system.trailer-craft', { projectName: project.name }, [
     BUILTIN_PROMPTS_DIR,
   ]);
-  const prompt = await conceptsPrompt(project, opts);
+  const prompt = await conceptsPrompt(project, withSeriesIdeas(project, opts));
   opts.signal?.throwIfAborted();
   const r = await deps.llm.generate(
     CONCEPTS_TASK,
@@ -252,6 +271,13 @@ export async function generateConcepts(
     opts.signal,
   );
   opts.signal?.throwIfAborted();
-  const vetted = vetConcepts(project, r.value.concepts, { source: 'app', strictEntities: false });
+  const asked = opts.series
+    ? // Every episode uses the series' format.
+      r.value.concepts.map((c) => ({ ...c, formatId: opts.series!.formatId }))
+    : r.value.concepts;
+  const vetted = vetConcepts(project, asked, { source: 'app', strictEntities: false });
+  // …and links to it (`vetConcepts` knows only what the model writes).
+  if (opts.series)
+    vetted.concepts = vetted.concepts.map((c) => ({ ...c, seriesId: opts.series!.id }));
   return { ...vetted, provider: r.provider, model: r.model, fellBack: r.fellBack };
 }

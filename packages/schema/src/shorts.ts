@@ -35,6 +35,8 @@ export const Concept = z.strictObject({
   targetSeconds: z.number().min(5).max(180),
   /** Knowledge entities (mechanics, bosses, levels…) it features. */
   entityIds: z.array(Id).max(20).default([]),
+  /** The series it is an episode of, when it was proposed for one. */
+  seriesId: Id.optional(),
   createdAt: IsoDateTime,
 });
 export type Concept = z.infer<typeof Concept>;
@@ -74,6 +76,32 @@ export type ShortSubtitles = z.infer<typeof ShortSubtitles>;
 
 /** Short ids leave room for the `tl_short_` timeline prefix within the 64-character id limit. */
 export const ShortId = Id.refine((id) => id.length <= 52, 'short ids are at most 52 characters');
+
+/**
+ * A run of TikToks that belong together: the same format, subtitle style and platform, a premise
+ * that each episode plays out differently. Episodes are normal shorts linked by `Short.seriesId`;
+ * nothing is stored twice. `cadencePerWeek` and `extensions` are kept for the planner (M8).
+ */
+export const Series = z.strictObject({
+  id: Id,
+  name: Line(120),
+  /** What every episode is about, in a sentence or two; the AI writes episodes from it. */
+  premise: z.string().trim().max(1000).default(''),
+  /** The short-form format (a storyboard template id) every episode uses. */
+  formatId: PluginRef,
+  subtitleStyle: SubtitleStyle.default('lines'),
+  platform: ShortPlatform.default('tiktok'),
+  /** How often the series is meant to post (the planner reads it; nothing here schedules). */
+  cadencePerWeek: z.int().min(1).max(14).optional(),
+  createdAt: IsoDateTime,
+  extensions: Extensions.default({}),
+});
+export type Series = z.infer<typeof Series>;
+export type SeriesInput = z.input<typeof Series>;
+
+/** The number of episodes the AI is asked for at once. */
+export const SERIES_EPISODES_MIN = 5;
+export const SERIES_EPISODES_MAX = 10;
 
 /** A hashtag without its `#`: letters, digits and underscores. */
 export const Hashtag = z
@@ -160,6 +188,9 @@ export const Short = z.strictObject({
   /** Null until a template is built from the concept (10.3). */
   storyboard: Storyboard.nullable().default(null),
   export: ExportSettings.optional(),
+  /** The series this is an episode of, and its number in it (1, 2, 3…). */
+  seriesId: Id.optional(),
+  episode: z.int().min(1).optional(),
   hooks: z.array(ShortHook).max(MAX_HOOKS).default([]),
   post: PostCopy.default({ caption: '', hashtags: [], pinnedComment: '' }),
   cover: ShortCover.default({ title: '' }),

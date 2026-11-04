@@ -163,6 +163,8 @@ describe('tool surface', () => {
         'tiktok_cut',
         'tiktok_hooks_generate',
         'tiktok_post_copy_generate',
+        'tiktok_series_concepts',
+        'core_series_add',
         'core_shorts_add-hook',
         'core_shorts_rename',
       ]),

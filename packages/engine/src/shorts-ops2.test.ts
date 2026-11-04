@@ -15,6 +15,7 @@ import { OpError } from './ops.js';
 import { readFile } from 'node:fs/promises';
 import { generateHooksOp } from './hooks-ops.js';
 import { postCopyOp } from './post-ops.js';
+import { exportSeriesOp, seriesConceptsOp } from './series-ops.js';
 import { createShortOp, fillSlotOp, recordVoiceTakeOp, recordingExtension, shortsViewOp } from './shorts-ops.js'; // prettier-ignore
 
 const ff = (args: string[]) =>
@@ -33,6 +34,18 @@ const concept = {
 
 const mock = createMockProvider({
   'tiktok.wording': { slots: [] },
+  'tiktok.concepts': {
+    concepts: ['Warden', 'Forest', 'Ashes', 'Parry', 'Dash'].map((t, i) => ({
+      title: `Boss ${t}`,
+      hook: `Boss ${t} has one tell.`,
+      formatId: i % 2 ? 'game-trailer/tiktok-voiceover' : 'game-trailer/tiktok-list',
+      pitch: 'One boss, one tell.',
+      shotList: [`${t} fight`],
+      voiceover: [],
+      targetSeconds: 20,
+      entityIds: [],
+    })),
+  },
   'tiktok.post-copy': {
     caption: 'A boss swing stops dead.\nOne perfect parry.',
     hashtags: ['#EmberKnight', 'indiedev', 'IndieDev', 'gamedev'],
@@ -205,6 +218,30 @@ describe('creating and filling a TikTok', { timeout: 120_000 }, () => {
     store.undo();
     expect(store.state.shorts[0]!.post.caption).toBe('');
     expect(store.state.shorts[0]!.cover.title).toBe('');
+    await store.close();
+  });
+
+  it('a series: AI episodes link to it with its format, episodes take its look, a repeat is refused; no episodes means nothing to export', async () => {
+    const store = await open();
+    store.dispatch('core/series.add', { name: 'Boss in 20 seconds', premise: 'One boss, one tell.', subtitleStyle: 'word-pop', platform: 'shorts', formatId: 'game-trailer/tiktok-montage' }); // prettier-ignore
+    const id = store.state.series[0]!.id;
+    const r = await seriesConceptsOp(engine, store, id, { count: 6 });
+    expect(r.added).toHaveLength(5);
+    expect(store.state.concepts.every((c) => c.seriesId === id && c.formatId === 'game-trailer/tiktok-montage')).toBe(true); // prettier-ignore
+    // The same ones again are repeats of waiting concepts: nothing is added twice.
+    expect((await seriesConceptsOp(engine, store, id)).added).toHaveLength(0);
+    const made = await createShortOp(engine, store, { conceptId: store.state.concepts[0]!.id, wording: false }); // prettier-ignore
+    const view = await shortsViewOp(engine, store);
+    expect(view.shorts.find((x) => x.id === made.shortId)).toMatchObject({ seriesId: id, episode: 1, platform: 'shorts' }); // prettier-ignore
+    expect(view.series[0]).toMatchObject({ id, waiting: 4, cadencePerWeek: null, subtitleStyle: 'word-pop', episodes: [{ shortId: made.shortId, episode: 1, cutBuilt: false }] }); // prettier-ignore
+    // An episode without a cut is skipped, and the rest of the queue goes on.
+    const q = await exportSeriesOp(engine, store, id);
+    expect(q.entries).toEqual([{ shortId: made.shortId, versionId: made.shortId, episode: 1, status: 'skipped', reason: 'its cut is not built yet' }]); // prettier-ignore
+    store.dispatch('core/series.add', { name: 'Empty' });
+    await expect(exportSeriesOp(engine, store, store.state.series[1]!.id)).rejects.toThrow(
+      /no episodes/,
+    );
+    await expect(seriesConceptsOp(engine, store, 'series_nope')).rejects.toBeInstanceOf(OpError);
     await store.close();
   });
 

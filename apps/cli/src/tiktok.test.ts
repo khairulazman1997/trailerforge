@@ -116,6 +116,18 @@ describe('tforge tiktok', { timeout: 120_000 }, () => {
     expect(cl.out).toMatch(/^Voice clean-up off/);
     expect((await run(['tiktok', 'clean', project, 'short_parry', '--on'])).out).toMatch(/^Voice clean-up on/); // prettier-ignore
 
+    const se = await run(['tiktok', 'series', project, '--new', '--name', 'Boss in 20 seconds', '--premise', 'One boss, one tell.', '--format', 'voiceover', '--style', 'word-pop']); // prettier-ignore
+    expect(se.out).toMatch(
+      /^series_boss_in_20_seconds\s+Boss in 20 seconds: 0 episodes, voiceover, word-pop, tiktok$/,
+    );
+    expect((await run(['tiktok', 'series', project, 'series_boss_in_20_seconds', '--cadence', '3'])).out).toMatch(/, 3\/week$/); // prettier-ignore
+    expect(
+      (await run(['tiktok', 'series', project, 'series_boss_in_20_seconds', '--queue'])).code,
+    ).toBe(2); // no episodes
+    expect(
+      (await run(['tiktok', 'series', project, 'series_boss_in_20_seconds', '--drop'])).out,
+    ).toMatch(/^No series/);
+
     const po = await run(['tiktok', 'post', project, 'short_parry', '--caption', 'One perfect parry.', '--hashtags', '#EmberKnight,indiedev', '--comment', 'Wishlist!', '--cover', 'Parry or die', '--at', '1.5']); // prettier-ignore
     expect(po.out).toBe('One perfect parry.\n\n#EmberKnight #indiedev\n\nPinned comment:\nWishlist!\n\nCover title:\nParry or die\nCover frame at 1.5 s'); // prettier-ignore
     expect((await run(['tiktok', 'post', project, 'short_parry', '--at', 'poster'])).out).not.toMatch(/Cover frame/); // prettier-ignore

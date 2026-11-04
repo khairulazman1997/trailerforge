@@ -155,6 +155,10 @@ export type TaskRequest =
       kind: 'claude-code-concepts';
       options: { allow: true; ideas?: string[]; count?: number; repo?: string };
     }
+  /** Ask the AI for 5 to 10 episode ideas for a series; they wait in the concept list, linked to it. */
+  | { kind: 'series-concepts'; options: { seriesId: string; count?: number } }
+  /** Export every episode of a series (and its hook versions), one after another. */
+  | { kind: 'export-series'; options: { seriesId: string } }
   /** Ask the AI for a TikTok's caption, hashtags, pinned comment and cover title (written to the TikTok). */
   | { kind: 'post-copy'; options: { shortId: string } }
   /** Ask the AI for alternative openings (hook versions) for a TikTok; they are added to the free places. */

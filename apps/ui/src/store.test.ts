@@ -145,6 +145,7 @@ class Fake {
     exportPresets: async () => ({ presets: [], hardwareDraftEncoder: null }),
     createDefaultVariants: async () => ({ added: [] }),
     shorts: async () => ({
+      series: [],
       shorts: [],
       concepts: [],
       voice: { status: 'absent' as const, disclosure: null },

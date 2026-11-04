@@ -1482,7 +1482,7 @@ export class AppStore {
 }
 
 /** Renders only read the project, so editing goes on while they run. */
-const RENDER_KINDS = new Set(['render-draft', 'export', 'handoff']);
+const RENDER_KINDS = new Set(['render-draft', 'export', 'export-series', 'handoff']);
 
 /** The task currently running on a project, if any that pauses editing. */
 export function busyTask(state: AppState, projectId: string): TaskView | undefined {

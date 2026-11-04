@@ -66,6 +66,19 @@ test('tiktok: pick a concept, fill a shot, set subtitles, undo', async ({ page }
   await expect(page.getByText('Parry or die')).toBeVisible();
   expect(await axe(page)).toEqual([]);
 
+  // A series: start one, see its card, the AI dialog shows what it sends, remove it.
+  await page.getByLabel('Series name').fill('Boss in 20 seconds');
+  await page.getByLabel('What every episode is about').fill('One boss, one tell.');
+  await page.getByRole('button', { name: 'Start the series' }).click();
+  const seriesCard = page.getByRole('group', { name: 'Series Boss in 20 seconds' });
+  await expect(seriesCard).toContainText('No episodes yet.');
+  await seriesCard.getByRole('button', { name: 'Suggest episodes' }).click();
+  await expect(page.getByRole('dialog')).toContainText('the series name and premise', { timeout: 15_000 }); // prettier-ignore
+  await page.keyboard.press('Escape');
+  await expect(seriesCard.getByRole('button', { name: 'Export all episodes' })).toBeDisabled();
+  await seriesCard.getByRole('button', { name: 'Remove series Boss in 20 seconds' }).click();
+  await expect(page.getByRole('group', { name: /^Series / })).toHaveCount(0);
+
   // The Claude Code dialog shows what would be shared before anything is.
   await page.getByRole('button', { name: 'Ask Claude Code…' }).click();
   await expect(page.getByRole('dialog')).toContainText('read-only', { timeout: 15_000 });
