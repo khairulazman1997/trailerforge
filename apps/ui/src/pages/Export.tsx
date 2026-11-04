@@ -14,7 +14,13 @@ import {
 } from '../export-view.js';
 import { OverrideField } from '../components/OverrideField.js';
 import { Link, projectPath } from '../router.js';
-import { progressLabel, verdictLine, versionKey, type GateGroups } from '../review-view.js';
+import {
+  checkName,
+  progressLabel,
+  verdictLine,
+  versionKey,
+  type GateGroups,
+} from '../review-view.js';
 import type { TaskView } from '@trailerforge/service/client';
 import type { RenderRun } from '../store.js';
 
@@ -306,6 +312,18 @@ function ExportCard({ id, view }: { id: string; view: View }) {
           </span>{' '}
           <Link to={projectPath(id, 'review')}>Open the Quality Gate report</Link>
         </p>
+      )}
+      {groups && groups.warnings.length > 0 && (
+        <ul className="findings" aria-label={`Worth a look in ${label}`}>
+          {groups.warnings.map((f, i) => (
+            <li key={`${f.checkId}-${i}`}>
+              <span>
+                <strong>{checkName(f.checkId)}.</strong> {f.message}
+                {f.suggestion && <span className="muted"> {f.suggestion}.</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="row">

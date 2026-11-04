@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ReviewComment } from '@trailerforge/schema';
 import {
   APPROVAL_LABEL,
+  checkName,
   commentsFor,
   formatTime,
   overridableChecks,
@@ -77,5 +78,11 @@ describe('review view helpers', () => {
   it('labels progress', () => {
     expect(progressLabel({ phase: 'segments', fraction: 0.456 })).toBe('Rendering the picture 46%');
     expect(progressLabel({ phase: 'x', fraction: 1, message: 'Custom' })).toBe('Custom 100%');
+  });
+
+  it('names the short-form checks and tidies unknown ones', () => {
+    expect(checkName('short/first-cut')).toBe('First cut');
+    expect(checkName('short/other')).toBe('other');
+    expect(checkName('core/other')).toBe('other');
   });
 });

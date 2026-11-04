@@ -182,6 +182,15 @@ describe('a TikTok, end to end', { timeout: 300_000 }, () => {
     ).toEqual([]);
   });
 
+  it('the quality report carries the short-form advice as warnings that never block', async () => {
+    const q = await qualityOp(engine, store, SHORT);
+    const short = q.findings.filter((f) => f.checkId.startsWith('short/'));
+    expect(short.length).toBeGreaterThan(0);
+    for (const f of short) expect(f).toMatchObject({ severity: 'warning', tier: 'warning' });
+    expect(q.verdict.warnings.some((f) => f.checkId.startsWith('short/'))).toBe(true);
+    expect(q.verdict.blocking.some((f) => f.checkId.startsWith('short/'))).toBe(false);
+  });
+
   it('is reviewed like the trailer: a draft, comments, an approval that goes stale on an edit', async () => {
     const d = await renderDraftOp(engine, store, SHORT, { hardware: false });
     const info = await probe(d.file);

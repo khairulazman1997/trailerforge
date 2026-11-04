@@ -22,6 +22,7 @@ import {
 import { appendDecisions, brandStatus, type ProjectStore } from '@trailerforge/core';
 import {
   checkPlan,
+  checkShortForm,
   cuesOf,
   declaredFlashes,
   finding,
@@ -127,6 +128,8 @@ export interface VersionBuild {
   graphics: Map<string, GraphicFrames>;
   sceneMessages: { itemId: string; messages: string[] }[];
   contrastIssues: string[];
+  /** TikToks: what the short-form checks need (the template's call-to-action slots). */
+  shortForm: { ctaSlotIds: string[] } | undefined;
   beats: number[] | undefined;
   resolved: ResolvedExport;
   /** Set when the plan cannot be compiled (e.g. flashing more than three times a second). */
@@ -326,6 +329,13 @@ export async function buildVersion(
     graphics,
     sceneMessages,
     contrastIssues,
+    shortForm: short
+      ? {
+          ctaSlotIds: (short.storyboard?.sections ?? []).flatMap((sec) =>
+            sec.slots.flatMap((sl) => (sl.kind === 'card' && sl.cardKind === 'cta' ? [sl.id] : [])),
+          ),
+        }
+      : undefined,
     beats,
     resolved,
     compileError,
@@ -403,6 +413,14 @@ export function planFindings(b: VersionBuild): GateFinding[] {
     graphicsIssues: b.sceneMessages,
     contrastIssues: b.contrastIssues,
   });
+  if (b.shortForm)
+    out.push(
+      ...checkShortForm({
+        timeline: b.timeline,
+        sources: b.takeSources,
+        ctaSlotIds: b.shortForm.ctaSlotIds,
+      }),
+    );
   for (const issue of b.resolved.issues) out.push(finding('core/output-format', issue));
   if (b.compileError && !out.some((f) => f.checkId === 'core/flash-plan'))
     out.push(finding('core/flash-plan', b.compileError));

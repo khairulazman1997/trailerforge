@@ -9,6 +9,7 @@ import {
   FLICKS_PER_SECOND,
   flicksPerFrame,
   itemEnd,
+  timelineDuration,
   type DecisionRecord,
   type Timeline,
   type TimelineItem,
@@ -64,6 +65,11 @@ export const GATE_POLICY: Readonly<Record<string, GateTier>> = {
   'core/screen-direction': 'warning',
   'core/off-beat': 'warning',
   'core/contrast': 'warning',
+  'short/first-frame': 'warning',
+  'short/first-cut': 'warning',
+  'short/dead-air': 'warning',
+  'short/loop-end': 'warning',
+  'short/cta-end': 'warning',
 };
 
 /** A finding with the policy's tier and severity (unknown checks are warnings). */
@@ -413,4 +419,173 @@ export function overrideDecision(input: {
     summary: `Exported despite "${override.checkId.replace(/^core\//, '')}": ${override.reason.trim()}`,
     alternatives: [],
   };
+}
+
+// ---- short-form checks -----------------------------------------------------------------------
+
+/** What the short-form checks use beyond the timeline. */
+export interface ShortFormInput {
+  timeline: Timeline;
+  /** Footage analysis per asset id: for whether the first frames move. */
+  sources?: ReadonlyMap<string, TakeSource>;
+  /** Ids of the template's call-to-action card slots (none: the format has no call to action). */
+  ctaSlotIds?: readonly string[];
+}
+
+/** First-frame movement below this (grey levels of change per frame, averaged) counts as still. */
+export const FIRST_FRAME_MOTION = 1;
+export const FIRST_CUT_SECONDS = 2;
+export const DEAD_AIR_SECONDS = 3;
+export const CTA_WINDOW_SECONDS = 3;
+const FADE_OUT_DB = -30;
+const FADE_OUT_MIN_SECONDS = 0.4;
+
+const animated = (v: unknown): boolean =>
+  typeof v === 'object' && v !== null && !Array.isArray(v) && 'keyframes' in v;
+
+/**
+ * Advice for short vertical videos (TikTok, Shorts, Reels), all warnings: people decide in the
+ * first second, so something should move or read in frame one and the first cut should come
+ * early; no shot should sit for long without a voice; a loop should not die in a fade-out; and
+ * the call to action should be on screen at the end.
+ */
+export function checkShortForm(input: ShortFormInput): GateFinding[] {
+  const { timeline } = input;
+  const out: GateFinding[] = [];
+  const total = timelineDuration(timeline);
+  if (total <= 0) return out;
+  const fpf = flicksPerFrame(timeline.frameRate);
+  const live = timeline.tracks.filter((t) => !t.muted);
+  const picture = live
+    .filter((t) => t.kind === 'video')
+    .flatMap((t) => t.items)
+    .filter((i) => i.kind === 'clip' || i.kind === 'graphic')
+    .sort((a, b) => a.start - b.start || (a.id < b.id ? -1 : 1));
+  const first = picture[0];
+
+  // Something moves or shows words in frame 1.
+  const wordsAtStart = live
+    .filter((t) => t.kind === 'caption' || t.kind === 'graphics')
+    .flatMap((t) => t.items)
+    .some((i) => i.start <= fpf && itemEnd(i) > fpf);
+  if (first && !wordsAtStart && first.kind === 'clip') {
+    const src = input.sources?.get(first.assetId);
+    let still: boolean | undefined;
+    if (src?.still)
+      still = !animated(first.transform?.scale) && !animated(first.transform?.position);
+    else if (src?.footage) {
+      const f = src.footage;
+      const from = Math.max(0, Math.round((first.sourceIn / FLICKS_PER_SECOND) * f.rate.num / f.rate.den)); // prettier-ignore
+      const n = Math.max(1, Math.round((0.5 * f.rate.num) / f.rate.den));
+      const m = f.motion.slice(from, from + n);
+      still = m.length > 0 && m.reduce((a, b) => a + b, 0) / m.length < FIRST_FRAME_MOTION;
+    }
+    if (still)
+      out.push(
+        finding(
+          'short/first-frame',
+          'Nothing moves or shows in the first frame: the video opens on a still picture',
+          {
+            at: span(first),
+            itemId: first.id,
+            suggestion: 'Open on action, or put a few words over the first shot',
+          },
+        ),
+      );
+  }
+
+  // The first cut lands within two seconds.
+  if (picture.length >= 2 && first) {
+    const at = sec(itemEnd(first));
+    if (at > FIRST_CUT_SECONDS)
+      out.push(
+        finding(
+          'short/first-cut',
+          `The first cut comes at ${at} s; most viewers decide within two`,
+          {
+            at: { start: at },
+            itemId: first.id,
+            suggestion: 'Make the opening shot shorter or add a quick second shot',
+          },
+        ),
+      );
+  }
+
+  // No shot over about three seconds without a voice.
+  const voice = live
+    .filter((t) => t.kind === 'audio' && t.id.startsWith('trk_voice'))
+    .flatMap((t) => t.items)
+    .filter((i) => i.kind === 'clip' && !i.muted);
+  for (const it of picture) {
+    if (it.kind !== 'clip' || sec(it.duration) <= DEAD_AIR_SECONDS) continue;
+    const heard = voice.reduce(
+      (n, v) => n + Math.max(0, Math.min(itemEnd(v), itemEnd(it)) - Math.max(v.start, it.start)),
+      0,
+    );
+    if (heard < it.duration * 0.5)
+      out.push(
+        finding(
+          'short/dead-air',
+          `"${label(it)}" stays on screen for ${sec(it.duration)} s with little or no voice`,
+          {
+            at: span(it),
+            itemId: it.id,
+            suggestion: 'Cut it shorter, split it, or say something over it',
+          },
+        ),
+      );
+  }
+
+  // The end should loop cleanly into the start: a music fade-out kills the loop point.
+  const lastPicture = picture.at(-1);
+  const hasCta = (input.ctaSlotIds ?? []).length > 0;
+  const endsOnCta = !!lastPicture?.slotId && (input.ctaSlotIds ?? []).includes(lastPicture.slotId);
+  if (!endsOnCta) {
+    for (const m of live
+      .filter((t) => t.kind === 'audio' && t.id === 'trk_music')
+      .flatMap((t) => t.items)) {
+      if (m.kind !== 'clip' || itemEnd(m) < total - fpf * 3) continue;
+      const g = m.gainDb;
+      if (!animated(g)) continue;
+      const ks = (g as { keyframes: { at: number; value: unknown }[] }).keyframes;
+      const last = ks.at(-1);
+      const prev = ks.at(-2);
+      if (
+        last &&
+        prev &&
+        typeof last.value === 'number' &&
+        last.value <= FADE_OUT_DB &&
+        sec(last.at - prev.at) >= FADE_OUT_MIN_SECONDS
+      )
+        out.push(
+          finding(
+            'short/loop-end',
+            'The music fades out at the end, so the video will not loop cleanly',
+            {
+              at: { start: sec(m.start + prev.at), end: sec(m.start + last.at) },
+              itemId: m.id,
+              suggestion: 'End the music on a beat instead of a fade so the loop restarts smoothly',
+            },
+          ),
+        );
+    }
+  }
+
+  // The call to action is on screen in the last three seconds.
+  if (hasCta) {
+    const ids = new Set(input.ctaSlotIds);
+    const from = total - Math.round(CTA_WINDOW_SECONDS * FLICKS_PER_SECOND);
+    const shown = live
+      .filter((t) => t.kind !== 'audio')
+      .flatMap((t) => t.items)
+      .some((i) => i.slotId !== undefined && ids.has(i.slotId) && itemEnd(i) > from);
+    if (!shown)
+      out.push(
+        finding('short/cta-end', 'The call to action is not on screen in the last three seconds', {
+          at: { start: sec(Math.max(0, from)), end: sec(total) },
+          suggestion: 'Put the wishlist card at the end, or move it later',
+        }),
+      );
+  }
+  return out;
 }

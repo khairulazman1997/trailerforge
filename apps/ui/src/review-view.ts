@@ -88,12 +88,17 @@ export const CHECK_NAME: Record<string, string> = {
   'core/jump-cut': 'Jump cut',
   'core/read-time': 'Text on screen too briefly',
   'core/pacing': 'Pacing',
+  'short/first-frame': 'Opening frame',
+  'short/first-cut': 'First cut',
+  'short/dead-air': 'Long shot without voice',
+  'short/loop-end': 'Loop ending',
+  'short/cta-end': 'Call to action at the end',
   'core/screen-direction': 'Screen direction',
   'core/off-beat': 'Cut off the beat',
   'core/contrast': 'Brand colour contrast',
 };
 
-export const checkName = (id: string) => CHECK_NAME[id] ?? id.replace(/^core\//, '');
+export const checkName = (id: string) => CHECK_NAME[id] ?? id.replace(/^(core|short)\//, '');
 
 /** Checks that can only be overridden once per check id (the override covers every finding of it). */
 export const overridableChecks = (g: GateGroups): string[] => [
