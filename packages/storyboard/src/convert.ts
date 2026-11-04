@@ -220,6 +220,7 @@ export function convertSections(
           direction: g.voLine.direction,
           linkedSlotIds: [slot.id],
           status: 'empty',
+          takes: [],
         });
       }
       return slot;

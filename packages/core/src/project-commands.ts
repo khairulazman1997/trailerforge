@@ -8,6 +8,7 @@ import { takeCommands } from './take-commands.js';
 import { timelineCommands } from './timeline-commands.js';
 import { exportCommands } from './export-commands.js';
 import { reviewCommands } from './review-commands.js';
+import { shortsCommands } from './shorts-commands.js';
 import { variantCommands } from './variant-commands.js';
 
 export const renameProject = defineCommand({
@@ -55,6 +56,7 @@ export function coreCommands(registry = new CommandRegistry()): CommandRegistry 
     ...exportCommands,
     ...reviewCommands,
     ...brandCommands,
+    ...shortsCommands,
   ])
     registry.register(c);
   return registry;

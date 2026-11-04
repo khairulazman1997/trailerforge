@@ -34,7 +34,11 @@ describe('Game Trailer pack', () => {
       'game-trailer/custom',
       'game-trailer/gameplay-trailer',
       'game-trailer/release-trailer',
+      'game-trailer/tiktok',
     ]);
+    const tiktok = host.registries.videoTypes.require('game-trailer/tiktok');
+    expect(tiktok.shortForm).toBe(true);
+    expect(release.shortForm).toBe(false);
   });
 
   it('validates the brief extension slice', () => {

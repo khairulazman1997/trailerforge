@@ -379,6 +379,9 @@ describe('tasks', () => {
     await expect(client.setVideoType('proj_sample', 'user/nope')).rejects.toMatchObject({
       status: 404,
     });
+    // The TikTok type is short-form: listed as such, never a project's main type.
+    expect((await client.info()).videoTypes.find((v) => v.id === 'game-trailer/tiktok')).toMatchObject({ shortForm: true }); // prettier-ignore
+    await expect(client.setVideoType('proj_sample', 'game-trailer/tiktok')).rejects.toMatchObject({ status: 400 }); // prettier-ignore
     await client.removeSavedVideoType(saved.id);
     expect((await client.savedVideoTypes()).types).toEqual([]);
     await client.setVideoType('proj_sample', before);

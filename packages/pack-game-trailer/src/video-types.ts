@@ -169,4 +169,32 @@ export const customVideo: VideoTypeDef = {
   ],
 };
 
-export const videoTypes = [releaseTrailer, announcementTrailer, gameplayTrailer, customVideo];
+/**
+ * Short-form marketing video (TikTok, Shorts, Reels): the type of every short's storyboard
+ * (`project.shorts`). Concepts and templates for it come from the brief and the knowledge.
+ */
+export const tiktokVideo: VideoTypeDef = {
+  id: 'game-trailer/tiktok',
+  name: 'TikTok',
+  description:
+    'A 15–60 s vertical marketing video: a hook in the first second, gameplay, images, clips and your own voiceover.',
+  shortForm: true,
+  typicalDuration: { min: 15, max: 60 },
+  requirements: [
+    r.title,
+    sellingPoints(1, 'What makes the game worth a look'),
+    r.tone,
+    { ...r.genre, required: false },
+    { ...r.cta, required: false },
+    { ...r.release, required: false },
+    r.audience,
+  ],
+};
+
+export const videoTypes = [
+  releaseTrailer,
+  announcementTrailer,
+  gameplayTrailer,
+  customVideo,
+  tiktokVideo,
+];

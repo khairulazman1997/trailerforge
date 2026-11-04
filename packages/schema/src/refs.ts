@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import { MigrationError, migrateProject } from './migrations.js';
 import { Project } from './project.js';
+import type { Storyboard, Take } from './storyboard.js';
 
 export interface RefIssue {
   path: string;
@@ -9,7 +10,7 @@ export interface RefIssue {
 
 /**
  * Cross-reference checks that a per-object schema can't express: unique ids, and every id
- * reference (slots, assets, format targets, variants, nested timelines) resolving to something
+ * reference (slots, assets, format targets, variants, shorts, nested timelines) resolving to something
  * that exists. Returns all issues rather than stopping at the first.
  */
 export function validateProjectRefs(project: Project): RefIssue[] {
@@ -43,94 +44,28 @@ export function validateProjectRefs(project: Project): RefIssue[] {
       issue(`knowledge[${i}]`, `unknown source "${e.sourceId}"`);
   });
 
-  const sectionIds = new Set<string>();
   const slotIds = new Set<string>();
   const variantIds = new Set<string>();
-  const takesBySlot = new Map<string, Set<string>>();
-  const sb = project.storyboard;
-  if (sb) {
-    claim(sb.id, 'storyboard');
-    sb.sections.forEach((s, si) => {
-      claim(s.id, `storyboard.sections[${si}]`);
-      sectionIds.add(s.id);
-      s.slots.forEach((slot, i) => {
-        const p = `storyboard.sections[${si}].slots[${i}]`;
-        claim(slot.id, p);
-        slotIds.add(slot.id);
-        slot.entityIds.forEach((id) => {
-          if (!entityIds.has(id)) issue(p, `unknown knowledge entity "${id}"`);
-        });
-        if (slot.kind === 'shot') {
-          slot.overlays.forEach((o, oi) => claim(o.id, `${p}.overlays[${oi}]`));
-          const takeIds = new Set<string>();
-          takesBySlot.set(slot.id, takeIds);
-          slot.takes.forEach((t, ti) => {
-            claim(t.id, `${p}.takes[${ti}]`);
-            takeIds.add(t.id);
-            if (!assetIds.has(t.assetId))
-              issue(`${p}.takes[${ti}]`, `unknown asset "${t.assetId}"`);
-          });
-          if (slot.chosenTakeId !== undefined) {
-            const chosen = slot.takes.find((t) => t.id === slot.chosenTakeId);
-            if (!chosen) issue(`${p}.chosenTakeId`, `unknown take "${slot.chosenTakeId}"`);
-            else if (chosen.rejected) issue(`${p}.chosenTakeId`, `take "${chosen.id}" is rejected`);
-          }
-        }
-      });
-    });
-    sb.voLines.forEach((v, i) => {
-      claim(v.id, `storyboard.voLines[${i}]`);
-      v.linkedSlotIds.forEach((id) => {
-        if (!slotIds.has(id)) issue(`storyboard.voLines[${i}]`, `unknown slot "${id}"`);
-      });
-    });
-    const m = sb.music;
-    if (m.trackAssetId && !assetIds.has(m.trackAssetId)) {
-      issue('storyboard.music.trackAssetId', `unknown asset "${m.trackAssetId}"`);
-    }
-    m.structure.forEach((part, i) => {
-      claim(part.id, `storyboard.music.structure[${i}]`);
-      part.sectionIds.forEach((id) => {
-        if (!sectionIds.has(id))
-          issue(`storyboard.music.structure[${i}]`, `unknown section "${id}"`);
-      });
-    });
-    m.hitPoints.forEach((h, i) => {
-      claim(h.id, `storyboard.music.hitPoints[${i}]`);
-      if (!slotIds.has(h.slotId))
-        issue(`storyboard.music.hitPoints[${i}]`, `unknown slot "${h.slotId}"`);
-    });
-    m.sfxCues.forEach((c, i) => {
-      claim(c.id, `storyboard.music.sfxCues[${i}]`);
-      if (!slotIds.has(c.slotId))
-        issue(`storyboard.music.sfxCues[${i}]`, `unknown slot "${c.slotId}"`);
-      if (c.assetId && !assetIds.has(c.assetId)) {
-        issue(`storyboard.music.sfxCues[${i}]`, `unknown asset "${c.assetId}"`);
-      }
-    });
-    sb.variants.forEach((v, i) => {
-      claim(v.id, `storyboard.variants[${i}]`);
-      variantIds.add(v.id);
-      if (!formatIds.has(v.formatTargetId)) {
-        issue(`storyboard.variants[${i}]`, `unknown format target "${v.formatTargetId}"`);
-      }
-      Object.entries(v.overrides).forEach(([id, o]) => {
-        if (!slotIds.has(id)) issue(`storyboard.variants[${i}].overrides`, `unknown slot "${id}"`);
-        else if (o.takeId !== undefined && !takesBySlot.get(id)?.has(o.takeId)) {
-          issue(`storyboard.variants[${i}].overrides.${id}`, `unknown take "${o.takeId}"`);
-        }
-      });
-    });
-  }
+  const ctx: StoryboardCheck = {
+    issue,
+    claim,
+    assetIds,
+    entityIds,
+    formatIds,
+    slotIds,
+    variantIds,
+  };
+  if (project.storyboard) checkStoryboard(project.storyboard, 'storyboard', ctx);
 
-  sb?.comments.forEach((c, i) => {
-    const p = `storyboard.comments[${i}]`;
-    claim(c.id, p);
-    if (!sectionIds.has(c.sectionId)) issue(p, `unknown section "${c.sectionId}"`);
-    if (c.slotId !== undefined) {
-      const home = sb.sections.find((s) => s.id === c.sectionId);
-      if (!home?.slots.some((x) => x.id === c.slotId))
-        issue(p, `slot "${c.slotId}" is not in section "${c.sectionId}"`);
+  project.concepts.forEach((c, i) => claim(c.id, `concepts[${i}]`));
+  project.shorts.forEach((sh, i) => {
+    const p = `shorts[${i}]`;
+    claim(sh.id, p);
+    if (sh.formatTargetId && !formatIds.has(sh.formatTargetId))
+      issue(p, `unknown format target "${sh.formatTargetId}"`);
+    if (sh.storyboard) {
+      if (sh.storyboard.variants.length > 0) issue(`${p}.storyboard`, 'a short has no versions');
+      checkStoryboard(sh.storyboard, `${p}.storyboard`, ctx);
     }
   });
 
@@ -189,28 +124,145 @@ export function validateProjectRefs(project: Project): RefIssue[] {
   return issues;
 }
 
+interface StoryboardCheck {
+  issue: (path: string, message: string) => void;
+  claim: (id: string, path: string) => void;
+  assetIds: Set<string>;
+  entityIds: Set<string>;
+  formatIds: Set<string>;
+  /** Filled: every slot id across the project's storyboards (timeline items may name any). */
+  slotIds: Set<string>;
+  variantIds: Set<string>;
+}
+
+function checkTakes(
+  takes: readonly Take[],
+  chosenTakeId: string | undefined,
+  p: string,
+  ctx: StoryboardCheck,
+): Set<string> {
+  const takeIds = new Set<string>();
+  takes.forEach((t, ti) => {
+    ctx.claim(t.id, `${p}.takes[${ti}]`);
+    takeIds.add(t.id);
+    if (!ctx.assetIds.has(t.assetId))
+      ctx.issue(`${p}.takes[${ti}]`, `unknown asset "${t.assetId}"`);
+  });
+  if (chosenTakeId !== undefined) {
+    const chosen = takes.find((t) => t.id === chosenTakeId);
+    if (!chosen) ctx.issue(`${p}.chosenTakeId`, `unknown take "${chosenTakeId}"`);
+    else if (chosen.rejected) ctx.issue(`${p}.chosenTakeId`, `take "${chosen.id}" is rejected`);
+  }
+  return takeIds;
+}
+
+function checkStoryboard(sb: Storyboard, base: string, ctx: StoryboardCheck): void {
+  const { issue, claim } = ctx;
+  const sectionIds = new Set<string>();
+  const slotIds = new Set<string>();
+  const takesBySlot = new Map<string, Set<string>>();
+  claim(sb.id, base);
+  sb.sections.forEach((s, si) => {
+    claim(s.id, `${base}.sections[${si}]`);
+    sectionIds.add(s.id);
+    s.slots.forEach((slot, i) => {
+      const p = `${base}.sections[${si}].slots[${i}]`;
+      claim(slot.id, p);
+      slotIds.add(slot.id);
+      ctx.slotIds.add(slot.id);
+      slot.entityIds.forEach((id) => {
+        if (!ctx.entityIds.has(id)) issue(p, `unknown knowledge entity "${id}"`);
+      });
+      if (slot.kind === 'shot') {
+        slot.overlays.forEach((o, oi) => claim(o.id, `${p}.overlays[${oi}]`));
+        takesBySlot.set(slot.id, checkTakes(slot.takes, slot.chosenTakeId, p, ctx));
+      }
+    });
+  });
+  sb.voLines.forEach((v, i) => {
+    const p = `${base}.voLines[${i}]`;
+    claim(v.id, p);
+    v.linkedSlotIds.forEach((id) => {
+      if (!slotIds.has(id)) issue(p, `unknown slot "${id}"`);
+    });
+    checkTakes(v.takes, v.chosenTakeId, p, ctx);
+  });
+  const m = sb.music;
+  if (m.trackAssetId && !ctx.assetIds.has(m.trackAssetId)) {
+    issue(`${base}.music.trackAssetId`, `unknown asset "${m.trackAssetId}"`);
+  }
+  m.structure.forEach((part, i) => {
+    claim(part.id, `${base}.music.structure[${i}]`);
+    part.sectionIds.forEach((id) => {
+      if (!sectionIds.has(id)) issue(`${base}.music.structure[${i}]`, `unknown section "${id}"`);
+    });
+  });
+  m.hitPoints.forEach((h, i) => {
+    claim(h.id, `${base}.music.hitPoints[${i}]`);
+    if (!slotIds.has(h.slotId))
+      issue(`${base}.music.hitPoints[${i}]`, `unknown slot "${h.slotId}"`);
+  });
+  m.sfxCues.forEach((c, i) => {
+    claim(c.id, `${base}.music.sfxCues[${i}]`);
+    if (!slotIds.has(c.slotId)) issue(`${base}.music.sfxCues[${i}]`, `unknown slot "${c.slotId}"`);
+    if (c.assetId && !ctx.assetIds.has(c.assetId)) {
+      issue(`${base}.music.sfxCues[${i}]`, `unknown asset "${c.assetId}"`);
+    }
+  });
+  sb.variants.forEach((v, i) => {
+    claim(v.id, `${base}.variants[${i}]`);
+    ctx.variantIds.add(v.id);
+    if (!ctx.formatIds.has(v.formatTargetId)) {
+      issue(`${base}.variants[${i}]`, `unknown format target "${v.formatTargetId}"`);
+    }
+    Object.entries(v.overrides).forEach(([id, o]) => {
+      if (!slotIds.has(id)) issue(`${base}.variants[${i}].overrides`, `unknown slot "${id}"`);
+      else if (o.takeId !== undefined && !takesBySlot.get(id)?.has(o.takeId)) {
+        issue(`${base}.variants[${i}].overrides.${id}`, `unknown take "${o.takeId}"`);
+      }
+    });
+  });
+  sb.comments.forEach((c, i) => {
+    const p = `${base}.comments[${i}]`;
+    claim(c.id, p);
+    if (!sectionIds.has(c.sectionId)) issue(p, `unknown section "${c.sectionId}"`);
+    if (c.slotId !== undefined) {
+      const home = sb.sections.find((s) => s.id === c.sectionId);
+      if (!home?.slots.some((x) => x.id === c.slotId))
+        issue(p, `slot "${c.slotId}" is not in section "${c.sectionId}"`);
+    }
+  });
+}
+
 /**
  * Every place in the project that refers to `assetId`, as paths. Used to refuse removing an asset
  * that is still in use, with a message that says where.
  */
 export function findAssetUsages(project: Project, assetId: string): string[] {
   const uses: string[] = [];
-  const sb = project.storyboard;
-  if (sb) {
+  const inStoryboard = (sb: Storyboard, base: string) => {
     sb.sections.forEach((s, si) =>
       s.slots.forEach((slot, i) => {
         if (slot.kind !== 'shot') return;
         slot.takes.forEach((t, ti) => {
-          if (t.assetId === assetId)
-            uses.push(`storyboard.sections[${si}].slots[${i}].takes[${ti}]`);
+          if (t.assetId === assetId) uses.push(`${base}.sections[${si}].slots[${i}].takes[${ti}]`);
         });
       }),
     );
-    if (sb.music.trackAssetId === assetId) uses.push('storyboard.music.trackAssetId');
+    sb.voLines.forEach((v, i) =>
+      v.takes.forEach((t, ti) => {
+        if (t.assetId === assetId) uses.push(`${base}.voLines[${i}].takes[${ti}]`);
+      }),
+    );
+    if (sb.music.trackAssetId === assetId) uses.push(`${base}.music.trackAssetId`);
     sb.music.sfxCues.forEach((c, i) => {
-      if (c.assetId === assetId) uses.push(`storyboard.music.sfxCues[${i}]`);
+      if (c.assetId === assetId) uses.push(`${base}.music.sfxCues[${i}]`);
     });
-  }
+  };
+  if (project.storyboard) inStoryboard(project.storyboard, 'storyboard');
+  project.shorts.forEach((sh, i) => {
+    if (sh.storyboard) inStoryboard(sh.storyboard, `shorts[${i}].storyboard`);
+  });
   if (project.brief.referenceAssetIds.includes(assetId)) uses.push('brief.referenceAssetIds');
   project.timelines.forEach((tl, ti) =>
     tl.tracks.forEach((track, ki) =>

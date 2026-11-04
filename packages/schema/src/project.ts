@@ -6,6 +6,7 @@ import { Review } from './review.js';
 import { FormatTarget } from './format.js';
 import { KnowledgeEntity, KnowledgeSource } from './knowledge.js';
 import { ProjectAssetRef } from './media.js';
+import { Concept, Short } from './shorts.js';
 import { Storyboard } from './storyboard.js';
 import { Timeline } from './timeline.js';
 
@@ -49,6 +50,10 @@ export const Project = z.strictObject({
   timelines: z.array(Timeline).default([]),
   /** Comments and approvals per version. */
   review: Review.default({ comments: [], approvals: [] }),
+  /** Short-form concepts proposed by the app or Claude Code, waiting to be picked. */
+  concepts: z.array(Concept).default([]),
+  /** Short-form videos (TikToks), each with its own storyboard and timeline. */
+  shorts: z.array(Short).default([]),
   assets: z.array(ProjectAssetRef).default([]),
   /** Local sources (e.g. the game repo) and the curated facts extracted from them. */
   sources: z.array(KnowledgeSource).default([]),

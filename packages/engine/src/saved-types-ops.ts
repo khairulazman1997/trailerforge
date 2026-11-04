@@ -185,8 +185,13 @@ export function savedTypeSnapshot(engine: Engine, videoTypeId: string | undefine
 
 /** Switch a project's video type; a saved type goes in with its copy (one undo step). */
 export function setVideoTypeOp(engine: Engine, store: ProjectStore, videoTypeId: string) {
-  if (!engine.plugins.registries.videoTypes.get(videoTypeId)) {
-    throw new OpError('not-found', `video type "${videoTypeId}" is not installed`);
+  const vt = engine.plugins.registries.videoTypes.get(videoTypeId);
+  if (!vt) throw new OpError('not-found', `video type "${videoTypeId}" is not installed`);
+  if (vt.shortForm) {
+    throw new OpError(
+      'usage',
+      `"${vt.name}" is for a project's TikToks; make one from a concept instead of changing the project's type`,
+    );
   }
   const saved = savedTypeSnapshot(engine, videoTypeId);
   store.dispatch('core/brief.set-video-type', { videoTypeId, ...(saved ? { saved } : {}) });

@@ -5,6 +5,7 @@ export * from './media.js';
 export * from './brief.js';
 export * from './brand.js';
 export * from './storyboard.js';
+export * from './shorts.js';
 export * from './timeline.js';
 export * from './decision.js';
 export * from './ids.js';

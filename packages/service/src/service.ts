@@ -463,6 +463,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           description: v.description,
           typicalDuration: v.typicalDuration,
           defaultTemplateId: v.defaultTemplateId,
+          shortForm: v.shortForm,
           saved: engine.plugins.registries.videoTypes.ownerOf(v.id) === 'user',
         })),
         templates: engine.plugins.registries.templates.list().map((t) => ({

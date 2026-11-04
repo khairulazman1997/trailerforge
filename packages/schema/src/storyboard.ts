@@ -59,6 +59,17 @@ const SlotBase = {
   extensions: Extensions.default({}),
 };
 
+/**
+ * What a picture slot can be filled with: a gameplay recording, a still image (screenshot, key
+ * art) or any other video (phone footage, a clip). Short-form templates say this per slot.
+ */
+export const SlotInput = z.enum(['gameplay', 'image', 'video']);
+export type SlotInput = z.infer<typeof SlotInput>;
+
+/** What kind of file filled a take: a slot input, or a voiceover recording. */
+export const TakeInput = z.enum(['gameplay', 'image', 'video', 'voiceover']);
+export type TakeInput = z.infer<typeof TakeInput>;
+
 /** How a recording came to be attached to a shot. */
 export const TakeMatch = z.enum(['code', 'suggestion', 'vision', 'manual']);
 export type TakeMatch = z.infer<typeof TakeMatch>;
@@ -93,6 +104,8 @@ export const Take = z
     sourceOut: Flicks.optional(),
     note: z.string().default(''),
     origin: TakeOrigin.optional(),
+    /** What kind of file this is, when it was added to a short's slot or voiceover line. */
+    input: TakeInput.optional(),
     attachedAt: IsoDateTime,
   })
   .refine(
@@ -115,6 +128,8 @@ export const ShotSlot = z.strictObject({
   /** Location/scene used to group the capture checklist. */
   location: z.string().default(''),
   hud: z.enum(['on', 'off', 'any']).default('any'),
+  /** What may fill this shot; unset means a gameplay recording (every trailer shot). */
+  accepts: z.array(SlotInput).min(1).optional(),
   /** Alternate ideas if the primary capture isn't possible. */
   alternates: z.array(z.string()).default([]),
   overlays: z.array(Overlay).default([]),
@@ -161,6 +176,10 @@ export const VoLine = z.strictObject({
   targetDuration: Seconds.optional(),
   linkedSlotIds: z.array(Id).default([]),
   status: SlotStatus.default('empty'),
+  /** Recordings of this line (one file per line, or a part of one long take via in/out). */
+  takes: z.array(Take).default([]),
+  /** The take the edit uses; unset means the latest non-rejected take. */
+  chosenTakeId: Id.optional(),
 });
 export type VoLine = z.infer<typeof VoLine>;
 

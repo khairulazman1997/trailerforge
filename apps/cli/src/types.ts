@@ -29,7 +29,7 @@ export async function typesCommand(
         [
           ...all.map(
             (v) =>
-              `${v.id.padEnd(36)} ${v.name}${engine.plugins.registries.videoTypes.ownerOf(v.id) === 'user' ? '  (saved)' : ''}`,
+              `${v.id.padEnd(36)} ${v.name}${engine.plugins.registries.videoTypes.ownerOf(v.id) === 'user' ? '  (saved)' : ''}${v.shortForm ? '  (short-form: for TikToks)' : ''}`,
           ),
           `Saved types live in ${saved.dir}`,
           ...saved.problems.map((p) => `! ${p.file}: ${p.message}`),

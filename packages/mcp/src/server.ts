@@ -571,7 +571,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
     tool: {
       name: 'video_types_list',
       description:
-        'Every installed video type (id, name, description, whether the user saved it), plus where saved types live and any saved files that failed to load. "game-trailer/custom" is open-ended: the user describes the video in brief.extensions.game-trailer.customType.',
+        'Every installed video type (id, name, description, whether the user saved it), plus where saved types live and any saved files that failed to load. "game-trailer/custom" is open-ended: the user describes the video in brief.extensions.game-trailer.customType. shortForm types (game-trailer/tiktok) are for the shorts (TikToks) of a project, not its main video.',
       inputSchema: object({}),
     },
     async run() {
@@ -581,6 +581,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
           id: v.id,
           name: v.name,
           description: v.description,
+          shortForm: v.shortForm,
           saved: reg.ownerOf(v.id) === 'user',
         })),
         saved: savedTypesViewOp(engine),

@@ -1,7 +1,11 @@
 import type { Info } from '../store.js';
 
-/** `<option>`s for a video type picker: built-in types first, then the ones the user saved. */
-export function VideoTypeOptions({ types }: { types: Info['videoTypes'] }) {
+/**
+ * `<option>`s for a video type picker: built-in types first, then the ones the user saved.
+ * Short-form types (TikToks) belong to a project's shorts, so they are left out.
+ */
+export function VideoTypeOptions({ types: all }: { types: Info['videoTypes'] }) {
+  const types = all.filter((v) => !v.shortForm);
   const builtIn = types.filter((v) => !v.saved);
   const saved = types.filter((v) => v.saved);
   const opts = (list: Info['videoTypes']) =>

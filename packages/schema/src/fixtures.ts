@@ -1,4 +1,5 @@
 import type { ProjectInput } from './project.js';
+import type { ConceptInput } from './shorts.js';
 import { PROJECT_SCHEMA_VERSION } from './project.js';
 import { rate, secondsToFlicks } from './time.js';
 
@@ -238,5 +239,126 @@ export function sampleProject(): ProjectInput {
       { id: 'ent_forest', kind: 'level', name: 'Cinder Forest', origin: 'user' },
     ],
     plugins: [{ id: 'game-trailer', version: '0.0.0' }],
+  };
+}
+
+/** A concept as the app's LLM might propose it, for the sample game. */
+export function sampleConcept(id = 'con_parry'): ConceptInput {
+  return {
+    id,
+    source: 'app',
+    title: 'Parry or die',
+    hook: 'A boss swing stops dead on a perfect parry, freeze frame, "You have 0.2 s."',
+    formatId: 'game-trailer/tiktok-voiceover',
+    pitch: 'The parry is what makes Ember Knight different and it reads in one second.',
+    shotList: ['A perfect parry on the Ash Warden', 'Key art', 'Phone clip of the dev playing'],
+    voiceover: ['This boss has one tell.', 'Miss it and you are done.'],
+    targetSeconds: 20,
+    entityIds: ['ent_warden'],
+    createdAt: T0,
+  };
+}
+
+/**
+ * `sampleProject()` plus one waiting concept and one short with a small storyboard: a gameplay
+ * slot (filled), an image-or-video slot, a card, and two voiceover lines (the first recorded).
+ */
+export function sampleShortProject(): ProjectInput {
+  const p = sampleProject();
+  return {
+    ...p,
+    assets: [
+      ...(p.assets ?? []),
+      { assetId: 'asset_vo', role: 'voiceover', addedAt: T0 },
+      { assetId: 'asset_keyart', role: 'graphic', addedAt: T0 },
+    ],
+    concepts: [sampleConcept('con_waiting')],
+    shorts: [
+      {
+        id: 'short_parry',
+        name: 'Parry or die',
+        createdAt: T0,
+        concept: sampleConcept(),
+        formatTargetId: 'fmt_tt',
+        storyboard: {
+          id: 'sb_short_parry',
+          meta: {
+            videoTypeId: 'game-trailer/tiktok',
+            targetDuration: 20,
+            masterResolution: { width: 1080, height: 1920 },
+          },
+          sections: [
+            {
+              id: 'ssec_hook',
+              name: 'Hook',
+              role: 'hook',
+              slots: [
+                {
+                  id: 'sshot_parry',
+                  kind: 'shot',
+                  title: 'Perfect parry',
+                  duration: { min: 1, ideal: 1.5, max: 2.5 },
+                  accepts: ['gameplay'],
+                  takes: [
+                    {
+                      id: 'stake_forest',
+                      assetId: 'asset_forest',
+                      matchedBy: 'manual',
+                      input: 'gameplay',
+                      attachedAt: T0,
+                    },
+                  ],
+                  chosenTakeId: 'stake_forest',
+                  status: 'recorded',
+                },
+                {
+                  id: 'sshot_art',
+                  kind: 'shot',
+                  title: 'Key art or a phone clip',
+                  duration: { min: 1, ideal: 2, max: 3 },
+                  accepts: ['image', 'video'],
+                },
+              ],
+            },
+            {
+              id: 'ssec_cta',
+              name: 'Call to action',
+              role: 'end-slate',
+              slots: [
+                {
+                  id: 'scard_cta',
+                  kind: 'card',
+                  cardKind: 'cta',
+                  templateId: 'core/cta-card',
+                  text: 'Wishlist now',
+                  duration: { min: 1.5, ideal: 2, max: 3 },
+                },
+              ],
+            },
+          ],
+          voLines: [
+            {
+              id: 'svo_1',
+              text: 'This boss has one tell.',
+              linkedSlotIds: ['sshot_parry'],
+              status: 'recorded',
+              takes: [
+                {
+                  id: 'svtake_1',
+                  assetId: 'asset_vo',
+                  matchedBy: 'manual',
+                  input: 'voiceover',
+                  sourceIn: 0,
+                  sourceOut: s(1.4),
+                  attachedAt: T0,
+                },
+              ],
+              chosenTakeId: 'svtake_1',
+            },
+            { id: 'svo_2', text: 'Miss it and you are done.', linkedSlotIds: ['sshot_art'] },
+          ],
+        },
+      },
+    ],
   };
 }

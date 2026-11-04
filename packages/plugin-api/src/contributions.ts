@@ -45,6 +45,11 @@ export const VideoTypeDef = z.strictObject({
    * has text, generation names the video with it instead of the type's name.
    */
   describedBy: z.string().min(1).optional(),
+  /**
+   * Short-form (TikTok-style) type: used by a project's shorts (`project.shorts`), not offered as
+   * the type of a project's main video.
+   */
+  shortForm: z.boolean().default(false),
   /** Typical duration range in seconds, used for defaults and critique. */
   typicalDuration: z
     .strictObject({ min: z.number().positive(), max: z.number().positive() })

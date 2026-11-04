@@ -216,6 +216,8 @@ export class ServiceClient {
         description?: string;
         defaultTemplateId?: string;
         typicalDuration?: { min: number; max: number };
+        /** Used by a project's TikToks, not offered as a project's main type. */
+        shortForm?: boolean;
         /** Saved by the user from one of their storyboards (`user/…`). */
         saved: boolean;
       }[];
