@@ -51,6 +51,7 @@ import {
   importFootageOp,
   matchAcceptOp,
   matchSuggestOp,
+  conceptsOp,
   rankTakesOp,
   approveVersionOp,
   draftFileOp,
@@ -314,6 +315,15 @@ const TaskRequest = z.discriminatedUnion('kind', [
         groupKeys: z.array(z.string().min(1)).optional(),
         force: z.boolean().optional(),
         overwriteEdited: z.boolean().optional(),
+      })
+      .default({}),
+  }),
+  z.strictObject({
+    kind: z.literal('tiktok-concepts'),
+    options: z
+      .strictObject({
+        ideas: z.array(z.string().max(500)).max(10).optional(),
+        count: z.int().min(1).max(10).optional(),
       })
       .default({}),
   }),
@@ -709,6 +719,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             'storyboard.regenerate-section',
             'brief.suggest',
             'capture.tips',
+            'tiktok.concepts',
             'critique.run',
           ])
           .safeParse(query.get('task'));
@@ -716,7 +727,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           throw new HttpError(
             400,
             'bad-request',
-            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips or critique.run',
+            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips, tiktok.concepts or critique.run',
           );
         return llmPreviewOp(engine, storeById(params.id!), task.data);
       },
@@ -1198,6 +1209,8 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await refineStoryboardOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'capture-tips')
             out = await captureTipsOp(engine, store, { ...t.options, signal });
+          else if (t.kind === 'tiktok-concepts')
+            out = await conceptsOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'rank-takes')
             out = await rankTakesOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'critique')

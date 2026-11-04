@@ -11,7 +11,17 @@ export const DecisionRecord = z.strictObject({
   /** Step that decided, e.g. `core/select-segment`, `core/beat-snap`. */
   step: PluginRef,
   subject: z.strictObject({
-    kind: z.enum(['section', 'slot', 'item', 'transition', 'timeline', 'storyboard', 'asset']),
+    kind: z.enum([
+      'section',
+      'slot',
+      'item',
+      'transition',
+      'timeline',
+      'storyboard',
+      'asset',
+      'concept',
+      'short',
+    ]),
     id: Id,
   }),
   choice: z.json(),

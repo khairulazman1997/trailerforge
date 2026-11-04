@@ -14,6 +14,8 @@ export * from './capture-pack.js';
 export * from './capture-pack-render.js';
 export * from './capture-pack-write.js';
 export * from './capture-tips.js';
+export * from './concepts.js';
+export * from './tiktok-formats.js';
 export * from './capture-tips-commands.js';
 export * from './pack-ext.js';
 export * from './capture-commands.js';

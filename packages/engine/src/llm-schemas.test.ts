@@ -3,6 +3,7 @@ import { DeepScanOutput } from '@trailerforge/knowledge';
 import { jsonSchemaFor } from '@trailerforge/llm';
 import {
   GeneratedCaptureTips,
+  GeneratedConcepts,
   GeneratedTakeRanking,
   videoTypes,
 } from '@trailerforge/pack-game-trailer';
@@ -36,6 +37,7 @@ const schemas: (readonly [string, z.ZodType])[] = [
   ['storyboard.regenerate-section', GeneratedSection],
   ['capture.tips', GeneratedCaptureTips],
   ['cut.rank-takes', GeneratedTakeRanking],
+  ['tiktok.concepts', GeneratedConcepts],
   ['knowledge.deep-scan', DeepScanOutput],
   ...briefAnswers,
 ];

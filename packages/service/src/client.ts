@@ -137,6 +137,8 @@ export type TaskRequest =
   /** Rewrite every section with open storyboard comments (or just `sectionIds`) from them. */
   | { kind: 'refine-storyboard'; options?: { sectionIds?: string[]; keepEdited?: boolean } }
   | { kind: 'rank-takes'; options?: { overwriteChosen?: boolean } }
+  /** Ask the AI for TikTok concepts (from the brief, the game knowledge and `ideas`); they land in the waiting list. */
+  | { kind: 'tiktok-concepts'; options?: { ideas?: string[]; count?: number } }
   /** Ask the AI to critique a version (`variantId` null = the master cut); notes land on the Review tab. */
   | { kind: 'critique'; options: { variantId: string | null } }
   /** Render a 720p review draft of a version (`variantId` null = the master cut). */
@@ -352,6 +354,7 @@ export class ServiceClient {
       | 'storyboard.regenerate-section'
       | 'brief.suggest'
       | 'capture.tips'
+      | 'tiktok.concepts'
       | 'critique.run',
   ) {
     return this.request<LlmPreview>(

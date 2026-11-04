@@ -32,6 +32,20 @@ const tipsReply = async (req: { prompt: string }) => {
 };
 const mock = createMockProvider({
   'capture.tips': tipsReply,
+  'tiktok.concepts': {
+    concepts: [
+      {
+        title: 'Parry or die',
+        hook: 'A boss swing stops dead on a perfect parry.',
+        formatId: 'game-trailer/tiktok-montage',
+        pitch: 'The parry sets the game apart.',
+        shotList: ['A perfect parry'],
+        voiceover: [],
+        targetSeconds: 20,
+        entityIds: [],
+      },
+    ],
+  },
   'brief.suggest': { value: 'Ember Knight', reason: 'from the game facts' },
   'critique.run': { notes: [{ about: 'overall', kind: 'idea', text: 'Open on the parry.', atSeconds: 1 }] }, // prettier-ignore
   'storyboard.generate': async () => {
@@ -1115,6 +1129,16 @@ describe('capture', () => {
       (await client.startTask(ID, { kind: 'capture-tips' })).id,
     );
     expect(again).toMatchObject({ status: 'succeeded', result: { written: [] } });
+  });
+
+  it('shows what concepts will send, then runs them as a task and keeps them waiting', async () => {
+    expect(await client.llmPreview(ID, 'tiktok.concepts')).toMatchObject({ available: true });
+    const t = await client.startTask(ID, { kind: 'tiktok-concepts', options: { ideas: ['boss in 3 s'], count: 1 } }); // prettier-ignore
+    const done = await client.waitForTask(t.id);
+    expect(done).toMatchObject({ status: 'succeeded', result: { added: [{ id: 'con_parry_or_die', source: 'app' }] } }); // prettier-ignore
+    expect((await client.getProject(ID)).project.concepts.map((c) => c.title)).toEqual(['Parry or die']); // prettier-ignore
+    await expect(client.startTask(ID, { kind: 'tiktok-concepts', options: { count: 99 } })).rejects.toMatchObject({ status: 400 }); // prettier-ignore
+    await client.command(ID, 'core/concepts.remove', { conceptIds: ['con_parry_or_die'] });
   });
 
   it('cancelling tips means nothing is stored', async () => {
