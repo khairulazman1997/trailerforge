@@ -1,15 +1,13 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
 import {
   analysisCacheFile,
   readAnalysisCache,
   writeAnalysisCache,
-  writeFileAtomic,
   type Egress,
 } from '@trailerforge/core';
 import { resolveTools } from '@trailerforge/media';
 import { z } from 'zod';
+import { downloadModel, modelDir, modelDisclosure, modelStatus } from './models.js';
 import { callSidecar, type SidecarCommand } from './sidecar.js';
 
 /** Either one combined `model.onnx` or separate vision and text models, plus the tokenizer. */
@@ -38,47 +36,23 @@ export interface VisionModelManifest {
 export type VisionModelStatus = 'unavailable' | 'absent' | 'ready';
 
 export const visionModelDir = (home: string, m: Pick<VisionModelManifest, 'id'>) =>
-  join(home, 'models', m.id);
-
-const VERIFIED = 'verified.json';
+  modelDir(home, m);
 
 /**
  * `unavailable`: no model pinned in this build (the feature stays hidden); `absent`: pinned but
  * not downloaded (or a file changed since); `ready`: every file is there with the size it had
  * when its checksum was verified.
  */
-export async function visionModelStatus(
+export function visionModelStatus(
   home: string,
   manifest: VisionModelManifest | null,
 ): Promise<VisionModelStatus> {
-  if (!manifest) return 'unavailable';
-  const dir = visionModelDir(home, manifest);
-  try {
-    const verified = JSON.parse(await readFile(join(dir, VERIFIED), 'utf8')) as Record<
-      string,
-      string
-    >;
-    for (const f of manifest.files) {
-      if (verified[f.name] !== f.sha256) return 'absent';
-      if ((await stat(join(dir, f.name))).size !== f.bytes) return 'absent';
-    }
-    return 'ready';
-  } catch {
-    return 'absent';
-  }
+  return modelStatus(home, manifest);
 }
 
 /** What the download will do, shown before asking for consent. */
 export function visionDownloadDisclosure(m: VisionModelManifest) {
-  return {
-    title: m.title,
-    license: m.license,
-    source: m.source,
-    hosts: [...new Set([...m.files.map((f) => new URL(f.url).host), ...(m.servedFrom ?? [])])],
-    totalBytes: m.files.reduce((n, f) => n + f.bytes, 0),
-    sends: 'Nothing about you or your project: this only downloads the model, once.',
-    afterwards: 'Matching runs on this computer; footage and frames never leave it.',
-  };
+  return modelDisclosure(m, 'Matching runs on this computer; footage and frames never leave it.');
 }
 
 export class VisionConsentRequired extends Error {
@@ -104,36 +78,14 @@ export async function downloadVisionModel(o: {
   if (!o.manifest) throw new Error('no vision model is pinned in this build');
   if (o.consent !== true) throw new VisionConsentRequired();
   const m = o.manifest;
-  const dir = visionModelDir(o.home, m);
-  const total = m.files.reduce((n, f) => n + f.bytes, 0);
-  let done = 0;
-  for (const f of m.files) {
-    const dest = join(dir, f.name);
-    const have = await stat(dest).catch(() => null);
-    if (!have || have.size !== f.bytes || !(await sha256File(dest, f.sha256))) {
-      await o.egress.download(f.url, dest, {
-        purpose: `Download the local AI vision model (${m.title}, ${m.license}): one time, nothing is uploaded`,
-        expectedBytes: f.bytes,
-        sha256: f.sha256,
-        ...(o.signal ? { signal: o.signal } : {}),
-        onProgress: (b) => o.onProgress?.((done + b) / total),
-      });
-    }
-    done += f.bytes;
-    o.onProgress?.(done / total);
-  }
-  await writeFileAtomic(
-    join(dir, VERIFIED),
-    `${JSON.stringify(Object.fromEntries(m.files.map((f) => [f.name, f.sha256])))}\n`,
-  );
-}
-
-async function sha256File(path: string, expected: string): Promise<boolean> {
-  return (
-    createHash('sha256')
-      .update(await readFile(path))
-      .digest('hex') === expected
-  );
+  await downloadModel({
+    home: o.home,
+    egress: o.egress,
+    manifest: m,
+    purpose: `Download the local AI vision model (${m.title}, ${m.license}): one time, nothing is uploaded`,
+    ...(o.signal ? { signal: o.signal } : {}),
+    ...(o.onProgress ? { onProgress: o.onProgress } : {}),
+  });
 }
 
 /** Turns frames and text into comparable unit vectors. */

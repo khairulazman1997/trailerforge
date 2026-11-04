@@ -19,3 +19,4 @@ export * from './demo-ops.js';
 export * from './saved-types-ops.js';
 export * from './concepts-ops.js';
 export * from './shorts-ops.js';
+export * from './voice-ops.js';

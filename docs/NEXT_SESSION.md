@@ -43,6 +43,14 @@ The package is tested on the fixture project (`pnpm test:unity`: the package's U
 
 Paste your notes into the next session together with the prompt below (add "and my Unity Capture notes" to it).
 
+## Voice transcription live test (after task 10.5)
+
+The cloud container cannot reach Hugging Face's file CDN, so the real model has only been tested with a stub. On Windows, from the repository root, with uv on PATH:
+
+1. `cd workers/analysis && uv sync` (adds faster-whisper, CTranslate2 and PyAV to the sidecar).
+2. Record a WAV of yourself saying "This boss has one tell. Miss it and you are done." (or any lines).
+3. `cd ../.. && set TFORGE_VOICE_LIVE=1 && set TFORGE_VOICE_WAV=C:\path\to\take.wav && pnpm --filter @trailerforge/analysis exec vitest run src/voice.test.ts -t live` (PowerShell: `$env:TFORGE_VOICE_LIVE=1` and so on). The first run downloads the pinned model (about 485 MB, once, into the temp folder) and prints the first 20 words with their times; check that the words and times look right.
+
 ## Prompt for the next session
 
 ---

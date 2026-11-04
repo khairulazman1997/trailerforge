@@ -24,11 +24,23 @@ def main() -> None:
 
         return embed_texts(params, progress)
 
+    def voice_envelope(params, progress):
+        from .voice import envelope
+
+        return envelope(params, progress)
+
+    def voice_transcribe(params, progress):
+        from .voice import transcribe
+
+        return transcribe(params, progress)
+
     # Heavy libraries load on first use, so `ping` answers at once.
     server.register("analyze.music", music, progress=True)
     server.register("analyze.footage", footage, progress=True)
     server.register("vision.embed_frames", frames, progress=True)
     server.register("vision.embed_texts", texts, progress=True)
+    server.register("voice.envelope", voice_envelope, progress=True)
+    server.register("voice.transcribe", voice_transcribe, progress=True)
     server.serve()
 
 

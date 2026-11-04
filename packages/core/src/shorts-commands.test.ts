@@ -183,4 +183,23 @@ describe('core/shorts.fill-slot and clear-slot', () => {
     valid();
     expect(() => store.dispatch('core/shorts.clear-slot', { shortId: 'short_parry', target: { voLineId: 'svo_1' }, takeId: 'nope' })).toThrow(/no take/); // prettier-ignore
   });
+
+  it('places several voiceover lines from one recording as one step, marked as suggested', () => {
+    store.dispatch('core/shorts.fill-voice', {
+      shortId: 'short_parry',
+      lines: [
+        { voLineId: 'svo_1', assetId: 'asset_take', sourceIn: 100, sourceOut: 900 },
+        { voLineId: 'svo_2', assetId: 'asset_take', sourceIn: 1000, sourceOut: 1800 },
+      ],
+    });
+    expect(vo('svo_1').takes.at(-1)).toMatchObject({ assetId: 'asset_take', sourceIn: 100, sourceOut: 900, matchedBy: 'suggestion', input: 'voiceover' }); // prettier-ignore
+    expect(vo('svo_1').chosenTakeId).toBe(vo('svo_1').takes.at(-1)!.id);
+    expect(vo('svo_2')).toMatchObject({ status: 'recorded', takes: [{ sourceIn: 1000, sourceOut: 1800 }] }); // prettier-ignore
+    expect(store.state.assets.find((a) => a.assetId === 'asset_take')!.role).toBe('voiceover');
+    valid();
+    store.undo();
+    expect(vo('svo_2').takes).toEqual([]);
+    expect(() => store.dispatch('core/shorts.fill-voice', { shortId: 'short_parry', lines: [{ voLineId: 'svo_1', assetId: 'a', sourceIn: 5, sourceOut: 5 }] })).toThrow(); // prettier-ignore
+    expect(() => store.dispatch('core/shorts.fill-voice', { shortId: 'short_parry', lines: [{ voLineId: 'sshot_parry', assetId: 'a', sourceIn: 0, sourceOut: 5 }] })).toThrow(/no voiceover line/); // prettier-ignore
+  });
 });

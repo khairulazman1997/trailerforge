@@ -5,6 +5,10 @@ import { join, resolve } from 'node:path';
 import { Egress, LibraryStore, type CommandRegistry } from '@trailerforge/core';
 import {
   PINNED_VISION_MODEL,
+  PINNED_VOICE_MODEL,
+  sidecarTranscriber,
+  type ModelManifest,
+  type Transcriber,
   registerAnalysisJobs,
   sidecarEmbedder,
   type VisionEmbedder,
@@ -74,6 +78,10 @@ export interface EngineOptions {
   visionModel?: VisionModelManifest | null;
   /** Builds the vision embedder for a model folder (tests pass a stub). Default: the sidecar. */
   visionEmbedder?: (modelDir: string, modelId: string) => VisionEmbedder;
+  /** The opt-in voice transcription model. Default: the one pinned in this build (null hides it). */
+  voiceModel?: ModelManifest | null;
+  /** Builds the transcriber for a model folder (tests pass a stub). Default: the sidecar. */
+  transcriber?: (modelDir: string, modelId: string) => Transcriber;
   /** How often watched folders are polled, in ms (default 2,000). */
   watchIntervalMs?: number;
   /** Disclosure gate for the default client; called before any request leaves the machine. */
@@ -106,6 +114,10 @@ export class Engine {
     readonly vision: {
       manifest: VisionModelManifest | null;
       embedder: (modelDir: string, modelId: string) => VisionEmbedder;
+    },
+    readonly voice: {
+      manifest: ModelManifest | null;
+      transcriber: (modelDir: string, modelId: string) => Transcriber;
     },
     readonly llm: LlmClient,
     readonly secrets: SecretStore,
@@ -143,7 +155,9 @@ export class Engine {
     const library = await LibraryStore.open(home);
     registerIngestJobs({ library, queue: jobs, home });
     const embedder = opts.visionEmbedder ?? ((dir: string, id: string) => sidecarEmbedder(dir, id));
-    registerAnalysisJobs(jobs, { visionEmbedder: embedder });
+    const transcriber =
+      opts.transcriber ?? ((dir: string, id: string) => sidecarTranscriber(dir, id));
+    registerAnalysisJobs(jobs, { visionEmbedder: embedder, transcriber });
     const ingestor = new Ingestor({ queue: jobs });
     const watched = new WatchedFolders(home, ingestor, opts.watchIntervalMs);
     const egress = new Egress({
@@ -222,6 +236,10 @@ export class Engine {
       {
         manifest: opts.visionModel === undefined ? PINNED_VISION_MODEL : opts.visionModel,
         embedder,
+      },
+      {
+        manifest: opts.voiceModel === undefined ? PINNED_VOICE_MODEL : opts.voiceModel,
+        transcriber,
       },
       llm,
       secrets,

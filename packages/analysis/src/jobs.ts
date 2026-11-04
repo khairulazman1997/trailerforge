@@ -14,10 +14,12 @@ import {
 } from './analyze.js';
 import { PERMANENT_SIDECAR_CODES, SidecarError, type SidecarCommand } from './sidecar.js';
 import { embedRecording, sidecarEmbedder, type VisionEmbedder } from './vision.js';
+import { sidecarTranscriber, transcribeRecording, type Transcriber } from './voice.js';
 
 export const MUSIC_JOB = 'analysis/music';
 export const FOOTAGE_JOB = 'analysis/footage';
 export const VISION_JOB = 'analysis/vision-frames';
+export const TRANSCRIBE_JOB = 'analysis/transcribe';
 
 const Input = z.strictObject({
   path: z.string().min(1),
@@ -39,7 +41,20 @@ export interface AnalysisJobOptions {
   ffmpeg?: string;
   /** Builds the embedder for a model folder (tests pass a stub). Default: the sidecar model. */
   visionEmbedder?: (modelDir: string, modelId: string) => VisionEmbedder;
+  /** Builds the transcriber for a model folder (tests pass a stub). Default: the sidecar model. */
+  transcriber?: (modelDir: string, modelId: string) => Transcriber;
 }
+
+const TranscribeInput = Input.extend({
+  modelDir: z.string().min(1),
+  modelId: z.string().regex(/^[0-9A-Za-z.-]{1,30}$/),
+  language: z
+    .string()
+    .regex(/^[a-z]{2,3}$/)
+    .optional(),
+  prompt: z.string().max(1000).optional(),
+});
+type TranscribeIn = z.infer<typeof TranscribeInput>;
 
 const VisionInput = Input.extend({
   durationSec: z.number().positive(),
@@ -148,10 +163,41 @@ export function createAnalysisJobs(opts: AnalysisJobOptions = {}) {
     },
   });
 
-  return { music, footage, vision };
+  const transcribe = defineJob<TranscribeIn, never, { cached: boolean; words: number }>({
+    type: TRANSCRIBE_JOB,
+    input: TranscribeInput,
+    maxAttempts: 2,
+    concurrency: 1,
+    run: async (ctx) => {
+      const { path, quickHash, analysisDir, modelDir, modelId, language, prompt } = ctx.input;
+      const t =
+        opts.transcriber?.(modelDir, modelId) ??
+        sidecarTranscriber(modelDir, modelId, {
+          ...(opts.command ? { command: opts.command } : {}),
+          ...(opts.ffmpeg ? { ffmpeg: opts.ffmpeg } : {}),
+        });
+      try {
+        const r = await transcribeRecording(
+          t,
+          { path, quickHash, analysisDir },
+          {
+            ...(language ? { language } : {}),
+            ...(prompt ? { prompt } : {}),
+            signal: ctx.signal,
+            onProgress: (f) => ctx.progress(f),
+          },
+        );
+        return { cached: r.cached, words: r.transcript.words.length };
+      } catch (err) {
+        throw toJobError(err);
+      }
+    },
+  });
+
+  return { music, footage, vision, transcribe };
 }
 
 export function registerAnalysisJobs(queue: JobQueue, opts: AnalysisJobOptions = {}): void {
   const jobs = createAnalysisJobs(opts);
-  queue.register(jobs.music).register(jobs.footage).register(jobs.vision);
+  queue.register(jobs.music).register(jobs.footage).register(jobs.vision).register(jobs.transcribe);
 }

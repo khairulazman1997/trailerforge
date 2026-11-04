@@ -12,6 +12,7 @@ import {
   Take,
   TakeInput,
   TakeOrigin,
+  type TakeMatch,
   collectIds,
   mintId,
   shortTimelineId,
@@ -241,70 +242,120 @@ const ROLE_FOR: Record<TakeInput, AssetRole> = {
  * is already a take there is chosen again (with the new in/out, if given). Picture slots take
  * what their `accepts` lists (gameplay when unset); voiceover goes to voiceover lines only.
  */
+const FillPayload = z
+  .strictObject({
+    shortId: Id,
+    target: Target,
+    assetId: Id,
+    input: TakeInput,
+    takeId: Id.optional(),
+    sourceIn: Flicks.optional(),
+    sourceOut: Flicks.optional(),
+    origin: TakeOrigin.optional(),
+    attachedAt: IsoDateTime.optional(),
+  })
+  .refine(
+    (p) => p.sourceIn === undefined || p.sourceOut === undefined || p.sourceIn < p.sourceOut,
+    { message: 'sourceIn must be before sourceOut' },
+  );
+type FillPayload = z.infer<typeof FillPayload>;
+
+function fill(d: Draft<Project>, p: FillPayload, type: string, matchedBy: TakeMatch): void {
+  const t = findTarget(findShort(d, p.shortId, type), p.target, type);
+  if (t.kind === 'vo' && p.input !== 'voiceover')
+    throw new CommandError(type, 'a voiceover line takes a voiceover recording');
+  if (t.kind === 'slot') {
+    const accepts = t.at.accepts ?? ['gameplay'];
+    if (p.input === 'voiceover' || !accepts.includes(p.input))
+      throw new CommandError(type, `this slot takes ${accepts.join(' or ')}, not ${p.input}`);
+  }
+  const now = p.attachedAt ?? new Date().toISOString();
+  if (!d.assets.some((a) => a.assetId === p.assetId))
+    d.assets.push(ProjectAssetRef.parse({ assetId: p.assetId, role: ROLE_FOR[p.input], addedAt: now })); // prettier-ignore
+  const hint = {
+    ...(p.sourceIn !== undefined ? { sourceIn: p.sourceIn } : {}),
+    ...(p.sourceOut !== undefined ? { sourceOut: p.sourceOut } : {}),
+  };
+  const takes = t.at.takes;
+  const existing = takes.find((x) => x.assetId === p.assetId && !p.takeId);
+  if (existing) {
+    if (p.sourceIn !== undefined || p.sourceOut !== undefined) {
+      delete existing.sourceIn;
+      delete existing.sourceOut;
+      Object.assign(existing, hint);
+    }
+    existing.rejected = false;
+    t.at.chosenTakeId = existing.id;
+  } else {
+    const taken = collectIds(d);
+    if (p.takeId && taken.has(p.takeId)) throw new CommandError(type, `id "${p.takeId}" is used`);
+    const id = p.takeId ?? mintId('take', p.assetId.replace(/^asset_/, ''), taken);
+    takes.push(
+      Take.parse({
+        id,
+        assetId: p.assetId,
+        matchedBy,
+        ...hint,
+        ...(p.origin ? { origin: p.origin } : {}),
+        input: p.input,
+        attachedAt: now,
+      }),
+    );
+    t.at.chosenTakeId = id;
+  }
+  if (t.at.status === 'empty') t.at.status = 'recorded';
+}
+
+/**
+ * Fill a slot or voiceover line with a file: the file becomes a take and is chosen. A file that
+ * is already a take there is chosen again (with the new in/out, if given). Picture slots take
+ * what their `accepts` lists (gameplay when unset); voiceover goes to voiceover lines only.
+ */
 export const fillShortSlot = defineCommand({
   type: 'core/shorts.fill-slot',
-  payload: z
-    .strictObject({
-      shortId: Id,
-      target: Target,
-      assetId: Id,
-      input: TakeInput,
-      takeId: Id.optional(),
-      sourceIn: Flicks.optional(),
-      sourceOut: Flicks.optional(),
-      origin: TakeOrigin.optional(),
-      attachedAt: IsoDateTime.optional(),
-    })
-    .refine(
-      (p) => p.sourceIn === undefined || p.sourceOut === undefined || p.sourceIn < p.sourceOut,
-      { message: 'sourceIn must be before sourceOut' },
-    ),
+  payload: FillPayload,
   label: (p) => ('voLineId' in p.target ? 'Add voiceover recording' : `Add ${p.input} to slot`),
-  apply: (d, p) => {
-    const type = 'core/shorts.fill-slot';
-    const t = findTarget(findShort(d, p.shortId, type), p.target, type);
-    if (t.kind === 'vo' && p.input !== 'voiceover')
-      throw new CommandError(type, 'a voiceover line takes a voiceover recording');
-    if (t.kind === 'slot') {
-      const accepts = t.at.accepts ?? ['gameplay'];
-      if (p.input === 'voiceover' || !accepts.includes(p.input))
-        throw new CommandError(type, `this slot takes ${accepts.join(' or ')}, not ${p.input}`);
-    }
-    const now = p.attachedAt ?? new Date().toISOString();
-    if (!d.assets.some((a) => a.assetId === p.assetId))
-      d.assets.push(ProjectAssetRef.parse({ assetId: p.assetId, role: ROLE_FOR[p.input], addedAt: now })); // prettier-ignore
-    const hint = {
-      ...(p.sourceIn !== undefined ? { sourceIn: p.sourceIn } : {}),
-      ...(p.sourceOut !== undefined ? { sourceOut: p.sourceOut } : {}),
-    };
-    const takes = t.at.takes;
-    const existing = takes.find((x) => x.assetId === p.assetId && !p.takeId);
-    if (existing) {
-      if (p.sourceIn !== undefined || p.sourceOut !== undefined) {
-        delete existing.sourceIn;
-        delete existing.sourceOut;
-        Object.assign(existing, hint);
-      }
-      existing.rejected = false;
-      t.at.chosenTakeId = existing.id;
-    } else {
-      const taken = collectIds(d);
-      if (p.takeId && taken.has(p.takeId)) throw new CommandError(type, `id "${p.takeId}" is used`);
-      const id = p.takeId ?? mintId('take', p.assetId.replace(/^asset_/, ''), taken);
-      takes.push(
-        Take.parse({
-          id,
-          assetId: p.assetId,
-          matchedBy: 'manual',
-          ...hint,
-          ...(p.origin ? { origin: p.origin } : {}),
-          input: p.input,
-          attachedAt: now,
-        }),
+  apply: (d, p) => fill(d, p, 'core/shorts.fill-slot', 'manual'),
+});
+
+/**
+ * Place voiceover lines found in recordings (one long take split into lines, or a file per
+ * line), each with its in and out, as one step. Marked as suggested: the app lined them up.
+ */
+export const fillShortVoice = defineCommand({
+  type: 'core/shorts.fill-voice',
+  payload: z.strictObject({
+    shortId: Id,
+    lines: z
+      .array(
+        z
+          .strictObject({ voLineId: Id, assetId: Id, sourceIn: Flicks, sourceOut: Flicks })
+          .refine((l) => l.sourceIn < l.sourceOut, {
+            message: 'sourceIn must be before sourceOut',
+          }),
+      )
+      .min(1)
+      .max(40),
+    attachedAt: IsoDateTime.optional(),
+  }),
+  label: ({ lines }) =>
+    lines.length === 1 ? 'Place voiceover line' : `Place ${lines.length} voiceover lines`,
+  apply: (d, { shortId, lines, attachedAt }) => {
+    for (const l of lines)
+      fill(
+        d,
+        {
+          shortId,
+          target: { voLineId: l.voLineId },
+          assetId: l.assetId,
+          input: 'voiceover',
+          sourceIn: l.sourceIn,
+          sourceOut: l.sourceOut,
+          ...(attachedAt ? { attachedAt } : {}),
+        },
+        'core/shorts.fill-voice',
+        'suggestion',
       );
-      t.at.chosenTakeId = id;
-    }
-    if (t.at.status === 'empty') t.at.status = 'recorded';
   },
 });
 
@@ -335,5 +386,6 @@ export const shortsCommands = [
   setShortStoryboard,
   setShortExport,
   fillShortSlot,
+  fillShortVoice,
   clearShortSlot,
 ] as unknown as readonly CommandDef<unknown>[];
