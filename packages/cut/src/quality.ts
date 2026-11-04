@@ -198,7 +198,7 @@ export function checkPlan(input: PlanCheckInput): GateFinding[] {
       const a = items[i - 1]!;
       const b = items[i]!;
       if (a.kind !== 'clip' || b.kind !== 'clip' || itemEnd(a) !== b.start) continue;
-      if (a.assetId === b.assetId) {
+      if (a.assetId === b.assetId && !input.sources?.get(a.assetId)?.still) {
         const skip = b.sourceIn - (a.sourceIn + a.duration * a.speed);
         if (Math.abs(skip) > fpf && Math.abs(skip) < 2 * FLICKS_PER_SECOND)
           out.push(

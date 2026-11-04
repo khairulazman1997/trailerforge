@@ -10,9 +10,10 @@ import { cleanupTempFiles, writeFileAtomic } from '../store/fs-atomic.js';
 import { ProjectLockedError, acquireLock, type Lock } from '../store/lock.js';
 import { assetIdForHash, quickHashFile } from './hash.js';
 
-const VIDEO = ['.mp4', '.mkv', '.mov', '.webm', '.avi', '.m4v', '.flv', '.ts', '.mxf'];
+// An animated GIF is a clip, not a still.
+const VIDEO = ['.mp4', '.mkv', '.mov', '.webm', '.avi', '.m4v', '.flv', '.ts', '.mxf', '.gif'];
 const AUDIO = ['.wav', '.mp3', '.flac', '.ogg', '.oga', '.m4a', '.aac', '.opus', '.aif', '.aiff'];
-const IMAGE = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff', '.gif'];
+const IMAGE = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff'];
 const FONT = ['.ttf', '.otf', '.woff', '.woff2'];
 
 export function assetKindFromName(name: string): AssetKind {

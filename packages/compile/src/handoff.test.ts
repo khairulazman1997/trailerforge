@@ -117,3 +117,59 @@ describe('NLE handoff', () => {
       expect(timecode(frames, r), `${r.num}/${r.den} ${frames}`).toBe(tc);
   });
 });
+
+describe('images in a hand-off', () => {
+  function withStill(): HandoffInput {
+    const timeline = Timeline.parse({
+      id: 'tl_s',
+      name: 'S',
+      frameRate: R,
+      resolution: { width: 1080, height: 1920 },
+      tracks: [
+        {
+          id: 'trk_v',
+          kind: 'video',
+          items: [
+            { id: 'i1', kind: 'clip', start: 0, duration: f(48), assetId: 'art', sourceIn: 0 },
+            { id: 'i2', kind: 'clip', start: f(48), duration: f(24), assetId: 'art', sourceIn: 0 },
+          ],
+        },
+      ],
+    });
+    return {
+      timeline,
+      name: 'Stills',
+      sources: new Map([
+        ['art', src('/media/key art.png', { still: true, hasAudio: false, width: 3840, height: 2160, duration: 3600 })], // prettier-ignore
+      ]),
+    };
+  }
+
+  it('FCPXML: one still asset with its own rate-less format and no running time', () => {
+    const xml = toFcpxml(withStill());
+    expect(xml.match(/<asset /g)).toHaveLength(1);
+    expect(xml).toContain('name="FFVideoFormatRateUndefined" width="3840" height="2160"');
+    expect(xml).toMatch(/<asset id="r2" name="key art.png" start="0s" duration="0s" hasVideo="1" hasAudio="0" format="r2f">/); // prettier-ignore
+    expect(xml).toContain('file:///media/key%20art.png');
+    // Both uses are clips of that asset, as long as the timeline says.
+    expect(xml.match(/<asset-clip ref="r2"/g)).toHaveLength(2);
+    expect(xml).toContain('offset="0s" name="key art.png" start="0s" duration="2s"');
+    expect(xml).toContain('offset="2s" name="key art.png" start="0s" duration="1s"');
+  });
+
+  it('OTIO: the reference is exactly as long as the clip that uses it, never an hour', () => {
+    const otio = JSON.parse(toOtio(withStill())) as {
+      tracks: { children: { children: { media_references: { DEFAULT_MEDIA: { available_range: { duration: { value: number } } } } }[] }[] }; // prettier-ignore
+    };
+    const clips = otio.tracks.children[0]!.children;
+    expect(
+      clips.map((c) => c.media_references.DEFAULT_MEDIA.available_range.duration.value),
+    ).toEqual([48, 24]);
+  });
+
+  it('EDL: an image is a normal event', () => {
+    const edl = toEdl(withStill());
+    expect(edl.match(/ AX /g)).toHaveLength(2);
+    expect(edl).toContain('* FROM CLIP NAME: key art.png');
+  });
+});

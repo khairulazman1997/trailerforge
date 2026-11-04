@@ -832,7 +832,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     ],
     [
       'GET',
-      /^\/v1\/library\/assets\/(?<asset>[^/]+)\/(?<what>proxy|audio|thumbnail|filmstrip)$/,
+      /^\/v1\/library\/assets\/(?<asset>[^/]+)\/(?<what>proxy|audio|thumbnail|filmstrip|still)$/,
       async ({ params, res }) => {
         const f = await libraryMediaOp(
           engine,

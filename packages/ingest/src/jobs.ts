@@ -8,13 +8,14 @@ import {
   extractThumbnail,
   makeFilmstrip,
   makeProxy,
+  makeStill,
   probe,
   type FfmpegTools,
 } from '@trailerforge/media';
 import { AssetKind, type MediaInfo } from '@trailerforge/schema';
 import { z } from 'zod';
 import { assetCachePaths } from './cache-paths.js';
-import { mediaWarnings, type MediaWarning } from './warnings.js';
+import { imageWarnings, mediaWarnings, type MediaWarning } from './warnings.js';
 
 export const IMPORT_JOB = 'ingest/import-file';
 export const PREVIEWS_JOB = 'ingest/previews';
@@ -124,7 +125,7 @@ export function createIngestJobs(deps: IngestDeps) {
       ctx.signal.throwIfAborted();
 
       let info: MediaInfo | undefined = asset.media;
-      if ((asset.kind === 'video' || asset.kind === 'audio') && !info) {
+      if ((asset.kind === 'video' || asset.kind === 'audio' || asset.kind === 'image') && !info) {
         try {
           info = await probe(path, { signal: ctx.signal, ...toolOpts });
         } catch (err) {
@@ -140,7 +141,7 @@ export function createIngestJobs(deps: IngestDeps) {
       await deps.onStage?.('probed', { path, assetId: asset.id });
 
       const opts = ctx.input.projectId ? { projectId: ctx.input.projectId } : {};
-      if (asset.kind === 'video' && info && info.video.length > 0) {
+      if ((asset.kind === 'video' || asset.kind === 'image') && info && info.video.length > 0) {
         queue.enqueue(
           PREVIEWS_JOB,
           { assetId: asset.id },
@@ -159,7 +160,7 @@ export function createIngestJobs(deps: IngestDeps) {
         kind: asset.kind,
         created: result.created,
         relinked: result.relinked,
-        warnings: info ? mediaWarnings(info) : [],
+        warnings: info ? (asset.kind === 'image' ? imageWarnings(info) : mediaWarnings(info)) : [],
       };
     },
   });
@@ -167,7 +168,7 @@ export function createIngestJobs(deps: IngestDeps) {
   const previews = defineJob<
     { assetId: string },
     never,
-    { thumbnail: boolean; filmstrip: boolean; proxy: boolean }
+    { thumbnail: boolean; filmstrip: boolean; proxy: boolean; still: boolean }
   >({
     type: PREVIEWS_JOB,
     input: z.strictObject({ assetId: z.string().min(1) }),
@@ -181,7 +182,7 @@ export function createIngestJobs(deps: IngestDeps) {
         throw new JobError(`the file is missing or changed: ${asset.uri}`, false, 'file-missing');
       }
       const out = assetCachePaths(home, asset.quickHash);
-      const done = { thumbnail: false, filmstrip: false, proxy: false };
+      const done = { thumbnail: false, filmstrip: false, proxy: false, still: false };
       try {
         const info = asset.media ?? (await probe(asset.uri, { signal: ctx.signal, ...toolOpts }));
         if (info.video.length === 0) return done;
@@ -189,7 +190,7 @@ export function createIngestJobs(deps: IngestDeps) {
         // Roughly 1.5 MB per second of proxy, plus room for the stills.
         await ensureFreeSpace(out.dir, Math.ceil(info.duration * 1.5e6) + 5e6);
 
-        const steps: {
+        const videoSteps: {
           key: keyof typeof done;
           final: string;
           weight: number;
@@ -220,6 +221,26 @@ export function createIngestJobs(deps: IngestDeps) {
               makeProxy(asset.uri, info, tmp, { signal: ctx.signal, onProgress, ...toolOpts }),
           },
         ];
+        // An image has a thumbnail and an editing copy, nothing else.
+        const steps =
+          asset.kind === 'image'
+            ? [
+                {
+                  key: 'thumbnail' as const,
+                  final: out.thumbnail,
+                  weight: 0.3,
+                  make: (tmp: string) =>
+                    extractThumbnail(asset.uri, 0, tmp, 320, { signal: ctx.signal, ...toolOpts }),
+                },
+                {
+                  key: 'still' as const,
+                  final: out.still,
+                  weight: 0.7,
+                  make: (tmp: string) =>
+                    makeStill(asset.uri, tmp, 1920, { signal: ctx.signal, ...toolOpts }),
+                },
+              ]
+            : videoSteps;
         let base = 0;
         for (const step of steps) {
           ctx.signal.throwIfAborted();

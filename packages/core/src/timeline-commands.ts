@@ -7,8 +7,9 @@ import {
   Flicks,
   PlaceholderItem,
   refitFadeOut,
+  Animatable,
   Timeline,
-  type Animatable,
+  Transform,
   type Project,
   type TimelineItem,
   type Track,
@@ -459,6 +460,58 @@ export const setClipAudio = defineCommand({
   },
 });
 
+/** Changes to a picture's placement; only the fields given change. `null` for all of it clears it. */
+const TransformPatch = z.strictObject({
+  position: Animatable.optional(),
+  anchor: Animatable.optional(),
+  scale: Animatable.optional(),
+  rotation: Animatable.optional(),
+  opacity: Animatable.optional(),
+  crop: Animatable.optional(),
+});
+
+/**
+ * Where a clip or card sits in the frame and how it moves: position, anchor, scale, rotation,
+ * opacity and crop, each fixed or keyframed. A slow push-in on an image is a scale animation.
+ */
+export const setTransform = defineCommand({
+  type: 'core/timeline.set-transform',
+  payload: z.strictObject({ ...Ref, transform: TransformPatch.nullable() }),
+  label: () => 'Move picture',
+  apply: (d, { timelineId, itemId, transform }) => {
+    const type = 'core/timeline.set-transform';
+    const { item } = find(d, timelineId, itemId, type);
+    if (item.kind !== 'clip' && item.kind !== 'graphic')
+      throw new CommandError(type, `a ${item.kind} has no placement`);
+    if (transform === null) delete item.transform;
+    else item.transform = Transform.parse({ ...(item.transform ?? {}), ...transform });
+    markEdited(item);
+  },
+});
+
+/** Where an image is cut when its shape does not fit the frame: 0..1 across and down the picture. */
+export const setStillFocus = defineCommand({
+  type: 'core/timeline.set-still-focus',
+  payload: z.strictObject({
+    ...Ref,
+    focus: z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).nullable(),
+  }),
+  label: () => 'Set image focus',
+  apply: (d, { timelineId, itemId, focus }) => {
+    const type = 'core/timeline.set-still-focus';
+    const { item } = find(d, timelineId, itemId, type);
+    if (item.kind !== 'clip') throw new CommandError(type, `a ${item.kind} is not an image`);
+    const core = (item.extensions.core as Record<string, unknown> | undefined) ?? {};
+    const { still: _old, ...rest } = core;
+    item.extensions.core = {
+      ...rest,
+      ...(focus ? { still: { focus } } : {}),
+    };
+    markEdited(item);
+  },
+  merge: { key: ({ itemId }) => itemId, windowMs: 1500 },
+});
+
 export const deleteItem = defineCommand({
   type: 'core/timeline.delete',
   payload: z.strictObject(Ref),
@@ -497,6 +550,8 @@ export const timelineCommands = [
   setItemEffects,
   setTransition,
   setClipAudio,
+  setTransform,
+  setStillFocus,
   deleteItem,
   setTrackLocked,
 ] as unknown as readonly CommandDef<unknown>[];

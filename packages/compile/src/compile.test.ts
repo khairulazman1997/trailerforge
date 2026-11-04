@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { Timeline, framesToFlicks, rate, type TimelineItem } from '@trailerforge/schema';
-import { compileRender, cropPath, esc, piecewise, type SourceMedia } from './compile.js';
+import { animPath, compileRender, cropPath, esc, piecewise, type SourceMedia } from './compile.js';
 import { sha256 } from './sha256.js';
 
 const R = rate(24);
@@ -139,6 +139,32 @@ describe('crop expressions', () => {
       [5, 0.5],
       [14, 0.5],
       [15, 0.25],
+    ]);
+  });
+});
+
+describe('animPath', () => {
+  const fpf = f(1);
+  it('a move whose last keyframe is at (or past) the end of the clip still gets there', () => {
+    const anim = {
+      keyframes: [
+        { at: 0, value: 0, easing: 'linear' as const },
+        { at: f(30), value: 3, easing: 'linear' as const },
+      ],
+    };
+    const path = animPath(anim, 1, f(30), 0, fpf);
+    expect(path.map((p) => p.f)).toEqual([0, 29]);
+    expect(path[1]!.v[0]).toBeCloseTo(2.9, 9);
+    // A move that has already finished adds no extra point.
+    const done = {
+      keyframes: [
+        { at: 0, value: 0, easing: 'linear' as const },
+        { at: f(10), value: 1, easing: 'linear' as const },
+      ],
+    };
+    expect(animPath(done, 1, f(30), 0, fpf).map((p) => [p.f, p.v[0]])).toEqual([
+      [0, 0],
+      [10, 1],
     ]);
   });
 });

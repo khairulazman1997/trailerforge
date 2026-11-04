@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { LibraryStore } from '@trailerforge/core';
 import { JobQueue, type JobRecord } from '@trailerforge/jobs';
+import { probe } from '@trailerforge/media';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { assetCachePaths } from './cache-paths.js';
 import { Ingestor } from './ingestor.js';
@@ -17,7 +18,7 @@ import {
   registerIngestJobs,
   type ImportOutput,
 } from './jobs.js';
-import { clip } from './test-media.js';
+import { clip, image } from './test-media.js';
 
 let home: string;
 let library: LibraryStore;
@@ -94,6 +95,28 @@ describe('footage import', () => {
     expect(queue.list().every((j) => j.projectId === 'proj_1')).toBe(true);
   }, 60_000);
 
+  it('imports an image: probed, a thumbnail and an editing copy, no proxy or filmstrip', async () => {
+    const png = image('still-a', '2400x1350');
+    const job = await importOne(png);
+    expect(job.status).toBe('succeeded');
+    const out = job.output as ImportOutput;
+    expect(out).toMatchObject({ kind: 'image', created: true, warnings: [] });
+    const asset = library.get(out.assetId)!;
+    expect(asset.media?.video[0]).toMatchObject({ width: 2400, height: 1350 });
+    await until(queue, idle);
+    const paths = assetCachePaths(home, asset.quickHash);
+    expect((await readdir(paths.dir)).sort()).toEqual(['still.jpg', 'thumb.jpg']);
+    const still = await probe(paths.still);
+    expect(still.video[0]).toMatchObject({ width: 1920, height: 1080 });
+    const small = image('still-small', '480x270');
+    const warn = (await importOne(small)).output as ImportOutput;
+    expect(warn.warnings.map((w) => w.code)).toEqual(['low-resolution']);
+    // A small image is never enlarged for its editing copy.
+    await until(queue, idle);
+    const smallAsset = library.get(warn.assetId)!;
+    expect((await probe(assetCachePaths(home, smallAsset.quickHash).still)).video[0]).toMatchObject({ width: 480, height: 270 }); // prettier-ignore
+  }, 60_000);
+
   it('does not import the same recording twice, however it is named or where it is', async () => {
     const first = (await importOne(clip('dup'))).output as ImportOutput;
     await until(queue, idle);
@@ -111,7 +134,7 @@ describe('footage import', () => {
       .list()
       .filter((j) => j.type === PREVIEWS_JOB)
       .map((j) => j.output);
-    expect(made[1]).toEqual({ thumbnail: false, filmstrip: false, proxy: false }); // nothing redone
+    expect(made[1]).toEqual({ thumbnail: false, filmstrip: false, proxy: false, still: false }); // nothing redone
   }, 60_000);
 
   it('warns about variable frame rate', async () => {

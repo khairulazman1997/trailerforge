@@ -82,6 +82,9 @@ type OnProgress = (p: Progress) => void;
 
 // ---- building a version ---------------------------------------------------------------------
 
+/** How long an image may be shown, seconds: it has no running time, so this is only a ceiling. */
+export const STILL_SECONDS = 3600;
+
 export interface VersionBuild {
   variantId: string | null;
   name: string;
@@ -153,20 +156,25 @@ export async function buildVersion(
     if (!media) continue;
     const v = media.video[0];
     const turned = v && (v.rotation === 90 || v.rotation === 270);
+    // An image is shown for as long as a clip needs; it has no running time of its own.
+    const still = a.kind === 'image' && v !== undefined;
     sources.set(id, {
       path: a.uri,
       contentHash: a.contentHash ?? a.quickHash,
       width: v ? (turned ? v.height : v.width) : 0,
       height: v ? (turned ? v.width : v.height) : 0,
       frameRate: v?.frameRate ?? { num: 30, den: 1 },
-      duration: media.duration,
-      hasAudio: media.audio.length > 0,
-      ...(v?.variableFrameRate ? { variableFrameRate: true } : {}),
+      duration: still ? STILL_SECONDS : media.duration,
+      hasAudio: still ? false : media.audio.length > 0,
+      ...(v?.variableFrameRate && !still ? { variableFrameRate: true } : {}),
+      ...(still ? { still: true } : {}),
     });
-    const analysis = v ? await readFootageAnalysis(store.paths.analysisCache, a.quickHash) : null;
+    const analysis =
+      v && !still ? await readFootageAnalysis(store.paths.analysisCache, a.quickHash) : null;
     takeSources.set(id, {
-      duration: Math.round(media.duration * FLICKS_PER_SECOND),
+      duration: Math.round((still ? STILL_SECONDS : media.duration) * FLICKS_PER_SECOND),
       ...(analysis ? { footage: analysis } : {}),
+      ...(still ? { still: true } : {}),
     });
   }
 

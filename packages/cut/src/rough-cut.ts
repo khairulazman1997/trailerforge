@@ -41,6 +41,8 @@ export interface TakeSource {
   duration: number;
   /** Footage analysis, when it has run. */
   footage?: FootageFacts;
+  /** A still image: as long as the clip needs, with no source time to jump across. */
+  still?: boolean;
 }
 
 export interface RoughCutInput {

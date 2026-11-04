@@ -160,6 +160,15 @@ export function toFcpxml(input: HandoffInput): string {
       const key = `a:${it.assetId}`;
       if (!assets.has(key)) {
         const id = `r${assets.size + 2}`;
+        if (src.still) {
+          // A still has no running time and no frame rate of its own: zero duration and a format
+          // with neither, so an editor lets it be as long as the clip needs.
+          assets.set(key, {
+            id,
+            xml: `<format id="${id}f" name="FFVideoFormatRateUndefined" width="${src.width}" height="${src.height}" colorSpace="1-1-1 (Rec. 709)"/>\n    <asset id="${id}" name="${xml(baseName(src.path))}" start="0s" duration="0s" hasVideo="1" hasAudio="0" format="${id}f"><media-rep kind="original-media" src="${xml(fileUrl(src.path))}"/></asset>`,
+          });
+          return id;
+        }
         const dur = Math.round((src.duration * r.num) / r.den);
         const video = src.width > 0;
         assets.set(key, {
@@ -346,7 +355,10 @@ export function toOtio(input: HandoffInput): string {
           OTIO_SCHEMA: 'ExternalReference.1',
           metadata: {},
           name: baseName(src.path),
-          available_range: range(0, Math.round((src.duration * r.num) / r.den)),
+          // A still lasts as long as the clip that uses it.
+          available_range: src.still
+            ? range(0, Math.max(1, framesOf(it.duration, r)))
+            : range(0, Math.round((src.duration * r.num) / r.den)),
           available_image_bounds: null,
           target_url: fileUrl(src.path),
         };

@@ -12,6 +12,8 @@ export function assetCachePaths(home: string, quickHash: string) {
     thumbnail: join(dir, 'thumb.jpg'),
     filmstrip: join(dir, 'filmstrip.jpg'),
     proxy: join(dir, 'proxy.mp4'),
+    /** The editing copy of an image: a JPEG no larger than 1920 on its long side. */
+    still: join(dir, 'still.jpg'),
   };
 }
 export type AssetCachePaths = ReturnType<typeof assetCachePaths>;

@@ -198,6 +198,10 @@ From the command line: `tforge variants list|defaults|add|set|override|remove <p
 
 **What leaves your computer in M5:** nothing new. The storyboard's accent suggestions are part of the same text request as before, limited to the ids of installed effects and templates; brand files, frames and sounds stay local.
 
+### Images in the cut
+
+A screenshot, key art or a sketch can sit on the timeline like a recording: add it with the recordings (PNG, JPEG, WebP, BMP or TIFF; an animated GIF counts as a clip). Each image gets a thumbnail and a small editing copy in the library cache. On the timeline it lasts as long as its clip does and has no source time. An image that does not match the frame's shape covers it, cut around a focus point you can set (centre by default); with the blurred-fill look the whole picture is kept instead. A slow push-in, pull-out or pan is just keyframes on the clip's scale and position (`core/timeline.set-transform`, with ready-made moves from `stillMotion` in `@trailerforge/cut`): the picture is cut at the biggest size the move reaches and only ever shrunk after that, so it stays sharp, and every frame is computed exactly, so the same cut always renders the same pixels. Hand-off files list an image as a still of the clip's length. Images with transparency are drawn over black.
+
 ### Review, render and export (M6)
 
 1. **Review** on the **Review** tab: pick the master cut or a version, render a 720p review draft (it renders in the background, so you can keep editing; a hardware encoder is used for drafts when one works), leave comments at a time on the ruler, resolve them, and approve the version. An approval is tied to what the version renders to, not to the preset: comments do not touch it, but any edit that changes the picture or sound marks it out of date ("Approve again"), and undoing the edit brings it back.

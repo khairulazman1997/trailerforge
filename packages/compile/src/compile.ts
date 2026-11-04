@@ -50,7 +50,7 @@ import { sha256 } from './sha256.js';
  * (`timeline.extensions.core.crossTransitions`): it is then drawn on the picture track itself.
  */
 
-export const COMPILER_VERSION = 4;
+export const COMPILER_VERSION = 5;
 
 /** What the compiler needs to know about a recording (from the probe and the library). */
 export interface SourceMedia {
@@ -66,6 +66,11 @@ export interface SourceMedia {
   hasAudio: boolean;
   /** Variable frame rate: real timestamps are kept instead of a regular frame grid. */
   variableFrameRate?: boolean;
+  /**
+   * A still image: one frame shown for as long as the clip lasts. `duration` is not a limit,
+   * `sourceIn` and speed do not apply, and a move is made with the clip's transform keyframes.
+   */
+  still?: boolean;
 }
 
 /** A card's or caption's rendered frames: `pattern` holds `%06d`, frame 0 = the item's start. */
@@ -391,7 +396,8 @@ export function compileRender(input: CompileInput): RenderPlan {
     const fmtTail = `format=${fmt},setsar=1,settb=${rate.den}/${rate.num}`;
     let body: string;
     if (it.kind === 'clip' && input.sources.has(it.assetId)) {
-      body = clipChain(it, input.sources.get(it.assetId)!, lead, frames, fmt, rampOf(it));
+      const src = input.sources.get(it.assetId)!;
+      body = clipChain(it, src, lead, frames, fmt, src.still ? undefined : rampOf(it));
     } else if ((it.kind === 'graphic' || it.kind === 'caption') && graphics.has(it.id)) {
       const g = graphics.get(it.id)!;
       const k = inputs.length;
@@ -445,6 +451,12 @@ export function compileRender(input: CompileInput): RenderPlan {
       }
       if (def.sourceSeconds) {
         // The first one retimes the clip as it is read (see `clipChain`); a second cannot.
+        if (it.kind === 'clip' && input.sources.get(it.assetId)?.still) {
+          warnings.push(
+            `effect ${e.effectId} on "${it.id}": a speed change does not apply to an image`,
+          );
+          return;
+        }
         if (it.kind !== 'clip' || rampOf(it)?.effect !== e)
           warnings.push(`effect ${e.effectId} on "${it.id}": only one speed change per clip`);
         return;
@@ -597,13 +609,31 @@ export function compileRender(input: CompileInput): RenderPlan {
       ];
       return `[${k}:v]${parts.join(',')}`;
     };
-    const h = ramp ? rampChain(item, src, ramp, lead, frames) : plainHead();
+    if (src.still && (src.width <= 0 || src.height <= 0)) {
+      warnings.push(`clip "${item.id}": the image has no size; drawn as a slate`);
+      return slate(item.label ?? 'Missing image', frames);
+    }
+    const h = src.still
+      ? stillHead(item, src, frames)
+      : ramp
+        ? rampChain(item, src, ramp, lead, frames)
+        : plainHead();
     if (typeof h !== 'string') return h.slate;
-    const geo = geometry(item, src, W, H, lead, fpf, warnings);
+    const geo = src.still
+      ? stillGeometry(item, src, lead)
+      : { ...geometry(item, src, W, H, lead, fpf, warnings), picScale: 1 };
     const head = h;
     const k = inputs.length - 1;
     if (!geo.fill)
-      return placed(item, `${head}${geo.crop},${geo.scale}`, lead, frames, fmt, `x${k}`);
+      return placed(
+        item,
+        `${head}${geo.crop},${geo.scale}`,
+        lead,
+        frames,
+        fmt,
+        `x${k}`,
+        geo.picScale,
+      );
     const out = `f${k}`;
     const bw = Math.max(2, Math.round(W / 8));
     const bh = Math.max(2, Math.round(H / 8));
@@ -615,6 +645,93 @@ export function compileRender(input: CompileInput): RenderPlan {
     chains.push(`[${out}b]${geo.scale},format=${WORK_FMT}[${out}fg]`);
     const filled = `[${out}bg][${out}fg]overlay=x=${esc('(W-w)/2')}:y=${esc('(H-h)/2')}:format=yuv444p10`;
     return placed(item, filled, lead, frames, fmt, `x${k}`);
+  }
+
+  /**
+   * An image: decoded once, converted to the working format with BT.709 (an RGB or JPEG source
+   * would otherwise get FFmpeg's default matrix), then repeated for exactly `frames` frames.
+   */
+  function stillHead(item: ClipItem, src: SourceMedia, frames: number): string {
+    const k = inputs.length;
+    inputs.push({
+      kind: 'media',
+      assetId: item.assetId,
+      path: src.path,
+      contentHash: src.contentHash,
+      seek: '0',
+      duration: '1',
+    });
+    if (item.sourceIn !== 0)
+      warnings.push(`clip "${item.id}": an image has no source time; its start is ignored`);
+    return [
+      `[${k}:v]trim=end_frame=1`,
+      'setpts=PTS-STARTPTS',
+      'scale=flags=lanczos+accurate_rnd+full_chroma_int:out_color_matrix=bt709:out_range=tv',
+      `format=${WORK_FMT}`,
+      'loop=loop=-1:size=1:start=0',
+      `settb=${rate.den}/${rate.num}`,
+      'setpts=N',
+      `trim=end_frame=${frames}`,
+      'setpts=PTS-STARTPTS',
+    ].join(',');
+  }
+
+  /**
+   * How an image meets the frame. A fill clip (`extensions.core.reframe.mode: 'fill'`) or one
+   * with a crop of its own uses the same fit as a recording. Otherwise the image covers the
+   * frame: the window of the frame's shape is cut from it around its focus point
+   * (`extensions.core.still.focus`, default the centre) and scaled to the largest zoom the clip
+   * reaches, so a push-in only ever shrinks the picture and stays sharp.
+   */
+  function stillGeometry(
+    item: ClipItem,
+    src: SourceMedia,
+    lead: number,
+  ): { crop: string; scale: string; fill: boolean; picScale: number } {
+    const reframe = (item.extensions.core as { reframe?: { mode?: string } } | undefined)?.reframe;
+    const hasCrop = item.transform?.crop !== undefined && !isZeroCrop(item.transform.crop);
+    if (reframe?.mode === 'fill' || hasCrop) {
+      if (
+        hasCrop &&
+        typeof item.transform!.crop === 'object' &&
+        !Array.isArray(item.transform!.crop)
+      )
+        warnings.push(
+          `clip "${item.id}": an image's crop is not animated; its first value is used`,
+        );
+      return { ...geometry(item, src, W, H, lead, fpf, warnings), picScale: 1 };
+    }
+    const aspect = W / H;
+    let cw = src.width;
+    let ch = src.height;
+    let crop = '';
+    if (Math.abs(src.width / src.height - aspect) > 0.005 * aspect) {
+      if (src.width / src.height > aspect) cw = Math.max(2, Math.round(src.height * aspect));
+      else ch = Math.max(2, Math.round(src.width / aspect));
+      const focus = (
+        item.extensions.core as { still?: { focus?: { x?: number; y?: number } } } | undefined
+      )?.still?.focus;
+      const fx = clamp(focus?.x ?? 0.5, 0, 1);
+      const fy = clamp(focus?.y ?? 0.5, 0, 1);
+      const x = clamp(Math.round(fx * src.width - cw / 2), 0, src.width - cw);
+      const y = clamp(Math.round(fy * src.height - ch / 2), 0, src.height - ch);
+      crop = `,crop=${opts({ w: cw, h: ch, x, y, exact: 1 })}`;
+    }
+    // The picture is scaled to the biggest size the move reaches (never past the image's own).
+    const biggest = item.transform
+      ? Math.max(
+          1,
+          ...animPath(item.transform.scale, 1, item.duration, lead, fpf).map((p) => p.v[0]!),
+        )
+      : 1;
+    const w2 = Math.max(W, Math.min(Math.round(W * Math.min(biggest, 3)), cw));
+    const h2 = Math.max(H, Math.round((w2 * H) / W));
+    return {
+      crop,
+      scale: `scale=${w2}:${h2}:flags=lanczos+accurate_rnd+full_chroma_int`,
+      fill: false,
+      picScale: w2 / W,
+    };
   }
 
   /**
@@ -631,9 +748,16 @@ export function compileRender(input: CompileInput): RenderPlan {
     frames: number,
     fmt: string,
     key: string,
+    picScale = 1,
   ): string {
     const t = item.transform;
-    if (!t) return pic;
+    const picW = Math.round(W * picScale);
+    const picH = Math.round(H * picScale);
+    const toFrame = () =>
+      picW === W && picH === H
+        ? pic
+        : `${pic},scale=${W}:${H}:flags=lanczos+accurate_rnd+full_chroma_int`;
+    if (!t) return toFrame();
     if (JSON.stringify(t.rotation) !== '0')
       warnings.push(`clip "${item.id}": rotation is not rendered`);
     const path = (a: Animatable, dims: number) => animPath(a, dims, item.duration, lead, fpf);
@@ -653,7 +777,7 @@ export function compileRender(input: CompileInput): RenderPlan {
       constant(scale, [1]) &&
       opacityOne
     )
-      return pic;
+      return toFrame();
 
     const alpha = fmt === WORK_FMT_ALPHA;
     const one = (ps: Point[], i: number) => ps.map((p) => ({ f: p.f, v: p.v[i]! }));
@@ -670,7 +794,7 @@ export function compileRender(input: CompileInput): RenderPlan {
       const s = scale[0]!.v[0]!;
       w = Math.max(1, Math.round(W * s));
       h = Math.max(1, Math.round(H * s));
-      if (w !== W || h !== H) sized = `${pic},scale=${w}:${h}:${scaleOpts}`;
+      if (w !== picW || h !== picH) sized = `${pic},scale=${w}:${h}:${scaleOpts}`;
     } else {
       // Converted first: a format change after a size-changing scale would get FFmpeg's own
       // fixed-size converter, which squeezes every frame back to the first size.
@@ -1016,6 +1140,12 @@ export function animPath(
     if (p.f >= frames) continue;
     if (out.length && out[out.length - 1]!.f >= p.f) out[out.length - 1] = p;
     else out.push(p);
+  }
+  // A segment that runs past the last frame still has to reach its value there.
+  const lastPoint = out.at(-1)!;
+  if (lastPoint.f < frames - 1) {
+    const v = at(frames - 1);
+    if (v.some((x, i) => x !== lastPoint.v[i])) out.push({ f: frames - 1, v });
   }
   return out;
 }

@@ -77,6 +77,41 @@ const it_ = (id: string) =>
     .find((i) => i.id === id)!;
 const ref = (itemId: string) => ({ timelineId: 'tl_rough', itemId });
 
+describe('core/timeline.set-transform and set-still-focus', () => {
+  const clip = () => it_('rc_a') as Extract<ReturnType<typeof it_>, { kind: 'clip' }>;
+
+  it('sets a move on a clip, merging with what is there, marks it edited and undoes', () => {
+    const push = { keyframes: [{ at: 0, value: 1, easing: 'linear' }, { at: 2 * F, value: 1.2, easing: 'linear' }] }; // prettier-ignore
+    store.dispatch('core/timeline.set-transform', { ...ref('rc_a'), transform: { scale: push, position: [0.4, 0.5] } }); // prettier-ignore
+    expect(clip().transform).toMatchObject({ scale: push, position: [0.4, 0.5], anchor: [0.5, 0.5], opacity: 1 }); // prettier-ignore
+    expect(isUserEdited(clip())).toBe(true);
+    store.dispatch('core/timeline.set-transform', { ...ref('rc_a'), transform: { opacity: 0.5 } });
+    expect(clip().transform).toMatchObject({ scale: push, opacity: 0.5 });
+    store.dispatch('core/timeline.set-transform', { ...ref('rc_a'), transform: null });
+    expect(clip().transform).toBeUndefined();
+    store.undo();
+    expect(clip().transform).toMatchObject({ scale: push, opacity: 0.5 });
+  });
+
+  it('refuses what has no placement, a bad value and a locked track', () => {
+    const set = (id: string, transform: object | null) => () =>
+      store.dispatch('core/timeline.set-transform', { ...ref(id), transform });
+    expect(set('rc_b', { scale: 2 })).toThrow(/no placement/);
+    expect(set('rc_a', { scale: 'big' })).toThrow();
+    expect(set('rc_a', { zoom: 2 })).toThrow();
+    expect(set('rc_m', { scale: 2 })).toThrow(/locked/);
+  });
+
+  it('sets and clears where an image is cut, keeping the rest of the item’s core data', () => {
+    store.dispatch('core/timeline.set-still-focus', { ...ref('rc_a'), focus: { x: 0.2, y: 0.7 } });
+    expect(clip().extensions.core).toMatchObject({ still: { focus: { x: 0.2, y: 0.7 } }, userEdited: true }); // prettier-ignore
+    store.dispatch('core/timeline.set-still-focus', { ...ref('rc_a'), focus: null });
+    expect((clip().extensions.core as Record<string, unknown>).still).toBeUndefined();
+    expect(() => store.dispatch('core/timeline.set-still-focus', { ...ref('rc_a'), focus: { x: 2, y: 0 } })).toThrow(); // prettier-ignore
+    expect(() => store.dispatch('core/timeline.set-still-focus', { ...ref('rc_b'), focus: null })).toThrow(/not an image/); // prettier-ignore
+  });
+});
+
 describe('core/timeline commands', () => {
   it('a trim or move that parts two items drops the transition between them', () => {
     const t = structuredClone(tl());

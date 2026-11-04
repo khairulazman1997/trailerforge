@@ -118,6 +118,18 @@ export async function extractThumbnail(
   );
 }
 
+/** The editing copy of an image: a JPEG whose long side is at most `longSide` (never enlarged). */
+export async function makeStill(
+  input: string,
+  output: string,
+  longSide = 1920,
+  opts: OpOptions = {},
+): Promise<void> {
+  // Quoted so the commas stay inside the expressions.
+  const scale = `scale=w='if(gte(iw,ih),min(${longSide},iw),-2)':h='if(gte(iw,ih),-2,min(${longSide},ih))'`;
+  await ffmpeg(['-i', input, '-vf', scale, '-frames:v', '1', '-q:v', '3', output], 0, opts);
+}
+
 /** `count` evenly spaced frames tiled into one horizontal strip for the timeline. */
 export async function makeFilmstrip(
   input: string,

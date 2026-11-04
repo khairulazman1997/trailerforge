@@ -40,3 +40,12 @@ export function clip(name: string, opts: { vfr?: boolean } = {}): string {
   ]);
   return out;
 }
+
+/** A still image (PNG or JPEG by extension); `name` and size make each one a different file. */
+export function image(name: string, size = '1600x900', ext: 'png' | 'jpg' = 'png'): string {
+  mkdirSync(dir, { recursive: true });
+  const out = join(dir, `${name}.${ext}`);
+  if (existsSync(out)) return out;
+  ff(['-f', 'lavfi', '-i', `testsrc2=s=${size}:r=1:d=1`, '-frames:v', '1', out]);
+  return out;
+}

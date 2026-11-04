@@ -65,3 +65,16 @@ export function mediaWarnings(info: MediaInfo): MediaWarning[] {
   if ((v.bitDepth ?? 8) > 8) add('high-bit-depth', 'info', `${v.bitDepth}-bit video.`);
   return out;
 }
+
+/** Notes for an image the user adds (a screenshot, key art, a sketch). */
+export function imageWarnings(info: MediaInfo): MediaWarning[] {
+  const v = info.video[0];
+  if (!v || Math.min(v.width, v.height) >= 720) return [];
+  return [
+    {
+      code: 'low-resolution',
+      severity: 'warn',
+      message: `Small image (${v.width}×${v.height}); it will look soft when it fills the frame.`,
+    },
+  ];
+}

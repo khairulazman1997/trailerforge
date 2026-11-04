@@ -512,7 +512,7 @@ const AUDIO_TYPES: Record<string, string> = {
   '.opus': 'audio/ogg',
 };
 
-export type LibraryMediaKind = 'proxy' | 'audio' | 'thumbnail' | 'filmstrip';
+export type LibraryMediaKind = 'proxy' | 'audio' | 'thumbnail' | 'filmstrip' | 'still';
 
 /**
  * A file the UI may fetch: a recording's small editing copy, thumbnail or filmstrip (10 frames of
@@ -530,7 +530,18 @@ export async function libraryMediaOp(
   let path: string;
   let type: string;
   if (what !== 'audio') {
-    if (a.kind !== 'video') throw new OpError('usage', `only recordings have a ${what}`);
+    // Recordings have an editing copy and a filmstrip; images have an editing copy; both a thumbnail.
+    const ok =
+      what === 'thumbnail'
+        ? a.kind === 'video' || a.kind === 'image'
+        : what === 'still'
+          ? a.kind === 'image'
+          : a.kind === 'video';
+    if (!ok)
+      throw new OpError(
+        'usage',
+        `${a.kind === 'image' ? 'an image' : 'that asset'} has no ${what === 'still' ? 'editing image' : what}`,
+      );
     path = assetCachePaths(engine.home, a.quickHash)[what];
     type = what === 'proxy' ? 'video/mp4' : 'image/jpeg';
   } else {
