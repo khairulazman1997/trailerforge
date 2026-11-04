@@ -155,6 +155,8 @@ export type TaskRequest =
       kind: 'claude-code-concepts';
       options: { allow: true; ideas?: string[]; count?: number; repo?: string };
     }
+  /** Ask the AI for a TikTok's caption, hashtags, pinned comment and cover title (written to the TikTok). */
+  | { kind: 'post-copy'; options: { shortId: string } }
   /** Ask the AI for alternative openings (hook versions) for a TikTok; they are added to the free places. */
   | { kind: 'hooks'; options: { shortId: string; count?: number } }
   | { kind: 'build-short'; options: { shortId: string; sectionIds?: string[]; wording?: boolean } }
@@ -476,6 +478,7 @@ export class ServiceClient {
       | 'tiktok.concepts'
       | 'tiktok.wording'
       | 'tiktok.hooks'
+      | 'tiktok.post-copy'
       | 'critique.run',
   ) {
     return this.request<LlmPreview>(

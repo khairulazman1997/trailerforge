@@ -1,9 +1,11 @@
 import { TemplateRegistry, type GraphicTemplate } from '../template.js';
 import { cardTemplates } from './cards.js';
+import { coverTemplates } from './cover.js';
 import { overlayTemplates } from './overlays.js';
 import { subtitleTemplates } from './subtitles.js';
 
 export * from './cards.js';
+export * from './cover.js';
 export * from './overlays.js';
 export * from './subtitles.js';
 
@@ -12,6 +14,7 @@ export const builtinTemplates: readonly GraphicTemplate<unknown>[] = [
   ...cardTemplates,
   ...overlayTemplates,
   ...subtitleTemplates,
+  ...coverTemplates,
 ];
 
 /** A registry holding the built-in templates (the engine's core plugin registers the same ones). */

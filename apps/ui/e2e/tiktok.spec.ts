@@ -81,6 +81,22 @@ test('tiktok: pick a concept, fill a shot, set subtitles, undo', async ({ page }
   await expect(first).toContainText('clip.mp4', { timeout: 30_000 });
   await expect(page.getByRole('status').filter({ hasText: 'shots filled' })).toContainText('1 of');
 
+  // Post text and cover: saved as you leave each field, hashtags tidied.
+  await page.getByLabel(/^Caption/).fill('One perfect parry.');
+  await page.getByLabel(/^Caption/).blur();
+  await expect(page.getByText('Caption (18 of 2200 characters)')).toBeVisible();
+  await page.getByLabel(/^Hashtags/).fill('#EmberKnight, indiedev');
+  await page.getByLabel(/^Hashtags/).blur();
+  await expect(page.getByLabel(/^Hashtags/)).toHaveValue('#EmberKnight #indiedev');
+  await page.getByLabel('Cover title').fill('Parry or die');
+  await page.getByLabel('Cover title').blur();
+  await page.getByLabel(/^Cover frame at/).fill('1.5');
+  await page.getByLabel(/^Cover frame at/).blur();
+  await expect(page.getByLabel(/^Cover frame at/)).toHaveValue('1.5');
+  await page.getByRole('button', { name: 'Write it with the AI' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Never recordings or game files', { timeout: 15_000 }); // prettier-ignore
+  await page.keyboard.press('Escape');
+
   // Hook versions: add one, give it words, see its own version id, remove it.
   await page.getByRole('button', { name: 'Add a hook version' }).click();
   const hook = page.locator('li.card').filter({ hasText: '_hk_a' });

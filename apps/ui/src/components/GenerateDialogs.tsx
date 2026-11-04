@@ -14,7 +14,8 @@ export type Task =
   | 'capture.tips'
   | 'critique.run'
   | 'tiktok.concepts'
-  | 'tiktok.hooks';
+  | 'tiktok.hooks'
+  | 'tiktok.post-copy';
 
 /** Loads the disclosure each time a dialog opens; null while loading. */
 export function usePreview(projectId: string, task: Task, open: boolean): LlmPreview | null {

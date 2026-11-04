@@ -59,6 +59,7 @@ import {
   fillSlotOp,
   recordVoiceTakeOp,
   generateHooksOp,
+  postCopyOp,
   voiceCleanReportOp,
   recordingExtension,
   MAX_RECORDING_BYTES,
@@ -384,6 +385,10 @@ const TaskRequest = z.discriminatedUnion('kind', [
       count: z.int().min(1).max(10).optional(),
       repo: z.string().optional(),
     }),
+  }),
+  z.strictObject({
+    kind: z.literal('post-copy'),
+    options: z.strictObject({ shortId: z.string().min(1) }),
   }),
   z.strictObject({
     kind: z.literal('hooks'),
@@ -911,6 +916,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             'tiktok.concepts',
             'tiktok.wording',
             'tiktok.hooks',
+            'tiktok.post-copy',
             'critique.run',
           ])
           .safeParse(query.get('task'));
@@ -918,7 +924,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           throw new HttpError(
             400,
             'bad-request',
-            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips, tiktok.concepts, tiktok.wording, tiktok.hooks or critique.run',
+            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips, tiktok.concepts, tiktok.wording, tiktok.hooks, tiktok.post-copy or critique.run',
           );
         return llmPreviewOp(engine, storeById(params.id!), task.data);
       },
@@ -1422,6 +1428,8 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
               ...(t.options.wording !== undefined ? { wording: t.options.wording } : {}),
               signal,
             });
+          else if (t.kind === 'post-copy')
+            out = await postCopyOp(engine, store, t.options.shortId, { signal });
           else if (t.kind === 'hooks')
             out = await generateHooksOp(engine, store, t.options.shortId, {
               ...(t.options.count !== undefined ? { count: t.options.count } : {}),

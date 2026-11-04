@@ -20,6 +20,7 @@ export * from './saved-types-ops.js';
 export * from './concepts-ops.js';
 export * from './shorts-ops.js';
 export * from './hooks-ops.js';
+export * from './post-ops.js';
 export * from './voice-ops.js';
 export * from './voice-clean.js';
 export { tapTempo, type TapTempo } from '@trailerforge/cut';

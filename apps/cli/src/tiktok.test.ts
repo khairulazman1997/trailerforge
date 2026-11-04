@@ -116,6 +116,10 @@ describe('tforge tiktok', { timeout: 120_000 }, () => {
     expect(cl.out).toMatch(/^Voice clean-up off/);
     expect((await run(['tiktok', 'clean', project, 'short_parry', '--on'])).out).toMatch(/^Voice clean-up on/); // prettier-ignore
 
+    const po = await run(['tiktok', 'post', project, 'short_parry', '--caption', 'One perfect parry.', '--hashtags', '#EmberKnight,indiedev', '--comment', 'Wishlist!', '--cover', 'Parry or die', '--at', '1.5']); // prettier-ignore
+    expect(po.out).toBe('One perfect parry.\n\n#EmberKnight #indiedev\n\nPinned comment:\nWishlist!\n\nCover title:\nParry or die\nCover frame at 1.5 s'); // prettier-ignore
+    expect((await run(['tiktok', 'post', project, 'short_parry', '--at', 'poster'])).out).not.toMatch(/Cover frame/); // prettier-ignore
+
     const h0 = await run(['tiktok', 'hooks', project, 'short_parry']);
     expect(h0.out).toMatch(/^No hook versions/);
     const h1 = await run(['tiktok', 'hooks', project, 'short_parry', '--add', '--name', 'Question', '--caption', 'Can you parry this?', '--kind', 'question']); // prettier-ignore

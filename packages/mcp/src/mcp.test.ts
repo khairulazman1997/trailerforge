@@ -162,6 +162,7 @@ describe('tool surface', () => {
         'tiktok_fill',
         'tiktok_cut',
         'tiktok_hooks_generate',
+        'tiktok_post_copy_generate',
         'core_shorts_add-hook',
         'core_shorts_rename',
       ]),

@@ -15,8 +15,10 @@ const HD: Resolution = { width: 1920, height: 1080 };
 const VERTICAL: Resolution = { width: 1080, height: 1920 };
 const SQUARE: Resolution = { width: 1080, height: 1080 };
 const reg = builtinRegistry();
-/** Subtitles cut on and off with the voice and take other params: tested in `subtitles.test.ts`. */
-const generic = builtinTemplates.filter((t) => !t.serves.includes('subtitle'));
+/** Subtitles and the cover title take other params and timing: tested in their own files. */
+const generic = builtinTemplates.filter(
+  (t) => !t.serves.includes('subtitle') && !t.serves.includes('cover'),
+);
 
 const tokens = (size: Resolution, logo = false): BrandTokens =>
   brandTokens(
@@ -89,6 +91,7 @@ describe('built-in templates', () => {
     expect(reg.ids().sort()).toEqual(builtinTemplates.map((t) => t.id).sort());
     expect(reg.ids('overlay')).toEqual([
       'core/caption',
+      'core/cover-title',
       'core/lower-third',
       'core/subtitle-line',
       'core/word-caption',

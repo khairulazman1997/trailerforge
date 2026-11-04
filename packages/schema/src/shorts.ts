@@ -75,6 +75,53 @@ export type ShortSubtitles = z.infer<typeof ShortSubtitles>;
 /** Short ids leave room for the `tl_short_` timeline prefix within the 64-character id limit. */
 export const ShortId = Id.refine((id) => id.length <= 52, 'short ids are at most 52 characters');
 
+/** A hashtag without its `#`: letters, digits and underscores. */
+export const Hashtag = z
+  .string()
+  .regex(/^[\p{L}\p{N}_]{1,60}$/u, 'a hashtag is letters, digits and underscores');
+
+/** Tidy a list of hashtags: strip `#` and anything else that is not part of one, drop empties and repeats. */
+export function normalizeHashtags(list: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of list) {
+    const tag = raw
+      .replace(/^[#\s]+/, '')
+      .replace(/[^\p{L}\p{N}_]/gu, '')
+      .slice(0, 60);
+    if (!tag || seen.has(tag.toLowerCase())) continue;
+    seen.add(tag.toLowerCase());
+    out.push(tag);
+  }
+  return out;
+}
+
+/** What goes with the video when it is posted. Limits follow the apps' own (the caption's is cautious). */
+export const PostCopy = z.strictObject({
+  caption: z.string().trim().max(2200).default(''),
+  hashtags: z.array(Hashtag).max(30).default([]),
+  /** The first comment to pin under the post (150 characters, the apps' limit). */
+  pinnedComment: z.string().trim().max(150).default(''),
+});
+export type PostCopy = z.infer<typeof PostCopy>;
+
+/** The cover: a frame of the video (seconds into it; unset = the poster frame) with a title over it. */
+export const ShortCover = z.strictObject({
+  seconds: z.number().min(0).max(600).optional(),
+  title: z.string().trim().max(60).default(''),
+});
+export type ShortCover = z.infer<typeof ShortCover>;
+
+/** The text file written beside an export: caption, hashtags, pinned comment and cover title; '' if there is none. */
+export function formatPostText(post: PostCopy, cover: ShortCover): string {
+  const parts: string[] = [];
+  if (post.caption) parts.push(post.caption);
+  if (post.hashtags.length) parts.push(post.hashtags.map((t) => `#${t}`).join(' '));
+  if (post.pinnedComment) parts.push(`Pinned comment:\n${post.pinnedComment}`);
+  if (cover.title) parts.push(`Cover title:\n${cover.title}`);
+  return parts.length ? `${parts.join('\n\n')}\n` : '';
+}
+
 /** The kinds of opening a hook version can be (the label helps the AI and the user; nothing branches on it). */
 export const HookKind = z.enum(['cold-open', 'text', 'question', 'custom']);
 export type HookKind = z.infer<typeof HookKind>;
@@ -114,6 +161,8 @@ export const Short = z.strictObject({
   storyboard: Storyboard.nullable().default(null),
   export: ExportSettings.optional(),
   hooks: z.array(ShortHook).max(MAX_HOOKS).default([]),
+  post: PostCopy.default({ caption: '', hashtags: [], pinnedComment: '' }),
+  cover: ShortCover.default({ title: '' }),
   platform: ShortPlatform.default('tiktok'),
   subtitles: ShortSubtitles.default({ enabled: false, style: 'lines', edits: [] }),
   /** Clean up the voiceover at render (high-pass, noise reduction, de-esser, compression, level); the files are untouched. */

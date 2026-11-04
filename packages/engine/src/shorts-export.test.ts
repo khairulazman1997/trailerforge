@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -286,6 +286,32 @@ describe('a TikTok, end to end', { timeout: 300_000 }, () => {
     expect(store.state.review.approvals.some((x) => x.variantId === vid)).toBe(false);
     await expect(buildVersion(engine, store, vid)).rejects.toBeInstanceOf(OpError);
     store.dispatch('core/shorts.remove-hook', { shortId: SHORT, hookId: 'b' });
+  });
+
+  it('writes the post text and a cover beside the export (once, not for the music-free copy)', async () => {
+    store.dispatch('core/shorts.set-post-copy', { shortId: SHORT, caption: 'One perfect parry.', hashtags: ['EmberKnight', 'indiedev'], pinnedComment: 'Wishlist now!' }); // prettier-ignore
+    store.dispatch('core/shorts.set-cover', { shortId: SHORT, seconds: 2, title: 'Parry or die' });
+    const r = await exportVersionOp(engine, store, SHORT);
+    expect(r.postFile).toMatch(/\.post\.txt$/);
+    expect(await readFile(r.postFile!, 'utf8')).toBe('One perfect parry.\n\n#EmberKnight #indiedev\n\nPinned comment:\nWishlist now!\n\nCover title:\nParry or die\n'); // prettier-ignore
+    expect(r.coverFile).toMatch(/\.cover\.png$/);
+    const info = await probe(r.coverFile!);
+    expect(info.video[0]).toMatchObject({ width: 1080, height: 1920 });
+    const titled = readFileSync(r.coverFile!);
+    expect(titled.equals(readFileSync(r.poster))).toBe(false);
+    expect(r.musicFree?.coverFile).toBeUndefined();
+    expect(r.musicFree?.postFile).toBeUndefined();
+    // Identical twice, and no title means the plain frame at the chosen time.
+    const again = await exportVersionOp(engine, store, SHORT);
+    expect(readFileSync(again.coverFile!).equals(titled)).toBe(true);
+    store.dispatch('core/shorts.set-cover', { shortId: SHORT, title: '' });
+    const plain = await exportVersionOp(engine, store, SHORT);
+    expect(readFileSync(plain.coverFile!).equals(titled)).toBe(false);
+    store.dispatch('core/shorts.set-post-copy', { shortId: SHORT, caption: '', hashtags: [], pinnedComment: '' }); // prettier-ignore
+    store.dispatch('core/shorts.set-cover', { shortId: SHORT, seconds: null });
+    const none = await exportVersionOp(engine, store, SHORT);
+    expect(none.postFile).toBeUndefined();
+    expect(none.coverFile).toBeUndefined();
   });
 
   it('hands off to an editor, and dropping the short drops its review', async () => {

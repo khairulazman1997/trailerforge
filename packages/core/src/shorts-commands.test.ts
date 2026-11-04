@@ -318,4 +318,21 @@ describe('core/shorts.fill-slot and clear-slot', () => {
     expect(store.state.review.comments).toEqual([]);
     valid();
   });
+
+  it('post text and cover: hashtags are tidied, fields left out stay, the cover time can go back to the poster frame', () => {
+    const sid = 'short_parry';
+    expect(short().post).toEqual({ caption: '', hashtags: [], pinnedComment: '' });
+    expect(short().cover).toEqual({ title: '' });
+    store.dispatch('core/shorts.set-post-copy', { shortId: sid, caption: 'One perfect parry.', hashtags: ['#EmberKnight', 'indiedev ', '##gamedev', 'emberknight', 'a b!c', ''] }); // prettier-ignore
+    expect(short().post).toEqual({ caption: 'One perfect parry.', hashtags: ['EmberKnight', 'indiedev', 'gamedev', 'abc'], pinnedComment: '' }); // prettier-ignore
+    store.dispatch('core/shorts.set-post-copy', { shortId: sid, pinnedComment: 'Wishlist now!' });
+    expect(short().post.caption).toBe('One perfect parry.');
+    expect(() => store.dispatch('core/shorts.set-post-copy', { shortId: sid, pinnedComment: 'x'.repeat(151) })).toThrow(); // prettier-ignore
+    store.dispatch('core/shorts.set-cover', { shortId: sid, seconds: 1.5, title: 'Parry or die' });
+    expect(short().cover).toEqual({ seconds: 1.5, title: 'Parry or die' });
+    store.dispatch('core/shorts.set-cover', { shortId: sid, seconds: null });
+    expect(short().cover).toEqual({ title: 'Parry or die' });
+    expect(() => store.dispatch('core/shorts.set-cover', { shortId: sid })).toThrow();
+    valid();
+  });
 });

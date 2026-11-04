@@ -14,6 +14,7 @@ import { Engine } from './engine.js';
 import { OpError } from './ops.js';
 import { readFile } from 'node:fs/promises';
 import { generateHooksOp } from './hooks-ops.js';
+import { postCopyOp } from './post-ops.js';
 import { createShortOp, fillSlotOp, recordVoiceTakeOp, recordingExtension, shortsViewOp } from './shorts-ops.js'; // prettier-ignore
 
 const ff = (args: string[]) =>
@@ -32,6 +33,12 @@ const concept = {
 
 const mock = createMockProvider({
   'tiktok.wording': { slots: [] },
+  'tiktok.post-copy': {
+    caption: 'A boss swing stops dead.\nOne perfect parry.',
+    hashtags: ['#EmberKnight', 'indiedev', 'IndieDev', 'gamedev'],
+    pinnedComment: 'Which boss should we show next?',
+    coverTitle: 'Parry or die',
+  },
   'tiktok.hooks': {
     hooks: [
       { name: 'Question', kind: 'question', caption: 'Can you parry this?', why: 'Curiosity.' },
@@ -180,6 +187,24 @@ describe('creating and filling a TikTok', { timeout: 120_000 }, () => {
     expect((await generateHooksOp(engine, store, 'short_parry')).full).toBe(true);
     store.undo();
     expect(store.state.shorts[0]!.hooks.map((h) => h.id)).toEqual(['a']);
+    await store.close();
+  });
+
+  it('writes the post text with the AI in one undo step, keeping the hashtags tidy', async () => {
+    const store = await open();
+    await createShortOp(engine, store, { concept, name: 'Parry', wording: false });
+    const r = await postCopyOp(engine, store, 'short_parry');
+    expect(r.applied).toEqual(['caption', 'hashtags', 'pinnedComment', 'coverTitle']);
+    const sh = store.state.shorts[0]!;
+    expect(sh.post).toEqual({
+      caption: 'A boss swing stops dead.\nOne perfect parry.',
+      hashtags: ['EmberKnight', 'indiedev', 'gamedev'],
+      pinnedComment: 'Which boss should we show next?',
+    });
+    expect(sh.cover.title).toBe('Parry or die');
+    store.undo();
+    expect(store.state.shorts[0]!.post.caption).toBe('');
+    expect(store.state.shorts[0]!.cover.title).toBe('');
     await store.close();
   });
 

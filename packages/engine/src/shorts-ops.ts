@@ -332,6 +332,9 @@ export interface ShortView {
   /** Voice clean-up at render (on by default). */
   voiceClean: boolean;
   hasTemplate: boolean;
+  /** Caption, hashtags and pinned comment, and the cover (frame time and title). */
+  post: Short['post'];
+  cover: Short['cover'];
   /** Alternative openings (hook versions), with the version id each is reviewed and exported by. */
   hooks: { id: string; versionId: string; name: string; kind: string; caption: string; takeId: string | null; why: string }[]; // prettier-ignore
   /** The opening shot the hooks change, and the takes a hook may use for it. */
@@ -416,6 +419,8 @@ export async function shortsViewOp(engine: Engine, store: ProjectStore): Promise
       subtitles: { enabled: s.subtitles.enabled, style: s.subtitles.style, edits: s.subtitles.edits.length }, // prettier-ignore
       voiceClean: voiceCleanOn(s),
       hasTemplate: sb !== null,
+      post: s.post,
+      cover: s.cover,
       hooks: s.hooks.map((h) => ({ id: h.id, versionId: hookVersionId(s.id, h.id), name: h.name, kind: h.kind, caption: h.caption, takeId: h.takeId ?? null, why: h.why })), // prettier-ignore
       opening: (() => {
         const o = sb ? hookSlotOf(sb) : undefined;

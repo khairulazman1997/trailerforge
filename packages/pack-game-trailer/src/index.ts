@@ -48,3 +48,4 @@ export const gameTrailerPack = definePlugin({
   },
 });
 export * from './short-hooks.js';
+export * from './post-copy.js';

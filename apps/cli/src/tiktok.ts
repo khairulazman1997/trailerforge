@@ -11,17 +11,22 @@ import {
   tapTempo,
   voiceCleanReportOp,
   generateHooksOp,
+  postCopyOp,
   shortsViewOp,
   voiceDownloadOp,
   voiceStatusOp,
   type Engine,
 } from '@trailerforge/engine';
-import { secondsToFlicks } from '@trailerforge/schema';
+import { formatPostText, secondsToFlicks } from '@trailerforge/schema';
 import { fail, type CmdCtx } from './m2.js';
 
 /** Options of `tforge tiktok …` (parsed in `main.ts`). */
 export interface TikTokOpts {
   none?: boolean | undefined;
+  hashtags?: string | undefined;
+  comment?: string | undefined;
+  cover?: string | undefined;
+  at?: string | undefined;
   generate?: boolean | undefined;
   add?: boolean | undefined;
   edit?: string | undefined;
@@ -74,6 +79,7 @@ export const TIKTOK_SUBS = [
   'music',
   'clean',
   'hooks',
+  'post',
   'generate',
   'ask-claude',
 ] as const;
@@ -338,6 +344,42 @@ export async function tiktokCommand(
             ),
           ].join('\n'),
           r,
+        );
+        return 0;
+      }
+      case 'post': {
+        const dispatch = (type: string, payload: Record<string, unknown>) => {
+          try {
+            store.dispatch(type, { shortId: sid(), ...payload });
+          } catch (err) {
+            throw new OpError('usage', err instanceof Error ? err.message : String(err));
+          }
+        };
+        let note = '';
+        if (o.generate) {
+          const r = await postCopyOp(e, store, sid());
+          note = `${r.applied.length ? `Written by the AI: ${r.applied.join(', ')}` : 'The AI wrote nothing usable'}${r.rejected.map((x) => `\n  ! ${x.field} left out: ${x.reason}`).join('')}\n`; // prettier-ignore
+        }
+        if (o.caption !== undefined || o.hashtags !== undefined || o.comment !== undefined)
+          dispatch('core/shorts.set-post-copy', {
+            ...(o.caption !== undefined ? { caption: o.caption } : {}),
+            ...(o.hashtags !== undefined
+              ? { hashtags: o.hashtags.split(/[\s,]+/).filter(Boolean) }
+              : {}),
+            ...(o.comment !== undefined ? { pinnedComment: o.comment } : {}),
+          });
+        if (o.cover !== undefined || o.at !== undefined)
+          dispatch('core/shorts.set-cover', {
+            ...(o.cover !== undefined ? { title: o.cover } : {}),
+            ...(o.at !== undefined
+              ? { seconds: o.at === 'poster' ? null : num('--at', o.at)! }
+              : {}),
+          });
+        const s = (await shortsViewOp(e, store)).shorts.find((x) => x.id === sid());
+        if (!s) throw new OpError('not-found', `no TikTok "${sid()}"`);
+        ctx.emit(
+          `${note}${formatPostText(s.post, s.cover) || 'No post text yet. Set it with --caption, --hashtags, --comment, --cover, or ask the AI with --generate.\n'}${s.cover.seconds !== undefined ? `Cover frame at ${s.cover.seconds} s\n` : ''}`.trimEnd(), // prettier-ignore
+          { post: s.post, cover: s.cover },
         );
         return 0;
       }

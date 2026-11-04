@@ -20,6 +20,7 @@ import {
   createShortOp,
   fillSlotOp,
   generateHooksOp,
+  postCopyOp,
   generateShortCutOp,
   placeVoiceOp,
   proposeConceptsOp,
@@ -920,6 +921,19 @@ export function createMcpServer(opts: McpServerOptions): Server {
         ...(typeof args.name === 'string' ? { name: args.name } : {}),
         wording: args.wording === true,
       });
+    },
+  });
+
+  add({
+    mutates: true,
+    tool: {
+      name: 'tiktok_post_copy_generate',
+      description:
+        "Ask TrailerForge's own AI to write the text that goes with a posted TikTok: caption, hashtags, a comment to pin and a cover title. They are written to the TikTok (replacing what was there; one undo step) and saved beside the export as <name>.post.txt. You can write them yourself with core_shorts_set-post-copy. The request sends the concept, shot titles, voiceover script, brief and the game facts not excluded from AI use; never the recordings.",
+      inputSchema: object({ short: SHORT_PROP }, ['short']),
+    },
+    async run(args) {
+      return postCopyOp(engine, await project(args), shortArg(args));
     },
   });
 

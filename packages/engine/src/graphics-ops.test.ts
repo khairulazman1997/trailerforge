@@ -133,7 +133,7 @@ describe('graphics templates and effects', () => {
   it('lists the installed templates with their parameters', () => {
     const t = templatesViewOp(engine);
     expect(t.map((x) => x.id)).toContain('core/title-card');
-    expect(t).toHaveLength(13);
+    expect(t).toHaveLength(14);
     const title = t.find((x) => x.id === 'core/title-card')!;
     expect(title).toMatchObject({
       kind: 'card',

@@ -58,6 +58,7 @@ import {
   checkBrandContrast,
   flicksPerFrame,
   isMasterTimeline,
+  formatPostText,
   shortTimelineId,
   shortVersionIds,
   shortVersionOf,
@@ -73,6 +74,7 @@ import { readFootageAnalysis } from '@trailerforge/analysis';
 import type { Engine } from './engine.js';
 import { deriveVariantOp } from './graphics-ops.js';
 import { OpError } from './ops.js';
+import { writeCover } from './post-ops.js';
 import { shortSources } from './shorts-ops.js';
 import { STILL_SECONDS } from './still.js';
 import { voiceCleanOn, withVoiceClean } from './voice-clean.js';
@@ -719,6 +721,10 @@ export interface ExportResult {
   variantId: string | null;
   /** `.srt` and `.vtt` written beside the video when the version has subtitles. */
   subtitleFiles: string[];
+  /** TikToks: caption, hashtags, pinned comment and cover title as text, when there are any. */
+  postFile?: string;
+  /** TikToks: the cover image, when a cover time or title is set. */
+  coverFile?: string;
   file: string;
   poster: string;
   record: string;
@@ -755,7 +761,7 @@ export async function exportVersionOp(
     !!tl?.tracks.some((t) => t.id === 'trk_music' && t.items.length > 0);
   // Without music in the cut there is only one file to make.
   if (!hasMusic || mode === 'with') return exportOne(engine, store, variantId, o, false);
-  if (mode === 'without') return exportOne(engine, store, variantId, o, true);
+  if (mode === 'without') return exportOne(engine, store, variantId, o, true, true);
   const part = (from: number): VersionExportOptions => {
     const { onProgress, ...rest } = o;
     return onProgress
@@ -780,6 +786,7 @@ async function exportOne(
   variantId: string | null,
   o: VersionExportOptions,
   withoutMusic: boolean,
+  extras = !withoutMusic,
 ): Promise<ExportResult> {
   const overrides = o.overrides ?? [];
   const b = await buildVersion(engine, store, variantId, withoutMusic ? { withoutMusic } : {});
@@ -873,6 +880,35 @@ async function exportOne(
       subtitleFiles.push(f);
     }
   }
+  // Post text and the cover beside a TikTok's video (once, not again for the music-free copy).
+  const short = shortOf(store.state, variantId);
+  let postFile: string | undefined;
+  let coverFile: string | undefined;
+  const coverWarnings: string[] = [];
+  if (short && extras) {
+    const text = formatPostText(short.post, short.cover);
+    if (text) {
+      postFile = file.replace(/\.[^.]+$/, '.post.txt');
+      await writeAtomic(postFile, text);
+    }
+    if (short.cover.title || short.cover.seconds !== undefined) {
+      coverFile = file.replace(/\.[^.]+$/, '.cover.png');
+      try {
+        const c = await writeCover(engine, store, short, {
+          video: file,
+          size: b.timeline.resolution,
+          fallbackSeconds: posterTime(timelineDuration(b.timeline) / FLICKS_PER_SECOND, ex.settings?.posterSeconds), // prettier-ignore
+          dest: coverFile,
+          ...(o.signal ? { signal: o.signal } : {}),
+        });
+        coverWarnings.push(...c.warnings);
+      } catch (err) {
+        o.signal?.throwIfAborted();
+        coverFile = undefined;
+        coverWarnings.push(`the cover image could not be made: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`); // prettier-ignore
+      }
+    }
+  }
   const used = [...planVerdict.overridden, ...outVerdict.overridden];
   const now = (o.now ?? (() => new Date()))();
   const all = [...planFound, ...out.findings] as GateFinding[];
@@ -906,7 +942,9 @@ async function exportOne(
       ...outVerdict.overridden,
     ],
     overridden: checks.map(([c]) => c),
-    warnings: [...new Set([...b.warnings, ...r.warnings])],
+    warnings: [...new Set([...b.warnings, ...r.warnings, ...coverWarnings])],
+    ...(postFile ? { postFile } : {}),
+    ...(coverFile ? { coverFile } : {}),
   };
   await writeAtomic(
     result.record,

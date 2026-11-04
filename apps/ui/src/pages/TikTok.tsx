@@ -518,6 +518,8 @@ function ShortEditor({ id, short, disabled }: { id: string; short: Short; disabl
         onClose={() => setPrompter(false)}
       />
 
+      <PostPanel id={id} short={short} disabled={disabled} />
+
       <HooksPanel id={id} short={short} disabled={disabled} />
 
       <MusicPanel id={id} short={short} disabled={disabled} />
@@ -978,6 +980,165 @@ function HooksDialog({
             Sent to <strong>{provider.name}</strong>
             {preview.model ? ` (${preview.model})` : ''}: the concept, the brief and the game facts
             not excluded from AI use. Never recordings or game files.
+          </p>
+        )}
+      </div>
+    </ConfirmDialog>
+  );
+}
+
+/** Caption, hashtags, pinned comment and the cover: written beside the export (.post.txt, .cover.png). */
+function PostPanel({ id, short, disabled }: { id: string; short: Short; disabled: boolean }) {
+  const store = useStore();
+  const [ask, setAsk] = useState(false);
+  const run = (type: string, payload: Record<string, unknown>) =>
+    store.command(id, type, { shortId: short.id, ...payload });
+  const tags = short.post.hashtags.map((t) => `#${t}`).join(' ');
+  return (
+    <section aria-labelledby="tt-post">
+      <h3 id="tt-post">Post text and cover</h3>
+      <p className="muted">
+        What goes with the video when you post it. It is saved next to the export as a text file,
+        with the cover image.
+      </p>
+      <div className="row">
+        <button
+          type="button"
+          disabled={disabled || !short.hasTemplate}
+          onClick={() => setAsk(true)}
+        >
+          Write it with the AI
+        </button>
+      </div>
+      <label className="field">
+        <span>Caption ({short.post.caption.length} of 2200 characters)</span>
+        <textarea
+          key={`cap:${short.post.caption}`}
+          rows={3}
+          defaultValue={short.post.caption}
+          disabled={disabled}
+          onBlur={(e) =>
+            e.target.value.trim() !== short.post.caption &&
+            void run('core/shorts.set-post-copy', { caption: e.target.value })
+          }
+        />
+      </label>
+      <label className="field">
+        <span>Hashtags (separated by spaces)</span>
+        <input
+          key={`tags:${tags}`}
+          type="text"
+          defaultValue={tags}
+          disabled={disabled}
+          onBlur={(e) =>
+            e.target.value.trim() !== tags &&
+            void run('core/shorts.set-post-copy', {
+              hashtags: e.target.value.split(/[\s,]+/).filter(Boolean),
+            })
+          }
+        />
+      </label>
+      <label className="field">
+        <span>Comment to pin ({short.post.pinnedComment.length} of 150 characters)</span>
+        <input
+          key={`pin:${short.post.pinnedComment}`}
+          type="text"
+          defaultValue={short.post.pinnedComment}
+          maxLength={150}
+          disabled={disabled}
+          onBlur={(e) =>
+            e.target.value.trim() !== short.post.pinnedComment &&
+            void run('core/shorts.set-post-copy', { pinnedComment: e.target.value })
+          }
+        />
+      </label>
+      <div className="row">
+        <label className="field">
+          <span>Cover title</span>
+          <input
+            key={`ct:${short.cover.title}`}
+            type="text"
+            defaultValue={short.cover.title}
+            maxLength={60}
+            disabled={disabled}
+            onBlur={(e) =>
+              e.target.value.trim() !== short.cover.title &&
+              void run('core/shorts.set-cover', { title: e.target.value })
+            }
+          />
+        </label>
+        <label className="field">
+          <span>Cover frame at (seconds; empty for the poster frame)</span>
+          <input
+            key={`cs:${short.cover.seconds ?? ''}`}
+            type="text"
+            inputMode="decimal"
+            defaultValue={short.cover.seconds ?? ''}
+            disabled={disabled}
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              const n = v === '' ? null : Number(v);
+              if (n !== null && !(Number.isFinite(n) && n >= 0))
+                return store.toast('error', 'Give the time in seconds, like 1.5.');
+              if (n !== (short.cover.seconds ?? null))
+                void run('core/shorts.set-cover', { seconds: n });
+            }}
+          />
+        </label>
+      </div>
+      <PostDialog id={id} shortId={short.id} open={ask} onClose={() => setAsk(false)} />
+    </section>
+  );
+}
+
+function PostDialog({
+  id,
+  shortId,
+  open,
+  onClose,
+}: {
+  id: string;
+  shortId: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const store = useStore();
+  const preview = usePreview(id, 'tiktok.post-copy', open);
+  const provider = preview?.provider;
+  return (
+    <ConfirmDialog
+      open={open}
+      title="Write the post text"
+      confirmLabel="Write it"
+      confirmDisabled={!preview?.available}
+      {...(needsConsent(preview) && provider
+        ? { acknowledge: `I understand this information is sent to ${provider.name}.` }
+        : {})}
+      onCancel={onClose}
+      onConfirm={async () => {
+        if (!preview?.available) return;
+        if (provider?.sendsDataOffDevice) giveConsent(provider.id);
+        await store.startTask(id, { kind: 'post-copy', options: { shortId } });
+        onClose();
+      }}
+    >
+      <div className="stack">
+        <p>
+          The AI writes a caption, hashtags, a comment to pin and a cover title. They replace what
+          is there now; Undo brings it back.
+        </p>
+        {!preview ? (
+          <p role="status">Checking which AI provider will be used…</p>
+        ) : !preview.available || !provider ? (
+          <p className="error" role="alert">
+            No AI provider is available: {preview.reason}.
+          </p>
+        ) : (
+          <p data-testid="disclosure">
+            Sent to <strong>{provider.name}</strong>
+            {preview.model ? ` (${preview.model})` : ''}: the concept, the shot titles, the
+            voiceover script, the brief and the game facts not excluded from AI use. Never
+            recordings or game files.
           </p>
         )}
       </div>

@@ -21,6 +21,7 @@ import {
   type TakeMatch,
   collectIds,
   mintId,
+  normalizeHashtags,
   hookVersionId,
   shortTimelineId,
   type AssetRole,
@@ -144,6 +145,8 @@ export const addShort = defineCommand({
       subtitles: { enabled: false, style: 'lines', edits: [] },
       voiceClean: true,
       hooks: [],
+      post: { caption: '', hashtags: [], pinnedComment: '' },
+      cover: { title: '' },
       extensions: {},
     });
   },
@@ -513,6 +516,52 @@ export const setShortVoiceClean = defineCommand({
   },
 });
 
+// ---- post text and cover --------------------------------------------------------------------
+
+/** The caption, hashtags and pinned comment that go with the post (fields left out stay as they are). */
+export const setShortPostCopy = defineCommand({
+  type: 'core/shorts.set-post-copy',
+  payload: z.strictObject({
+    shortId: Id,
+    caption: z.string().trim().max(2200).optional(),
+    hashtags: z.array(z.string().max(80)).max(40).optional(),
+    pinnedComment: z.string().trim().max(150).optional(),
+    /** The cover's title (what the AI writes along with the post text). */
+    coverTitle: z.string().trim().max(60).optional(),
+  }),
+  label: () => 'Edit post text',
+  apply: (d, p) => {
+    const s = findShort(d, p.shortId, 'core/shorts.set-post-copy');
+    if (p.caption !== undefined) s.post.caption = p.caption;
+    if (p.hashtags !== undefined) s.post.hashtags = normalizeHashtags(p.hashtags).slice(0, 30);
+    if (p.pinnedComment !== undefined) s.post.pinnedComment = p.pinnedComment;
+    if (p.coverTitle !== undefined) s.cover.title = p.coverTitle;
+  },
+  merge: { key: ({ shortId }) => `${shortId}:post`, windowMs: 1500 },
+});
+
+/** The cover frame (seconds into the video; `null` goes back to the poster frame) and its title. */
+export const setShortCover = defineCommand({
+  type: 'core/shorts.set-cover',
+  payload: z
+    .strictObject({
+      shortId: Id,
+      seconds: z.number().min(0).max(600).nullable().optional(),
+      title: z.string().trim().max(60).optional(),
+    })
+    .refine((p) => p.seconds !== undefined || p.title !== undefined, {
+      message: 'give a time or a title',
+    }),
+  label: () => 'Set the cover',
+  apply: (d, p) => {
+    const s = findShort(d, p.shortId, 'core/shorts.set-cover');
+    if (p.seconds === null) delete s.cover.seconds;
+    else if (p.seconds !== undefined) s.cover.seconds = p.seconds;
+    if (p.title !== undefined) s.cover.title = p.title;
+  },
+  merge: { key: ({ shortId }) => `${shortId}:cover`, windowMs: 1500 },
+});
+
 // ---- hook versions ---------------------------------------------------------------------------
 
 const HookText = {
@@ -660,6 +709,8 @@ export const shortsCommands = [
   clearShortSlot,
   setShortMusic,
   setShortGrid,
+  setShortPostCopy,
+  setShortCover,
   addShortHook,
   editShortHook,
   removeShortHook,

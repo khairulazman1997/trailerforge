@@ -108,6 +108,8 @@ Usage:
   tforge tiktok music <dir> <short> [--asset <id>|--none] [--timing-only] [--tempo <bpm>|--taps <s,s,s,s…>] [--export with|without|both]
                                                           Music for the cut (a reference song can give the beat only); tap tempo; export with/without music
   tforge tiktok clean <dir> <short> [--on|--off]        Voice clean-up at render, with each recording's loudness before and after
+  tforge tiktok post <dir> <short> [--generate] [--caption <t>] [--hashtags <a,b,c>] [--comment <t>] [--cover <title>] [--at <s>|poster]
+                                                          Caption, hashtags, pinned comment and cover; written beside the export as .post.txt and .cover.png
   tforge tiktok hooks <dir> <short> [--generate [--count n]|--add --name <n> [--caption <t>] [--kind cold-open|text|question|custom] [--take <id>]|--edit <id> …|--remove <id>]
                                                           Alternative openings for A/B tests; each exports as its own version <short>_hk_<id>
   tforge tiktok generate <dir> <short>                    Build the TikTok's cut; then draft/export it with --version <short>
@@ -219,6 +221,9 @@ export async function main(
         to: { type: 'string' },
         language: { type: 'string' },
         none: { type: 'boolean', default: false },
+        hashtags: { type: 'string' },
+        comment: { type: 'string' },
+        cover: { type: 'string' },
         generate: { type: 'boolean', default: false },
         add: { type: 'boolean', default: false },
         edit: { type: 'string' },
@@ -491,6 +496,7 @@ export async function main(
       case 'tiktok music':
       case 'tiktok clean':
       case 'tiktok hooks':
+      case 'tiktok post':
       case 'tiktok generate':
       case 'tiktok ask-claude':
         return await tiktokCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3], {
@@ -519,6 +525,10 @@ export async function main(
           style: o.style,
           platform: o.platform,
           none: o.none,
+          hashtags: o.hashtags,
+          comment: o.comment,
+          cover: o.cover,
+          at: o.at,
           generate: o.generate,
           add: o.add,
           edit: o.edit,

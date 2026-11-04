@@ -118,6 +118,10 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
     'Beat grid for a TikTok: tempo (BPM; no music file needed, e.g. from tap tempo), offset in flicks (at most a second), downbeatShift, beatsPerBar, barsPerPhrase. null clears tempo or beatsPerBar. Rebuild the cut with tiktok_cut afterwards.',
   'core/shorts.set-voice-clean':
     "Voice clean-up on or off for a TikTok (on by default): high-pass, noise reduction tuned to the recording's own noise floor, de-esser, gentle compression and a level to -16 LUFS, applied when it renders; the recordings are not changed.",
+  'core/shorts.set-post-copy':
+    'The text that goes with a posted TikTok: caption (up to 2200 characters), hashtags (tidied: no #, one word each), pinned comment (up to 150) and coverTitle. Fields you leave out stay. Written beside the export as <name>.post.txt.',
+  'core/shorts.set-cover':
+    'The cover image written with the export: seconds into the video to take it from (null = the poster frame) and the title over it.',
   'core/shorts.add-hook':
     "Add a hook version to a TikTok: an alternative opening for A/B tests (name, kind cold-open|text|question|custom, caption = the words over the first shot (empty for none), optional takeId of the opening shot's other recording). At most three. It exports as its own version <short id>_hk_<hook id>.",
   'core/shorts.edit-hook':
