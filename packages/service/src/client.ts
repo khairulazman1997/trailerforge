@@ -139,6 +139,8 @@ export type TaskRequest =
   | { kind: 'rank-takes'; options?: { overwriteChosen?: boolean } }
   /** Ask the AI for TikTok concepts (from the brief, the game knowledge and `ideas`); they land in the waiting list. */
   | { kind: 'tiktok-concepts'; options?: { ideas?: string[]; count?: number } }
+  /** Build (or rebuild) a TikTok's template from its format and concept; `wording: false` skips the AI pass. */
+  | { kind: 'build-short'; options: { shortId: string; sectionIds?: string[]; wording?: boolean } }
   /** Ask the AI to critique a version (`variantId` null = the master cut); notes land on the Review tab. */
   | { kind: 'critique'; options: { variantId: string | null } }
   /** Render a 720p review draft of a version (`variantId` null = the master cut). */
@@ -355,6 +357,7 @@ export class ServiceClient {
       | 'brief.suggest'
       | 'capture.tips'
       | 'tiktok.concepts'
+      | 'tiktok.wording'
       | 'critique.run',
   ) {
     return this.request<LlmPreview>(

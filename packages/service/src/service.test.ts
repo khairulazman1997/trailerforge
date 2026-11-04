@@ -32,6 +32,7 @@ const tipsReply = async (req: { prompt: string }) => {
 };
 const mock = createMockProvider({
   'capture.tips': tipsReply,
+  'tiktok.wording': { slots: [] },
   'tiktok.concepts': {
     concepts: [
       {
@@ -1139,6 +1140,23 @@ describe('capture', () => {
     expect((await client.getProject(ID)).project.concepts.map((c) => c.title)).toEqual(['Parry or die']); // prettier-ignore
     await expect(client.startTask(ID, { kind: 'tiktok-concepts', options: { count: 99 } })).rejects.toMatchObject({ status: 400 }); // prettier-ignore
     await client.command(ID, 'core/concepts.remove', { conceptIds: ['con_parry_or_die'] });
+  });
+
+  it('builds a TikTok from a concept as a task, then rebuilds one section', async () => {
+    expect(await client.llmPreview(ID, 'tiktok.wording')).toMatchObject({ available: true });
+    await client.command(ID, 'core/shorts.add', { id: 'short_t', concept: { source: 'user', title: 'Parry', hook: 'A hook', formatId: 'game-trailer/tiktok-list', targetSeconds: 20 } }); // prettier-ignore
+    const t = await client.startTask(ID, { kind: 'build-short', options: { shortId: 'short_t' } });
+    const done = await client.waitForTask(t.id);
+    expect(done).toMatchObject({ status: 'succeeded', result: { shortId: 'short_t', kept: 0, wording: { status: 'done', changed: 0 } } }); // prettier-ignore
+    const sb = (await client.getProject(ID)).project.shorts.find(
+      (s) => s.id === 'short_t',
+    )!.storyboard!;
+    expect(sb.meta.templateId).toBe('game-trailer/tiktok-list');
+    const again = await client.waitForTask((await client.startTask(ID, { kind: 'build-short', options: { shortId: 'short_t', sectionIds: [sb.sections[0]!.id], wording: false } })).id); // prettier-ignore
+    expect(again).toMatchObject({ status: 'succeeded', result: { rebuilt: 1, wording: { status: 'off' } } }); // prettier-ignore
+    const bad = await client.waitForTask((await client.startTask(ID, { kind: 'build-short', options: { shortId: 'short_nope' } })).id); // prettier-ignore
+    expect(bad).toMatchObject({ status: 'failed', error: { code: 'not-found' } });
+    await client.command(ID, 'core/shorts.remove', { shortId: 'short_t' });
   });
 
   it('cancelling tips means nothing is stored', async () => {

@@ -4,6 +4,7 @@ import { captureTipsCommands } from './capture-tips-commands.js';
 import { captureCommands } from './capture-commands.js';
 import { recordingCommands } from './recording-commands.js';
 import { storyboardTemplates } from './templates.js';
+import { shortTemplates } from './short-templates.js';
 import { unityExtractor } from './unity.js';
 import { videoTypes } from './video-types.js';
 
@@ -16,6 +17,8 @@ export * from './capture-pack-write.js';
 export * from './capture-tips.js';
 export * from './concepts.js';
 export * from './tiktok-formats.js';
+export * from './short-templates.js';
+export * from './short-wording.js';
 export * from './capture-tips-commands.js';
 export * from './pack-ext.js';
 export * from './capture-commands.js';
@@ -38,7 +41,7 @@ export const gameTrailerPack = definePlugin({
   dependsOn: ['core'],
   register(ctx) {
     for (const vt of videoTypes) ctx.videoTypes.register(vt);
-    for (const t of storyboardTemplates) ctx.templates.register(t);
+    for (const t of [...storyboardTemplates, ...shortTemplates]) ctx.templates.register(t);
     ctx.knowledgeExtractors.register(unityExtractor);
     for (const c of [...captureCommands, ...captureTipsCommands, ...recordingCommands])
       ctx.commands.register(c);

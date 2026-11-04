@@ -4,6 +4,7 @@ import { jsonSchemaFor } from '@trailerforge/llm';
 import {
   GeneratedCaptureTips,
   GeneratedConcepts,
+  GeneratedWording,
   GeneratedTakeRanking,
   videoTypes,
 } from '@trailerforge/pack-game-trailer';
@@ -38,6 +39,7 @@ const schemas: (readonly [string, z.ZodType])[] = [
   ['capture.tips', GeneratedCaptureTips],
   ['cut.rank-takes', GeneratedTakeRanking],
   ['tiktok.concepts', GeneratedConcepts],
+  ['tiktok.wording', GeneratedWording],
   ['knowledge.deep-scan', DeepScanOutput],
   ...briefAnswers,
 ];

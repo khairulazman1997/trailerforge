@@ -51,6 +51,7 @@ import {
   importFootageOp,
   matchAcceptOp,
   matchSuggestOp,
+  buildShortOp,
   conceptsOp,
   rankTakesOp,
   approveVersionOp,
@@ -326,6 +327,14 @@ const TaskRequest = z.discriminatedUnion('kind', [
         count: z.int().min(1).max(10).optional(),
       })
       .default({}),
+  }),
+  z.strictObject({
+    kind: z.literal('build-short'),
+    options: z.strictObject({
+      shortId: z.string().min(1),
+      sectionIds: z.array(z.string().min(1)).optional(),
+      wording: z.boolean().optional(),
+    }),
   }),
   z.strictObject({
     kind: z.literal('scan'),
@@ -720,6 +729,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             'brief.suggest',
             'capture.tips',
             'tiktok.concepts',
+            'tiktok.wording',
             'critique.run',
           ])
           .safeParse(query.get('task'));
@@ -727,7 +737,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           throw new HttpError(
             400,
             'bad-request',
-            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips, tiktok.concepts or critique.run',
+            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips, tiktok.concepts, tiktok.wording or critique.run',
           );
         return llmPreviewOp(engine, storeById(params.id!), task.data);
       },
@@ -1209,6 +1219,12 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await refineStoryboardOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'capture-tips')
             out = await captureTipsOp(engine, store, { ...t.options, signal });
+          else if (t.kind === 'build-short')
+            out = await buildShortOp(engine, store, t.options.shortId, {
+              ...(t.options.sectionIds ? { sectionIds: t.options.sectionIds } : {}),
+              ...(t.options.wording !== undefined ? { wording: t.options.wording } : {}),
+              signal,
+            });
           else if (t.kind === 'tiktok-concepts')
             out = await conceptsOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'rank-takes')

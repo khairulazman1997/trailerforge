@@ -56,7 +56,8 @@ describe('storyboard templates', () => {
       }),
       gameTrailerPack,
     ]);
-    expect(host.registries.templates.list()).toHaveLength(4);
+    // Four trailer templates and the six TikTok ones.
+    expect(host.registries.templates.list()).toHaveLength(10);
     expect(host.registries.templates.require('game-trailer/tpl-custom').flexible).toBe(true);
     expect(host.registries.templates.require('game-trailer/tpl-release').name).toBe(
       'Release trailer',
