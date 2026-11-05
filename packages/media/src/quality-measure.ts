@@ -36,6 +36,8 @@ export interface OutputExpectations {
   loudness: { lufs: number; truePeakDb: number; toleranceLu?: number } | null;
   /** Seconds of flashes the plan declares (a flash transition): a bright frame there is intended. */
   declaredFlashes?: readonly number[];
+  /** Spans (seconds) where the plan shows a dark full-frame card fading its words in or out: black there is intended. */
+  plannedDark?: readonly { start: number; end: number }[];
 }
 
 export interface PictureAnalysis {
@@ -352,7 +354,11 @@ export function checkOutput(facts: OutputFacts, exp: OutputExpectations): Qualit
         },
       ),
     );
-  for (const b of facts.picture.black)
+  const dark = exp.plannedDark ?? [];
+  const eps = (0.5 / exp.rate.num) * exp.rate.den;
+  for (const b of facts.picture.black.filter(
+    (x) => !dark.some((d) => x.start >= d.start - eps && x.end <= d.end + eps),
+  ))
     out.push(
       f('core/black-frames', 'override', `black picture from ${b.start} s to ${b.end} s`, {
         at: b,

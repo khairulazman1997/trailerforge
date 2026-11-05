@@ -76,6 +76,16 @@ describe('validateProjectRefs', () => {
     expect(validateProjectRefs(p)[0]?.message).toMatch(/duplicate id "trk_v1"/);
   });
 
+  it('scopes track, transition and item ids to their timeline (a TikTok cut reuses the trailer cut’s track ids)', () => {
+    const p = parsed();
+    const copy = structuredClone(p.timelines[0]!);
+    copy.id = 'tl_short_copy';
+    p.timelines.push(copy);
+    expect(validateProjectRefs(p).filter((i) => i.message.includes('duplicate'))).toEqual([]);
+    copy.id = p.timelines[0]!.id; // the timeline id itself stays project-unique
+    expect(validateProjectRefs(p).some((i) => i.message.includes(`duplicate id "${copy.id}"`))).toBe(true); // prettier-ignore
+  });
+
   it('detects nested-sequence cycles', () => {
     const p = parsed();
     const base = p.timelines[0]!;

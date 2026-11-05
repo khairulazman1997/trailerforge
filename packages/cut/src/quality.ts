@@ -589,3 +589,30 @@ export function checkShortForm(input: ShortFormInput): GateFinding[] {
   }
   return out;
 }
+
+/** How long a card's words take to fade in and out (the built-in cards' timing, with a margin). */
+const CARD_FADE_IN_SECONDS = 0.5;
+const CARD_FADE_OUT_SECONDS = 0.4;
+
+/**
+ * Where a full-frame card shows its background before its words have faded in (or after they
+ * faded out), in seconds: a dark brand background reads as a black picture there, and that is
+ * intended, not a gap. `isCard` says whether a graphic item is a full-frame card (not an overlay).
+ */
+export function plannedDark(
+  timeline: Timeline,
+  isCard: (item: TimelineItem) => boolean,
+): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  for (const t of timeline.tracks) {
+    if (t.muted || (t.kind !== 'graphics' && t.kind !== 'video')) continue;
+    for (const it of t.items) {
+      if (it.kind !== 'graphic' || !isCard(it)) continue;
+      const a = sec(it.start);
+      const b = sec(itemEnd(it));
+      out.push({ start: a, end: Math.min(b, a + CARD_FADE_IN_SECONDS) });
+      out.push({ start: Math.max(a, b - CARD_FADE_OUT_SECONDS), end: b });
+    }
+  }
+  return out;
+}

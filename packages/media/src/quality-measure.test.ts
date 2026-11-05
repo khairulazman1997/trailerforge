@@ -101,6 +101,12 @@ describe('output checks', { timeout: 60_000 }, () => {
     expect(frame.map((x) => [x.checkId, x.at?.start])).toEqual([['core/flash-frames', 0.5]]);
   });
 
+  it('black where the plan shows a dark card fading in is intended; anywhere else it is not', async () => {
+    const facts = await measureOutput(files.gap!);
+    expect(ids(checkOutput(facts, exp({ plannedDark: [{ start: 1, end: 1.5 }] })))).toEqual([]);
+    expect(ids(checkOutput(facts, exp({ plannedDark: [{ start: 1.1, end: 1.5 }] })))).toEqual(['core/black-frames']); // prettier-ignore
+  });
+
   it('a single bright frame at a planned flash is intended, elsewhere it is not', async () => {
     const facts = await measureOutput(files.frame!);
     expect(ids(checkOutput(facts, exp({ declaredFlashes: [0.55] })))).toEqual([]);

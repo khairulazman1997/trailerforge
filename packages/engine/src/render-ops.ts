@@ -25,6 +25,7 @@ import {
   checkShortForm,
   cuesOf,
   declaredFlashes,
+  plannedDark,
   finding,
   gateVerdict,
   overrideDecision,
@@ -853,6 +854,7 @@ async function exportOne(
         frames: frames(b),
         loudness: { lufs: b.resolved.loudness.lufs, truePeakDb: b.resolved.loudness.truePeakDb },
         declaredFlashes: declaredFlashes(b.timeline).map((e) => e.at),
+        plannedDark: plannedDark(b.timeline, (it) => it.kind === 'graphic' && engine.plugins.registries.graphicTemplates.get(it.templateId)?.kind === 'card'), // prettier-ignore
       },
       { cacheDir: join(store.paths.cache, 'quality'), ...(o.signal ? { signal: o.signal } : {}) },
     ),

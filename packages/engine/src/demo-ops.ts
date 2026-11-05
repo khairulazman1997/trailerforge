@@ -9,6 +9,7 @@ import { FLICKS_PER_SECOND, rate, type ProjectInput } from '@trailerforge/schema
 import type { Engine } from './engine.js';
 import { generateCutOp, importFootageOp, matchAcceptOp } from './footage-ops.js';
 import { createDefaultVariantsOp } from './graphics-ops.js';
+import { createShortOp, generateShortCutOp } from './shorts-ops.js';
 import { requireRenderTools } from './health-ops.js';
 import { OpError } from './ops.js';
 import { qualityOp } from './render-ops.js';
@@ -214,6 +215,19 @@ async function waitIdle(engine: Engine, signal?: AbortSignal, ms = 120_000) {
   }
 }
 
+/** The demo TikTok's concept: a beat-led montage (the demo has no voiceover). */
+const DEMO_CONCEPT = {
+  source: 'user' as const,
+  title: 'Parry or die',
+  hook: 'The Ash Warden swings. One perfect parry.',
+  formatId: 'game-trailer/tiktok-montage',
+  pitch: 'The parry is what sets Ember Knight apart, and it reads in one second.',
+  shotList: ['The perfect parry', 'The Warden staggers', 'The forest run'],
+  voiceover: [],
+  targetSeconds: 14,
+  entityIds: [],
+};
+
 export interface DemoOutcome {
   projectId: string;
   dir: string;
@@ -221,6 +235,8 @@ export interface DemoOutcome {
   shots: number;
   versions: string[];
   seconds: number;
+  /** The demo TikTok (a version of its own, made from the same recordings). */
+  short: string;
 }
 
 /** A folder name for the demo that is not taken yet: "Ember Knight demo", then " 2", " 3"... */
@@ -276,9 +292,28 @@ export async function createDemoOp(
     await matchAcceptOp(engine, store, { minConfidence: 'certain' });
     await generateCutOp(engine, store);
     createDefaultVariantsOp(store);
+    // One TikTok from the same recordings, on the same beat: the short-form flow at a glance.
+    const short = await createShortOp(engine, store, {
+      concept: DEMO_CONCEPT,
+      name: 'Parry or die',
+      wording: false,
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
+    const shots = store.state.shorts
+      .find((x) => x.id === short.shortId)!
+      .storyboard!.sections.flatMap((sec) => sec.slots)
+      .filter((x) => x.kind === 'shot');
+    const footage = engine.library.list().filter((a) => a.kind === 'video').sort((a, b) => (a.originalName < b.originalName ? -1 : 1)); // prettier-ignore
+    shots.forEach(
+      (slot, i) =>
+      store.dispatch('core/shorts.fill-slot', { shortId: short.shortId, target: { slotId: slot.id }, assetId: footage[i % footage.length]!.id, input: 'gameplay' }), // prettier-ignore
+    );
+    store.dispatch('core/shorts.set-music', { shortId: short.shortId, assetId: track.id });
+    store.dispatch('core/shorts.set-post-copy', { shortId: short.shortId, caption: 'One boss. One tell. One perfect parry.', hashtags: ['EmberKnight', 'indiedev', 'gamedev'], coverTitle: 'Parry or die' }); // prettier-ignore
+    await generateShortCutOp(engine, store, short.shortId);
     // The demo must be clean: a blocked Quality Gate would be a bug here, not a lesson.
     const versions = store.state.storyboard!.variants.map((v) => v.id);
-    for (const v of [null, ...versions]) {
+    for (const v of [null, ...versions, short.shortId]) {
       const q = await qualityOp(engine, store, v);
       if (!q.verdict.allowed)
         throw new OpError('failed', `the demo's ${v ?? 'master'} cut is blocked by the Quality Gate: ${q.verdict.blocking.map((f) => f.message).join('; ')}`); // prettier-ignore
@@ -292,6 +327,7 @@ export async function createDemoOp(
       shots: SHOTS.length,
       versions,
       seconds: end / FLICKS_PER_SECOND,
+      short: short.shortId,
     };
   } catch (err) {
     await engine.closeProject(dir).catch(() => undefined);

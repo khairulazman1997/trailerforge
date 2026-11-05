@@ -64,7 +64,17 @@ describe('demo project', { timeout: 300_000 }, () => {
     expect(p.storyboard!.variants.map((v) => v.formatTargetId)).toEqual(['fmt_yt', 'fmt_tt']);
     expect(p.brand?.colors.primary).toBe('#f2aa4c');
     expect(p.knowledge).toHaveLength(3);
-    expect(out).toMatchObject({ shots: 5, versions: expect.any(Array) });
+    expect(out).toMatchObject({
+      shots: 5,
+      versions: expect.any(Array),
+      short: 'short_parry_or_die',
+    });
+    const short = p.shorts.find((x) => x.id === out.short)!;
+    expect(short.storyboard!.sections.flatMap((x) => x.slots).filter((x) => x.kind === 'shot' && x.takes.length === 0)).toEqual([]); // prettier-ignore
+    const stl = p.timelines.find((t) => t.id === `tl_short_${out.short}`)!;
+    expect(stl.resolution).toEqual({ width: 1080, height: 1920 });
+    expect(stl.tracks.flatMap((t) => t.items).some((i) => i.kind === 'placeholder')).toBe(false);
+    expect(short.post.hashtags).toContain('EmberKnight');
     expect(out.seconds).toBeGreaterThan(15);
     expect(out.seconds).toBeLessThan(26);
   });

@@ -119,13 +119,21 @@ export function validateProjectRefs(project: Project): RefIssue[] {
       issue(tp, `unknown format target "${tl.formatTargetId}"`);
     }
     const children: string[] = [];
+    // Tracks, transitions and items are unique within their timeline: every command and comment
+    // names the timeline too, and a TikTok's cut uses the same track ids as the trailer's.
+    const local = new Map<string, string>();
+    const claimLocal = (id: string, path: string) => {
+      const prev = local.get(id);
+      if (prev) issue(path, `duplicate id "${id}" (also at ${prev})`);
+      else local.set(id, path);
+    };
     tl.tracks.forEach((track, ki) => {
       const kp = `${tp}.tracks[${ki}]`;
-      claim(track.id, kp);
-      track.transitions.forEach((t, i) => claim(t.id, `${kp}.transitions[${i}]`));
+      claimLocal(track.id, kp);
+      track.transitions.forEach((t, i) => claimLocal(t.id, `${kp}.transitions[${i}]`));
       track.items.forEach((item, ii) => {
         const ip = `${kp}.items[${ii}]`;
-        claim(item.id, ip);
+        claimLocal(item.id, ip);
         if (item.slotId && !slotIds.has(item.slotId)) issue(ip, `unknown slot "${item.slotId}"`);
         if (item.kind === 'clip' && !assetIds.has(item.assetId)) {
           issue(ip, `unknown asset "${item.assetId}"`);

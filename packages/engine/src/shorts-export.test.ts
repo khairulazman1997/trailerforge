@@ -77,7 +77,7 @@ beforeAll(async () => {
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, 'config.json'), modelFile);
   await writeFile(join(dir, 'verified.json'), JSON.stringify({ 'config.json': manifest.files[0]!.sha256 })); // prettier-ignore
-  ff(['-f', 'lavfi', '-i', 'gradients=s=320x180:r=30:d=6:c0=0x4488cc:c1=0xffcc66:speed=0.02', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', join(root, 'gameplay.mp4')]); // prettier-ignore
+  ff(['-f', 'lavfi', '-i', 'gradients=s=320x180:r=30:d=6:c0=0x4488cc:c1=0xffcc66:speed=0.02:seed=1', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', join(root, 'gameplay.mp4')]); // prettier-ignore
   ff([
     '-f',
     'lavfi',

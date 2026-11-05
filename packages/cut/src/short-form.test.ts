@@ -115,3 +115,18 @@ describe('short-form checks', () => {
     expect(ids(checkShortForm({ timeline: at(1) }))).not.toContain('short/cta-end'); // no call to action in this format
   });
 });
+
+describe('plannedDark', () => {
+  it('covers the fade-in and fade-out of full-frame cards only', async () => {
+    const { plannedDark } = await import('./quality.js');
+    const t = tl([
+      picture([clip('a', 'a1', 0, 2)]),
+      { id: 'trk_cards', kind: 'graphics', items: [card('c', 'cta1', 2, 2)] },
+    ]);
+    expect(plannedDark(t, (i) => i.kind === 'graphic')).toEqual([
+      { start: 2, end: 2.5 },
+      { start: 3.6, end: 4 },
+    ]);
+    expect(plannedDark(t, () => false)).toEqual([]);
+  });
+});
