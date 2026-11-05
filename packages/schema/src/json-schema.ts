@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DecisionRecord } from './decision.js';
 import { AssetLibrary, LibraryAsset } from './media.js';
+import { PlannerFile, ProjectRegistryFile } from './planner.js';
 import { Project } from './project.js';
 import { Storyboard } from './storyboard.js';
 import { Timeline } from './timeline.js';
@@ -17,6 +18,8 @@ export const jsonSchemaSources = {
   'library-asset': LibraryAsset,
   'asset-library': AssetLibrary,
   decision: DecisionRecord,
+  planner: PlannerFile,
+  'project-registry': ProjectRegistryFile,
 } as const;
 
 export type JsonSchemaName = keyof typeof jsonSchemaSources;

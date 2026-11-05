@@ -63,3 +63,25 @@ function isAlive(pid: number): boolean {
     return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
+
+/**
+ * Take a short-lived lock on an app-level file (library, planner, project registry), waiting up
+ * to `timeoutMs` for another process that holds it.
+ */
+export async function acquireLockWaiting(
+  path: string,
+  timeoutMs: number,
+  what: string,
+): Promise<Lock> {
+  const deadline = Date.now() + timeoutMs;
+  for (let wait = 10; ; wait = Math.min(wait * 2, 200)) {
+    try {
+      return await acquireLock(path);
+    } catch (err) {
+      if (!(err instanceof ProjectLockedError)) throw err;
+      if (Date.now() >= deadline)
+        throw new Error(`${what} is busy (pid ${err.holder.pid} holds ${path})`, { cause: err });
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+}

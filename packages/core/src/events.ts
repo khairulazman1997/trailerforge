@@ -10,6 +10,8 @@ export interface CoreEvents {
   'core/project.changed': { projectId: string; change: Omit<ChangeEvent, 'project'> };
   'core/project.saved': { projectId: string; dir: string };
   'core/project.closed': { projectId: string; dir: string };
+  /** The planner file changed (a command, undo or redo in this process). */
+  'core/planner.changed': { kind: 'command' | 'undo' | 'redo'; type: string; label: string };
   'core/storyboard.approved': { projectId: string; storyboardId: string; revision: number };
   'core/footage.ingested': { projectId: string; assetIds: string[] };
   'core/job.updated': {

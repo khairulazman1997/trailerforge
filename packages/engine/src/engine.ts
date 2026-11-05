@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Egress, LibraryStore, type CommandRegistry } from '@trailerforge/core';
+import {
+  Egress,
+  LibraryStore,
+  PlannerStore,
+  ProjectRegistry,
+  type CommandRegistry,
+} from '@trailerforge/core';
 import {
   PINNED_VISION_MODEL,
   registerAnalysisJobs,
@@ -113,6 +119,10 @@ export class Engine {
     readonly routesPath: string,
     readonly pluginStatus: PluginStatus[],
     private readonly autosaveMs: number,
+    /** Campaigns and calendar slots (`<home>/planner/planner.json`). */
+    readonly planner: PlannerStore,
+    /** Every project folder the app created or opened (`<home>/projects.json`). */
+    readonly registry: ProjectRegistry,
   ) {}
 
   static async start(opts: EngineOptions = {}): Promise<Engine> {
@@ -141,6 +151,10 @@ export class Engine {
     // Footage ingest and local analysis: registered before the queue starts, so a job left
     // running by a crash resumes at startup.
     const library = await LibraryStore.open(home);
+    const registry = await ProjectRegistry.open(home);
+    const planner = await PlannerStore.open(home, {
+      onChange: (_file, change) => bus.emit('core/planner.changed', change),
+    });
     registerIngestJobs({ library, queue: jobs, home });
     const embedder = opts.visionEmbedder ?? ((dir: string, id: string) => sidecarEmbedder(dir, id));
     registerAnalysisJobs(jobs, { visionEmbedder: embedder });
@@ -229,7 +243,14 @@ export class Engine {
       routesPath,
       status,
       opts.autosaveMs ?? 2000,
+      planner,
+      registry,
     );
+    // Keep the project list's names in step with renames.
+    bus.on('core/project.saved', ({ dir }) => {
+      const name = engine.projects.get(dir)?.state.name;
+      if (name) engine.registry.rename(dir, name).catch(() => {});
+    });
     engine.ollama = providers['core/ollama'];
     engine.tools = opts.ffmpegTools ?? resolveTools();
     await loadSavedTypes(engine);
@@ -348,8 +369,9 @@ export class Engine {
     return { commands: this.commands, autosaveMs: this.autosaveMs };
   }
 
-  private track(store: ProjectStore): ProjectStore {
+  private async track(store: ProjectStore): Promise<ProjectStore> {
     const dir = store.paths.dir;
+    await this.registry.register({ id: store.state.id, dir, name: store.state.name });
     this.projects.set(dir, store);
     this.unbridge.set(dir, bridgeProjectStore(store, this.bus));
     this.bus.emit('core/project.opened', { projectId: store.state.id, dir });
