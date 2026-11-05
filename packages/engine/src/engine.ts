@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { CreateFromSlotResult } from './planner-ops.js';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -342,6 +343,18 @@ export class Engine {
     return this.track(store);
   }
 
+  /**
+   * Make a project from a planner calendar slot (stable API for the Content Calendar Planner):
+   * see `createFromCalendarSlotOp`.
+   */
+  async createFromCalendarSlot(
+    slotId: string,
+    opts: { dir?: string | undefined } = {},
+  ): Promise<CreateFromSlotResult> {
+    const { createFromCalendarSlotOp } = await import('./planner-ops.js');
+    return createFromCalendarSlotOp(this, slotId, opts);
+  }
+
   async openProject(dir: string): Promise<ProjectStore> {
     const existing = this.projects.get(resolve(dir));
     if (existing) return existing;
@@ -371,10 +384,10 @@ export class Engine {
 
   private async track(store: ProjectStore): Promise<ProjectStore> {
     const dir = store.paths.dir;
-    await this.registry.register({ id: store.state.id, dir, name: store.state.name });
     this.projects.set(dir, store);
     this.unbridge.set(dir, bridgeProjectStore(store, this.bus));
     this.bus.emit('core/project.opened', { projectId: store.state.id, dir });
+    await this.registry.register({ id: store.state.id, dir, name: store.state.name });
     return store;
   }
 }

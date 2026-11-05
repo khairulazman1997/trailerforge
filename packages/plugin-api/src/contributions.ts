@@ -72,6 +72,19 @@ export const PlatformProfile = z.strictObject({
   captionsRecommended: z.boolean().default(true),
   /** Derivation ruleset used to build this platform's storyboard variant. */
   variantRulesetId: PluginRef.optional(),
+  /**
+   * The deliverable a planned video for this platform starts with: its version's frame size,
+   * rate and length (the shape is `aspects[0]`).
+   */
+  format: z
+    .strictObject({
+      resolution: Resolution,
+      frameRate: Rate,
+      targetDuration: z.number().positive(),
+    })
+    .optional(),
+  /** Export preset id (e.g. `core/vertical`) a version for this platform uses by default. */
+  exportPresetId: PluginRef.optional(),
 });
 export type PlatformProfile = z.input<typeof PlatformProfile>;
 

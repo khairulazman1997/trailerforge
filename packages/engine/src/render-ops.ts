@@ -1,4 +1,5 @@
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { presetForPlatforms } from './platforms.js';
 import { dirname, join } from 'node:path';
 import {
   CompileError,
@@ -122,6 +123,7 @@ export async function buildVersion(
   let timeline: Timeline;
   let name: string;
   let exportSettings: StoryboardVariant['export'];
+  let platformPreset: string | undefined;
   if (variantId === null) {
     const master =
       project.timelines.find((t) => t.id === 'tl_rough') ??
@@ -135,6 +137,11 @@ export async function buildVersion(
     timeline = (await deriveVariantOp(engine, store, variantId)).timeline;
     name = v.name || v.id;
     exportSettings = v.export;
+    // Unless the user chose one, the version's platform names its preset (planner, M8).
+    platformPreset = presetForPlatforms(
+      engine.plugins.registries.platforms.list(),
+      project.formatTargets.find((f) => f.id === v.formatTargetId)?.platformIds,
+    );
   }
   if (o.maxHeight) timeline = scaled(timeline, o.maxHeight);
   const warnings: string[] = [];
@@ -211,7 +218,7 @@ export async function buildVersion(
 
   const beats = (await cutGridBeats(engine, store)) ?? undefined;
   const resolved = resolveExport(
-    exportSettings?.presetId,
+    exportSettings?.presetId ?? platformPreset,
     { resolution: timeline.resolution, frameRate: timeline.frameRate },
     exportSettings?.loudnessLufs !== undefined ? { loudnessLufs: exportSettings.loudnessLufs } : {},
   );

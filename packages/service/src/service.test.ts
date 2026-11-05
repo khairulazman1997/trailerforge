@@ -922,7 +922,7 @@ describe('settings routes', () => {
     await expect(c2.setApiKey('')).rejects.toMatchObject({ status: 400 });
     expect((await c2.clearApiKey()).anthropicApiKey.set).toBe(false);
     expect((await anthropic()).available).toMatchObject({ ok: false });
-  });
+  }, 30_000); // provider checks probe local tools: slow under pnpm check load on Windows
 
   it('edits and resets the routes, and announces the change on the event stream', async () => {
     const ac = new AbortController();

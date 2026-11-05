@@ -224,7 +224,7 @@ export interface DemoOutcome {
 }
 
 /** A folder name for the demo that is not taken yet: "Ember Knight demo", then " 2", " 3"... */
-async function freeDir(base: string): Promise<string> {
+export async function freeDir(base: string): Promise<string> {
   for (let n = 1; ; n++) {
     const dir = n === 1 ? `${base}.tforge` : `${base} ${n}.tforge`;
     if (

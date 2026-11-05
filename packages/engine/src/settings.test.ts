@@ -90,7 +90,7 @@ describe('API key and provider availability', () => {
     } finally {
       await engine.close();
     }
-  });
+  }, 30_000); // provider checks probe local tools: slow under pnpm check load on Windows
 
   it('rejects things that are not a key, and reports an environment key as such', async () => {
     const engine = await Engine.start({

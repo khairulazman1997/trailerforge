@@ -1,4 +1,5 @@
 import { briefCommands } from '@trailerforge/brief';
+import { BUILTIN_PLATFORMS } from './platforms.js';
 import { builtinEffects, builtinTransitions } from '@trailerforge/effects';
 import { builtinTemplates } from '@trailerforge/graphics';
 import { genericExtractor, knowledgeCommands } from '@trailerforge/knowledge';
@@ -60,23 +61,7 @@ export const corePlugin = definePlugin({
   version: '0.0.0',
   apiVersion: PLUGIN_API_VERSION,
   register(ctx) {
-    ctx.platforms.register({
-      id: 'core/youtube',
-      name: 'YouTube',
-      aspects: ['16:9'],
-      loudnessLufs: -14,
-      truePeakDb: -1,
-      safeArea: { top: 0.05, bottom: 0.1, left: 0.05, right: 0.05 },
-    });
-    ctx.platforms.register({
-      id: 'core/tiktok',
-      name: 'TikTok',
-      aspects: ['9:16'],
-      maxDuration: 600,
-      loudnessLufs: -14,
-      truePeakDb: -1,
-      safeArea: { top: 0.12, bottom: 0.2, left: 0.06, right: 0.14 },
-    });
+    for (const platform of BUILTIN_PLATFORMS) ctx.platforms.register(platform);
     ctx.exportPresets.register({
       id: 'core/youtube-1080p',
       name: 'YouTube 1080p H.264',
