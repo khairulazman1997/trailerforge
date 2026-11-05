@@ -6,7 +6,12 @@ import {
   type CallToolResult,
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import { CommandError, readDecisions, type ProjectStore } from '@trailerforge/core';
+import {
+  CommandError,
+  plannerCommands,
+  readDecisions,
+  type ProjectStore,
+} from '@trailerforge/core';
 import {
   briefStatus,
   analyzeOp,
@@ -24,6 +29,7 @@ import {
   templatePreviewOp,
   templatesViewOp,
   variantsViewOp,
+  plannerViewOp,
   generateCutOp,
   matchAcceptOp,
   matchSuggestOp,
@@ -45,7 +51,7 @@ import {
 } from '@trailerforge/engine';
 import { storyboardTiming, userEditedFields } from '@trailerforge/storyboard';
 import { z } from 'zod';
-import { COMMAND_DESCRIPTIONS, HIDDEN_COMMANDS } from './descriptions.js';
+import { COMMAND_DESCRIPTIONS, HIDDEN_COMMANDS, PLANNER_DESCRIPTIONS } from './descriptions.js';
 
 export interface McpServerOptions {
   engine: Engine;
@@ -1012,6 +1018,81 @@ export function createMcpServer(opts: McpServerOptions): Server {
         const { project: _ignored, ...payload } = args;
         const next = store.dispatch(type, payload);
         return { ok: true, revision: next.storyboard?.revision ?? null, canUndo: store.canUndo };
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------- planner (app-level, no project)
+  // Campaigns and planned videos live in the app home, so these tools take no "project".
+  const noProject = (properties: Record<string, object>, required: string[] = []) => ({
+    type: 'object' as const,
+    properties,
+    required,
+    additionalProperties: false,
+  });
+  add({
+    mutates: false,
+    tool: {
+      name: 'planner_view',
+      description:
+        'The content calendar: campaigns, planned videos (date, platforms, campaign) with the live status, date and next-status suggestion of the project made from each, every known project, the platforms that can be chosen, and footage shared inside a campaign. Edit with the planner_* tools.',
+      inputSchema: noProject({}),
+      annotations: ReadOnly,
+    },
+    async run() {
+      return plannerViewOp(engine);
+    },
+  });
+  add({
+    mutates: false,
+    tool: {
+      name: 'planner_create_project',
+      description:
+        "Make the project for a planned video: it gets the video's title, campaign, date, platforms and video type, and one output format per platform. The project is created under the app's projects folder (the user can choose another folder in the app or with tforge planner create-project --dir). The planned video must not have a project yet.",
+      inputSchema: noProject(
+        { slotId: { type: 'string', description: 'A planned video id from planner_view.' } },
+        ['slotId'],
+      ),
+    },
+    async run(args) {
+      const slotId = z.string().min(1).parse(args.slotId);
+      return engine.createFromCalendarSlot(slotId);
+    },
+  });
+  for (const def of [
+    { type: 'undo', label: 'Undo the last calendar change.' },
+    { type: 'redo', label: 'Redo the calendar change that was undone.' },
+  ] as const) {
+    add({
+      mutates: false,
+      tool: {
+        name: `planner_${def.type}`,
+        description: def.label,
+        inputSchema: noProject({}),
+      },
+      async run() {
+        if (def.type === 'undo') await engine.planner.undo();
+        else await engine.planner.redo();
+        return plannerViewOp(engine);
+      },
+    });
+  }
+  for (const def of plannerCommands) {
+    const json = z.toJSONSchema(def.payload as z.ZodType, { io: 'input' }) as Record<
+      string,
+      unknown
+    >;
+    delete json.$schema;
+    add({
+      mutates: false,
+      tool: {
+        name: def.type.replace(/[/.]/g, '_'),
+        description: `${PLANNER_DESCRIPTIONS[def.type] ?? `Run ${def.type}.`} Undoable with planner_undo. [${def.type}]`,
+        inputSchema: { ...json, type: 'object' } as Tool['inputSchema'],
+      },
+      async run(args) {
+        await engine.planner.dispatch(def.type, args);
+        return plannerViewOp(engine);
       },
     });
   }

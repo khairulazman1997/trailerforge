@@ -29,6 +29,7 @@ import {
   effectsViewOp,
   setSfxFolderOp,
   sfxViewOp,
+  plannerViewOp,
   templatePreviewOp,
   templatesViewOp,
   variantsViewOp,
@@ -380,6 +381,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       events.emit('project.closed', p);
     }),
     engine.bus.on('core/project.saved', (p) => events.emit('project.saved', p)),
+    engine.bus.on('core/planner.changed', (p) => events.emit('planner.changed', p)),
     engine.bus.on('core/job.updated', (p) => events.emit('job.updated', p)),
   ];
 
@@ -490,6 +492,16 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       'GET',
       /^\/v1\/projects$/,
       async () => stores().map((s) => ({ id: s.state.id, name: s.state.name, dir: s.paths.dir })),
+    ],
+    // Every project the app has opened, with whether its folder is still there.
+    ['GET', /^\/v1\/projects\/known$/, async () => engine.registry.views()],
+    [
+      'DELETE',
+      /^\/v1\/projects\/known$/,
+      async ({ body }) => {
+        const { dir } = Dir.parse(await body());
+        return { removed: await engine.registry.forget(resolve(dir)) };
+      },
     ],
     [
       'POST',
@@ -1038,6 +1050,42 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       },
     ],
     ['GET', /^\/v1\/effects$/, async () => effectsViewOp(engine)],
+    // Content Calendar Planner: campaigns and planned videos live in the app home, not in a project.
+    ['GET', /^\/v1\/planner$/, async () => plannerViewOp(engine)],
+    [
+      'POST',
+      /^\/v1\/planner\/commands$/,
+      async ({ body }) => {
+        const c = z
+          .strictObject({ type: z.string().min(1), payload: z.unknown() })
+          .parse(await body());
+        await engine.planner.dispatch(c.type, c.payload);
+        return plannerViewOp(engine);
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/planner\/(?<what>undo|redo)$/,
+      async ({ params }) => {
+        if (params.what === 'undo') await engine.planner.undo();
+        else await engine.planner.redo();
+        return plannerViewOp(engine);
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/planner\/slots\/(?<id>[^/]+)\/create-project$/,
+      async ({ params, body }) => {
+        const o = z
+          .strictObject({ dir: z.string().min(1).optional() })
+          .default({})
+          .parse(await body());
+        const made = await engine.createFromCalendarSlot(params.id!, {
+          ...(o.dir ? { dir: resolve(o.dir) } : {}),
+        });
+        return { ...made, view: await plannerViewOp(engine) };
+      },
+    ],
     ['GET', /^\/v1\/sfx$/, async () => sfxViewOp(engine)],
     [
       'POST',

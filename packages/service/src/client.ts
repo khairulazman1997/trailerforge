@@ -51,6 +51,8 @@ import type {
   cutGridOp,
   effectsViewOp,
   setSfxFolderOp,
+  plannerViewOp,
+  createFromCalendarSlotOp,
   sfxViewOp,
   removeSavedTypeOp,
   savedTypesViewOp,
@@ -429,6 +431,45 @@ export class ServiceClient {
   }
   setSfxFolder(folder: string | null) {
     return this.request<Result<typeof setSfxFolderOp>>('POST', '/v1/sfx/folder', { folder });
+  }
+  /** Campaigns, planned videos with their projects' live fields, platforms (Content Calendar Planner). */
+  planner() {
+    return this.request<Result<typeof plannerViewOp>>('GET', '/v1/planner');
+  }
+  /** Run a `planner/*` command (see `PlannerStore.commandTypes`); returns the new view. */
+  plannerCommand(type: string, payload: unknown) {
+    return this.request<Result<typeof plannerViewOp>>('POST', '/v1/planner/commands', {
+      type,
+      payload,
+    });
+  }
+  plannerUndo() {
+    return this.request<Result<typeof plannerViewOp>>('POST', '/v1/planner/undo');
+  }
+  plannerRedo() {
+    return this.request<Result<typeof plannerViewOp>>('POST', '/v1/planner/redo');
+  }
+  /** Make a project from a planned video; it is opened and linked. */
+  createProjectFromSlot(slotId: string, dir?: string) {
+    return this.request<
+      Result<typeof createFromCalendarSlotOp> & { view: Result<typeof plannerViewOp> }
+    >('POST', `/v1/planner/slots/${encodeURIComponent(slotId)}/create-project`, dir ? { dir } : {});
+  }
+  /** Every project folder the app has opened, with whether it is still there. */
+  knownProjects() {
+    return this.request<
+      {
+        id: string;
+        dir: string;
+        name: string;
+        registeredAt: string;
+        lastOpenedAt: string;
+        state: 'ok' | 'missing' | 'replaced' | 'unreadable';
+      }[]
+    >('GET', '/v1/projects/known');
+  }
+  forgetProject(dir: string) {
+    return this.request<{ removed: boolean }>('DELETE', '/v1/projects/known', { dir });
   }
   savedVideoTypes() {
     return this.request<Result<typeof savedTypesViewOp>>('GET', '/v1/video-types/saved');

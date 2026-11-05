@@ -156,6 +156,17 @@ describe('tool surface', () => {
         'core_review_comment',
         'core_export_set',
         'core_timeline_set-clip-audio',
+        'core_project_set-campaign',
+        'core_project_set-schedule',
+        'core_project_set-platforms',
+        'planner_view',
+        'planner_create_project',
+        'planner_undo',
+        'planner_redo',
+        'planner_campaign_add',
+        'planner_slot_add',
+        'planner_slot_move',
+        'planner_slot_link',
       ]),
     );
     // Bulk-result commands are reachable only through the action tools.
@@ -168,6 +179,11 @@ describe('tool surface', () => {
     expect(names).not.toContain('core_brand_set-font');
     // Approving is the user's sign-off, and overriding a gate finding is theirs too.
     expect(names).not.toContain('core_review_approve');
+    // The calendar is not tied to a project, so its tools take no "project".
+    for (const name of ['planner_view', 'planner_slot_add', 'planner_create_project'])
+      expect(JSON.stringify(tools.find((t) => t.name === name)!.inputSchema)).not.toContain(
+        '"project"',
+      );
     // Applying an AI critique's fix is the user's decision; Claude can ask for the critique.
     expect(names).not.toContain('core_critique_apply-fix');
     expect(names).not.toContain('core_critique_add');
@@ -180,7 +196,9 @@ describe('tool surface', () => {
     );
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object');
-      expect(t.inputSchema.properties).toHaveProperty('project');
+      // Every tool can name the project, except the calendar's (not tied to one).
+      if (!t.name.startsWith('planner_'))
+        expect(t.inputSchema.properties).toHaveProperty('project');
       expect(t.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
       expect(t.description?.length).toBeGreaterThan(10);
     }
@@ -456,4 +474,50 @@ describe('review, quality and render tools', () => {
     expect(done.error.message).toMatch(/Quality Gate stopped the export/);
     expect((await call(client, 'render_cancel')).data).toEqual({ cancelled: false });
   }, 60_000);
+});
+
+describe('content calendar', () => {
+  it('plans a video, moves it, makes its project and undoes the edits', async () => {
+    const campaign = await call(client, 'planner_campaign_add', {
+      id: 'cmp_mcp',
+      name: 'MCP launch',
+    });
+    expect(campaign.isError).toBe(false);
+    const added = await call(client, 'planner_slot_add', {
+      id: 'cal_mcp',
+      title: 'MCP trailer',
+      date: '2026-12-01',
+      campaignId: 'cmp_mcp',
+      platformTargets: ['core/youtube', 'core/tiktok'],
+    });
+    expect(added.data.slots[0]).toMatchObject({ id: 'cal_mcp', project: null });
+    expect(added.data.platforms.map((p: { id: string }) => p.id)).toContain('core/steam');
+
+    // Mistakes come back as tool errors the model can read.
+    const bad = await call(client, 'planner_slot_move', { slotId: 'cal_mcp', date: 'soon' });
+    expect(bad.isError).toBe(true);
+    const missing = await call(client, 'planner_create_project', { slotId: 'cal_none' });
+    expect(missing.isError).toBe(true);
+
+    const made = await call(client, 'planner_create_project', { slotId: 'cal_mcp' });
+    expect(made.isError).toBe(false);
+    expect(made.data.formatTargetIds).toHaveLength(2);
+    const view = await call(client, 'planner_view');
+    expect(view.data.slots[0].project).toMatchObject({ name: 'MCP trailer', status: 'idea' });
+
+    // The project's own planner fields are ordinary undoable command tools.
+    const dir = made.data.dir as string;
+    const set = await call(client, 'core_project_set-schedule', {
+      project: dir,
+      scheduledDate: '2026-12-15',
+    });
+    expect(set.isError).toBe(false);
+    expect((await call(client, 'planner_view')).data.slots[0].project.scheduledDate).toBe(
+      '2026-12-15',
+    );
+
+    const undone = await call(client, 'planner_undo');
+    expect(undone.data.slots[0].project).toBeNull();
+    expect((await call(client, 'planner_redo')).data.slots[0].project).not.toBeNull();
+  });
 });

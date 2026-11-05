@@ -61,6 +61,12 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
   'core/brief.remove-assumption': 'Remove the assumption recorded for a brief field.',
   'core/project.rename': 'Rename the project.',
   'core/project.set-status': 'Set the project status.',
+  'core/project.set-campaign':
+    'Put the project in a campaign (a campaign id from planner_view), or null for none.',
+  'core/project.set-schedule':
+    'Set the date the video is planned for (YYYY-MM-DD), or null to unschedule it.',
+  'core/project.set-platforms':
+    'Set the platforms the video is made for, e.g. ["core/youtube", "core/tiktok"].',
   'core/project.set-extension': 'Set plugin data on the project under a plugin id.',
   'core/project.add-format-target':
     'Add an output format target (aspect ratio, resolution, length, platform).',
@@ -110,6 +116,23 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
  * Commands that exist for the app's own use and are not offered as tools: they carry bulk
  * results that the action tools produce (scan results, a whole generated storyboard).
  */
+/** The content calendar's own commands (app-level, not tied to a project). */
+export const PLANNER_DESCRIPTIONS: Record<string, string> = {
+  'planner/campaign.add':
+    'Add a campaign (a group of planned videos) with a name and optional dates and colour.',
+  'planner/campaign.set': 'Change a campaign; null clears its colour or dates.',
+  'planner/campaign.remove':
+    'Remove a campaign; its planned videos stay on the calendar without one, or go too with slots "remove".',
+  'planner/slot.add': 'Plan a video: a date, a title, optional campaign, platforms and video type.',
+  'planner/slot.set': 'Change a planned video (title, campaign, platforms, video type, notes).',
+  'planner/slot.move': 'Move a planned video to another date (YYYY-MM-DD).',
+  'planner/slot.remove':
+    'Remove a planned video from the calendar (a project made from it is not touched).',
+  'planner/slot.link':
+    'Link a planned video to an existing project id (a project sits on one planned video at most).',
+  'planner/slot.unlink': 'Detach a planned video from its project (the project is not touched).',
+};
+
 export const HIDDEN_COMMANDS = new Set([
   // Which logo or font files go into a project is the user's choice (screens, `tforge brand`).
   'core/brand.set-logo',

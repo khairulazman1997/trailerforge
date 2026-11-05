@@ -122,7 +122,7 @@ export class PlannerStore {
 
   async dispatch(type: string, payload: unknown): Promise<PlannerFile> {
     const def = this.defs.get(type);
-    if (!def) throw new CommandError(type, 'unknown planner command');
+    if (!def) throw new CommandError(type, 'unknown command');
     const parsed = def.payload.safeParse(payload);
     if (!parsed.success)
       throw new CommandError(

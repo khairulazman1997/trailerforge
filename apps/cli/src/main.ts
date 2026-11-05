@@ -6,6 +6,7 @@ import { MediaError, probe } from '@trailerforge/media';
 import { DEFAULT_APP_PORT, startService } from '@trailerforge/service';
 import { captureCommand } from './capture.js';
 import { brandCommand, effectsCommand, sfxCommand, variantsCommand } from './graphics.js';
+import { plannerCommand, projectsCommand } from './planner.js';
 import {
   analyzeCommand,
   cutCommand,
@@ -75,6 +76,13 @@ Usage:
   tforge brand reset <dir>                                Forget the brand kit
   tforge effects                                          Installed transitions, effects, graphics templates and sounds
   tforge sfx show | tforge sfx folder <path|none>         Your folder of licensed or CC0 sound effects (nothing is uploaded)
+  tforge planner show                                     Campaigns and planned videos on the calendar, with their projects' status
+  tforge planner campaign-add|campaign-set|campaign-remove [id] [--name <text>] [--start <date>] [--end <date>] [--color <#rrggbb>] [--note <text>]
+  tforge planner slot-add|slot-set [id] --title <text> --date <YYYY-MM-DD> [--campaign <id>] [--platform core/youtube,core/tiktok] [--type <videoTypeId>]
+  tforge planner slot-move <id> --date <YYYY-MM-DD> | slot-remove <id> | slot-unlink <id>
+  tforge planner create-project <slotId> [--dir <folder>] Make the project for a planned video (one version format per platform)
+  tforge projects [list]                                  Every project folder the app has opened, and whether it is still there
+  tforge projects forget <dir>                            Take a folder off that list (the folder itself is never touched)
   tforge presets                                          The export presets (YouTube, Steam, Vertical social, X, ProRes master)
   tforge demo [--dir <folder>]                            Build a demo project (generated footage and music, a cut, two versions); nothing is downloaded
   tforge doctor                                           Is this computer ready? FFmpeg, analysis tools, disk space, AI help
@@ -178,6 +186,13 @@ export async function main(
         at: { type: 'string' },
         text: { type: 'string' },
         todo: { type: 'boolean', default: false },
+        date: { type: 'string' },
+        campaign: { type: 'string' },
+        platform: { type: 'string', multiple: true },
+        title: { type: 'string' },
+        color: { type: 'string' },
+        start: { type: 'string' },
+        end: { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
       },
     });
@@ -297,6 +312,14 @@ export async function main(
       override: o.override ?? [],
       at: o.at,
       text: o.text,
+      date: o.date,
+      campaign: o.campaign,
+      platform: o.platform ?? [],
+      title: o.title,
+      color: o.color,
+      start: o.start,
+      end: o.end,
+      type: o.type,
     },
   };
   try {
@@ -382,6 +405,10 @@ export async function main(
         return need(arg, '<dir>')
           ? await brandCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
           : 2;
+      case 'planner':
+        return await plannerCommand(ctx, positionals[1] ?? '', positionals[2]);
+      case 'projects':
+        return await projectsCommand(ctx, positionals[1] ?? '', positionals[2]);
       case 'effects':
         return await effectsCommand(ctx);
       case 'sfx show':

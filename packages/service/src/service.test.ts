@@ -1451,3 +1451,66 @@ describe('demo', () => {
     expect(view.project.timelines.some((tl) => tl.id === 'tl_rough')).toBe(true);
   }, 180_000);
 });
+
+describe('planner', () => {
+  it('needs the token like everything else', async () => {
+    for (const path of ['/v1/planner', '/v1/projects/known'])
+      expect((await raw({ path })).status).toBe(401);
+    for (const path of [
+      '/v1/planner/commands',
+      '/v1/planner/undo',
+      '/v1/planner/slots/x/create-project',
+    ])
+      expect((await raw({ path, method: 'POST', body: '{}' })).status).toBe(401);
+  });
+
+  it('plans a video, makes its project, undoes edits, and announces changes', async () => {
+    const ac = new AbortController();
+    const stream = client.events({ after: (await client.info()).lastSeq, signal: ac.signal });
+    const seen = nextEvents(stream, 1, (e) => e.type === 'planner.changed');
+    await client.plannerCommand('planner/campaign.add', {
+      id: 'cmp_svc',
+      name: 'Service launch',
+    });
+    expect((await seen)[0]!.data).toMatchObject({ kind: 'command', type: 'planner/campaign.add' });
+    ac.abort();
+    let view = await client.plannerCommand('planner/slot.add', {
+      id: 'cal_svc',
+      date: '2026-12-01',
+      title: 'Service trailer',
+      campaignId: 'cmp_svc',
+      platformTargets: ['core/youtube', 'core/tiktok'],
+    });
+    expect(view.slots[0]).toMatchObject({ id: 'cal_svc', project: null });
+    expect(view.platforms.map((p) => p.id)).toContain('core/steam');
+
+    // Bad input is a client error, not a crash.
+    await expect(client.plannerCommand('planner/slot.nope', {})).rejects.toMatchObject({
+      status: 400,
+      code: 'unknown-command',
+    });
+    await expect(
+      client.plannerCommand('planner/slot.move', { slotId: 'cal_svc', date: 'soon' }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(client.createProjectFromSlot('cal_none')).rejects.toMatchObject({ status: 404 });
+
+    const dir = join(root, 'FromSlot.tforge');
+    const made = await client.createProjectFromSlot('cal_svc', dir);
+    expect(made.formatTargetIds).toHaveLength(2);
+    expect(made.view.slots[0]!.project).toMatchObject({ id: made.projectId, state: 'ok' });
+    expect((await client.listProjects()).map((p) => p.id)).toContain(made.projectId);
+    const known = await client.knownProjects();
+    expect(known.find((p) => p.id === made.projectId)).toMatchObject({
+      name: 'Service trailer',
+      state: 'ok',
+    });
+    await expect(client.createProjectFromSlot('cal_svc')).rejects.toMatchObject({ status: 400 });
+
+    view = await client.plannerUndo();
+    expect(view.slots[0]!.project).toBeNull();
+    view = await client.plannerRedo();
+    expect(view.slots[0]!.project?.id).toBe(made.projectId);
+    expect(await client.forgetProject(dir)).toEqual({ removed: true });
+    expect((await client.knownProjects()).some((p) => p.id === made.projectId)).toBe(false);
+  });
+});

@@ -61,6 +61,15 @@ export interface Flags {
   dir?: string | undefined;
   /** `critique --show`: print what would be sent. */
   show: boolean;
+  /** Planner commands. */
+  date?: string | undefined;
+  campaign?: string | undefined;
+  platform: string[];
+  title?: string | undefined;
+  color?: string | undefined;
+  start?: string | undefined;
+  end?: string | undefined;
+  type?: string | undefined;
 }
 
 export interface CmdCtx {
