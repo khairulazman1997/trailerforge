@@ -48,3 +48,22 @@ export const megabytes = (bytes: number) => {
   const mb = bytes / 1_000_000;
   return mb < 10 ? `${Math.round(mb * 10) / 10} MB` : `${Math.round(mb)} MB`;
 };
+
+/** One project's use of a recording, as the engine reports it. */
+export interface UsedIn {
+  projectId: string;
+  projectName: string | null;
+  exports: number;
+}
+
+/**
+ * Text for the "used in" chip: what the recording was exported in, with this project named as
+ * "this video" so the list shows what is shared with other videos. Null when never exported.
+ */
+export function usedInLabel(usedIn: readonly UsedIn[], currentProjectId: string): string | null {
+  if (usedIn.length === 0) return null;
+  const names = usedIn.map((u) =>
+    u.projectId === currentProjectId ? 'this video' : (u.projectName ?? 'another video'),
+  );
+  return `used in ${names.join(', ')}`;
+}

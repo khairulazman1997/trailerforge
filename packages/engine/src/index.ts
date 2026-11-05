@@ -19,3 +19,4 @@ export * from './demo-ops.js';
 export * from './saved-types-ops.js';
 export * from './planner-ops.js';
 export * from './platforms.js';
+export * from './reuse-ops.js';

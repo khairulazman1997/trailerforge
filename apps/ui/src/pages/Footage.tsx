@@ -7,6 +7,7 @@ import {
   confidentCount,
   lengthText,
   parsePaths,
+  usedInLabel,
 } from '../footage-view.js';
 import { Filmstrip, Thumb } from '../components/Thumb.js';
 import { desktop } from '../desktop.js';
@@ -203,6 +204,9 @@ export function FootagePage({ id }: { id: string }) {
                 <strong>{f.name}</strong> <span className="muted">{lengthText(f.durationSec)}</span>
                 {f.file !== 'ok' && <span className="chip warn">file {f.file}</span>}
                 <span className="chip">{f.analyzed ? 'analysed' : 'not analysed'}</span>
+                {usedInLabel(f.usedIn, view.project.id) && (
+                  <span className="chip">{usedInLabel(f.usedIn, view.project.id)}</span>
+                )}
                 {f.slotIds.map((s) => (
                   <span key={s} className="chip">
                     take of {title(s)}

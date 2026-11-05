@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { baseName, confidentCount, lengthText, megabytes, parsePaths } from './footage-view.js';
+import {
+  baseName,
+  confidentCount,
+  lengthText,
+  megabytes,
+  parsePaths,
+  usedInLabel,
+} from './footage-view.js';
 
 describe('footage view helpers', () => {
   it('reads pasted paths: lines or semicolons, quotes, blanks and repeats', () => {
@@ -37,5 +44,21 @@ describe('megabytes', () => {
   it('rounds to whole megabytes, with one decimal for small sizes', () => {
     expect(megabytes(3_400_000)).toBe('3.4 MB');
     expect(megabytes(151_300_000)).toBe('151 MB');
+  });
+});
+
+describe('usedInLabel', () => {
+  it('names the other videos and calls the open one "this video"', () => {
+    expect(usedInLabel([], 'p1')).toBeNull();
+    expect(
+      usedInLabel(
+        [
+          { projectId: 'p2', projectName: 'Teaser', exports: 1 },
+          { projectId: 'p1', projectName: 'Launch', exports: 2 },
+          { projectId: 'p3', projectName: null, exports: 1 },
+        ],
+        'p1',
+      ),
+    ).toBe('used in Teaser, this video, another video');
   });
 });

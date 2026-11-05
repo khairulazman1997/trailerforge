@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { assetUsageOp } from './reuse-ops.js';
 import dns from 'node:dns';
 import { appendFileSync, readFileSync, rmSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
@@ -96,6 +97,10 @@ describe('M6 flow', { timeout: 600_000 }, () => {
       if (process.env.TFORGE_TIMING_FILE) appendFileSync(process.env.TFORGE_TIMING_FILE, line);
     }
     expect(sizes).toEqual(['1920x1080', '1080x1920', '1920x1080']);
+    // Each export noted the footage it used: the music plays in all three.
+    const usage = assetUsageOp(engine).flatMap((a) => a.uses);
+    expect(usage.every((u) => u.projectId === store.state.id)).toBe(true);
+    expect(Math.max(...usage.map((u) => u.exports))).toBe(3);
   });
 
   it('renders the same bytes from scratch a second time', async () => {

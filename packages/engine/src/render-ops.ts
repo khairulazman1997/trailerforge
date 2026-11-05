@@ -1,4 +1,5 @@
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { recordReuse } from './reuse-ops.js';
 import { presetForPlatforms } from './platforms.js';
 import { dirname, join } from 'node:path';
 import {
@@ -748,6 +749,12 @@ export async function exportVersionOp(
   await rm(posterTmp, { force: true });
   const used = [...planVerdict.overridden, ...outVerdict.overridden];
   const now = (o.now ?? (() => new Date()))();
+  // The footage counts as used by this project once its export is delivered. A library that
+  // cannot be written must not fail an export that already succeeded.
+  const reuseWarnings: string[] = [];
+  await recordReuse(engine, store.state.id, b.timeline, now).catch((err: Error) => {
+    reuseWarnings.push(`Could not note which footage this export used: ${err.message}`);
+  });
   const all = [...planFound, ...out.findings] as GateFinding[];
   const checks = [...new Map(used.map((f) => [f.checkId, f.reason])).entries()];
   await appendDecisions(
@@ -778,7 +785,7 @@ export async function exportVersionOp(
       ...outVerdict.overridden,
     ],
     overridden: checks.map(([c]) => c),
-    warnings: [...new Set([...b.warnings, ...r.warnings])],
+    warnings: [...new Set([...b.warnings, ...r.warnings, ...reuseWarnings])],
   };
   await writeAtomic(
     result.record,

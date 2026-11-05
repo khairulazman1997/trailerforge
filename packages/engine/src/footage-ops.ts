@@ -1,4 +1,5 @@
 import { readFile, stat } from 'node:fs/promises';
+import { assetUsage, type AssetUse } from './reuse-ops.js';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -110,6 +111,8 @@ export interface FootageEntry {
   /** Shots this recording is a take of. */
   slotIds: string[];
   inProject: boolean;
+  /** Projects that exported with this recording, most recent first. */
+  usedIn: AssetUse[];
 }
 
 /** Every video in the library with what is known about it, and import progress for this project. */
@@ -146,6 +149,7 @@ export async function footageStatusOp(
       previews: { thumbnail: await exists(cache.thumbnail), proxy: await exists(cache.proxy) },
       slotIds: attached.get(a.id) ?? [],
       inProject: inProject.has(a.id),
+      usedIn: assetUsage(engine, a),
     });
   }
   const chosen = store.state.storyboard?.music.trackAssetId;
