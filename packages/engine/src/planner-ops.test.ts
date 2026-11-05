@@ -2,11 +2,12 @@ import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveExport } from '@trailerforge/compile';
+import { normalizeProjectDir } from '@trailerforge/core';
 import { FormatTarget } from '@trailerforge/schema';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Engine } from './engine.js';
 import { OpError } from './ops.js';
-import { createFromCalendarSlotOp, plannerViewOp } from './planner-ops.js';
+import { createFromCalendarSlotOp, importKnownProjectsOp, plannerViewOp } from './planner-ops.js';
 import { BUILTIN_PLATFORMS, platformFormat, presetForPlatforms } from './platforms.js';
 
 const exists = (p: string) =>
@@ -154,5 +155,36 @@ describe('plannerViewOp', () => {
     // Closed projects are read from their file.
     await engine.closeProject(out.dir);
     expect((await plannerViewOp(engine)).slots[0]!.project).toEqual(view.slots[0]!.project);
+  });
+});
+
+describe('importKnownProjectsOp', () => {
+  it('lists existing project folders without opening them, most recent first', async () => {
+    const a = join(home, 'Old A.tforge');
+    const b = join(home, 'Old B.tforge');
+    for (const [dir, id, name] of [
+      [a, 'proj_old_a', 'Old A'],
+      [b, 'proj_old_b', 'Old B'],
+    ] as const) {
+      await mkdir(dir);
+      await writeFile(join(dir, 'project.json'), JSON.stringify({ id, name }));
+    }
+    const notes = join(home, 'notes');
+    await mkdir(notes);
+    await writeFile(join(notes, 'project.json'), JSON.stringify({ hello: 'world' }));
+
+    const out = await importKnownProjectsOp(engine, [b, a, join(home, 'gone.tforge'), notes]);
+    expect(out.added).toEqual([b, a].map(normalizeProjectDir));
+    expect(out.skipped.map((s) => s.reason)).toEqual(['no project there', 'no project there']);
+    expect(engine.registry.list().map((p) => p.name)).toEqual(['Old B', 'Old A']);
+    expect(engine.projects.size).toBe(0); // listed, not opened
+
+    // Asking again changes nothing.
+    const again = await importKnownProjectsOp(engine, [b, a]);
+    expect(again.added).toEqual([]);
+    expect(again.skipped.map((s) => s.reason)).toEqual([
+      'already on the list',
+      'already on the list',
+    ]);
   });
 });

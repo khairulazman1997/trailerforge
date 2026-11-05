@@ -4,38 +4,12 @@ import { BrowseButton } from '../components/BrowseButton.js';
 import { VideoTypeOptions } from '../components/VideoTypeOptions.js';
 import { examplePath, joinPath } from '../desktop.js';
 import { statusLabel } from '../planner-view.js';
+import { clearLegacyRecents, legacyRecents } from '../recents.js';
 import { Link, navigate, projectPath } from '../router.js';
 import type { Info } from '../store.js';
 
 /** Selectors must return stable values: a fresh [] each time would re-render forever. */
 const NO_VIDEO_TYPES: Info['videoTypes'] = [];
-
-const RECENT_KEY = 'tforge.recent';
-
-function readRecent(): string[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as unknown;
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(0, 8) : [];
-  } catch {
-    return [];
-  }
-}
-
-function remember(dir: string) {
-  try {
-    const next = [dir, ...readRecent().filter((d) => d !== dir)].slice(0, 8);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-  } catch {
-    // storage blocked: recents just won't persist
-  }
-}
-
-/** One key for a folder path, whichever slashes and letter case a drive uses. */
-const sameFolder = (dir: string) =>
-  dir
-    .replace(/[\\/]+/g, '/')
-    .replace(/\/$/, '')
-    .toLowerCase();
 
 export function HomePage() {
   const store = useStore();
@@ -48,26 +22,28 @@ export function HomePage() {
   const [videoType, setVideoType] = useState('');
   const [busy, setBusy] = useState(false);
   const [demoing, setDemoing] = useState(false);
-  const [recent, setRecent] = useState(readRecent);
   const health = useAppState((s) => s.health);
   const known = useAppState((s) => s.planner?.projects);
   useEffect(() => {
     if (!health) void store.loadHealth();
   }, [store, health]);
   useEffect(() => {
-    void store.loadPlanner();
+    // Projects an older version remembered in this browser move to the engine's list, once.
+    const old = legacyRecents();
+    if (old.length === 0) {
+      void store.loadPlanner();
+      return;
+    }
+    void store.importKnownProjects(old).then((ok) => {
+      if (ok) clearLegacyRecents();
+    });
   }, [store]);
-  const knownDirs = new Set((known ?? []).map((p) => sameFolder(p.dir ?? '')));
 
   const open = async (dir: string) => {
     setBusy(true);
     const id = await store.openProject(dir);
     setBusy(false);
-    if (id) {
-      remember(dir);
-      setRecent(readRecent());
-      navigate(projectPath(id));
-    }
+    if (id) navigate(projectPath(id));
   };
 
   return (
@@ -194,22 +170,6 @@ export function HomePage() {
               </button>
             </div>
           </form>
-          {recent.filter((d) => !knownDirs.has(sameFolder(d))).length > 0 && (
-            <>
-              <h3>Recent</h3>
-              <ul className="recent">
-                {recent
-                  .filter((d) => !knownDirs.has(sameFolder(d)))
-                  .map((d) => (
-                    <li key={d}>
-                      <button type="button" className="link" onClick={() => void open(d)}>
-                        {d}
-                      </button>
-                    </li>
-                  ))}
-              </ul>
-            </>
-          )}
         </section>
 
         <section aria-labelledby="new-form">
@@ -226,11 +186,7 @@ export function HomePage() {
                   ...(videoType ? { videoTypeId: videoType } : {}),
                 });
                 setBusy(false);
-                if (id) {
-                  remember(newDir.trim());
-                  setRecent(readRecent());
-                  navigate(projectPath(id));
-                }
+                if (id) navigate(projectPath(id));
               })();
             }}
           >

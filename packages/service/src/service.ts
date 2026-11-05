@@ -30,6 +30,7 @@ import {
   setSfxFolderOp,
   sfxViewOp,
   plannerViewOp,
+  importKnownProjectsOp,
   templatePreviewOp,
   templatesViewOp,
   variantsViewOp,
@@ -495,6 +496,19 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     ],
     // Every project the app has opened, with whether its folder is still there.
     ['GET', /^\/v1\/projects\/known$/, async () => engine.registry.views()],
+    [
+      'POST',
+      /^\/v1\/projects\/known\/import$/,
+      async ({ body }) => {
+        const { dirs } = z
+          .strictObject({ dirs: z.array(z.string().min(1)).max(50) })
+          .parse(await body());
+        return importKnownProjectsOp(
+          engine,
+          dirs.map((d) => resolve(d)),
+        );
+      },
+    ],
     [
       'DELETE',
       /^\/v1\/projects\/known$/,

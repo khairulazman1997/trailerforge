@@ -52,6 +52,7 @@ import type {
   effectsViewOp,
   setSfxFolderOp,
   plannerViewOp,
+  importKnownProjectsOp,
   createFromCalendarSlotOp,
   sfxViewOp,
   removeSavedTypeOp,
@@ -467,6 +468,12 @@ export class ServiceClient {
         state: 'ok' | 'missing' | 'replaced' | 'unreadable';
       }[]
     >('GET', '/v1/projects/known');
+  }
+  /** Put project folders on that list without opening them (most recent first). */
+  importKnownProjects(dirs: string[]) {
+    return this.request<Result<typeof importKnownProjectsOp>>('POST', '/v1/projects/known/import', {
+      dirs,
+    });
   }
   forgetProject(dir: string) {
     return this.request<{ removed: boolean }>('DELETE', '/v1/projects/known', { dir });

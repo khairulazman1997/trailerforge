@@ -166,6 +166,7 @@ export type ClientLike = Pick<
   | 'plannerRedo'
   | 'createProjectFromSlot'
   | 'forgetProject'
+  | 'importKnownProjects'
 >;
 
 export type ProviderStatus = Awaited<ReturnType<ServiceClient['llmProviders']>>[number];
@@ -1006,6 +1007,14 @@ export class AppStore {
     const done = await this.command(id, type, payload);
     await this.reloadPlanner();
     return done;
+  }
+
+  /** Hand folders to the engine's list of known projects (without opening them). */
+  async importKnownProjects(dirs: string[]): Promise<boolean> {
+    const r = await this.run((c) => c.importKnownProjects(dirs));
+    if (!r) return false;
+    await this.loadPlanner();
+    return true;
   }
 
   /** Take a folder off the known-projects list (the folder is never touched). */

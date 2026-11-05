@@ -287,3 +287,48 @@ export async function createFromCalendarSlotOp(
     });
   }
 }
+
+export interface ImportKnownResult {
+  /** Folders put on the known-projects list, in the order given. */
+  added: string[];
+  skipped: { dir: string; reason: string }[];
+}
+
+/**
+ * Put project folders on the known-projects list without opening them (for the recent
+ * projects an older version of the app kept in the browser). A folder counts only if it holds
+ * a `project.json` with an id and a name; nothing is changed in the folder. `dirs` is most
+ * recent first, and the list keeps that order.
+ */
+export async function importKnownProjectsOp(
+  engine: Engine,
+  dirs: readonly string[],
+): Promise<ImportKnownResult> {
+  const out: ImportKnownResult = { added: [], skipped: [] };
+  const found: { id: string; name: string; dir: string }[] = [];
+  for (const raw of dirs) {
+    const dir = normalizeProjectDir(raw);
+    if (engine.registry.byDir(dir)) {
+      out.skipped.push({ dir, reason: 'already on the list' });
+      continue;
+    }
+    try {
+      const doc = JSON.parse(await readFile(projectPaths(dir).projectFile, 'utf8')) as {
+        id?: unknown;
+        name?: unknown;
+      };
+      if (typeof doc.id !== 'string' || typeof doc.name !== 'string')
+        throw new Error('not a project file');
+      found.push({ id: doc.id, name: doc.name, dir });
+    } catch {
+      out.skipped.push({ dir, reason: 'no project there' });
+    }
+  }
+  // Oldest first, so the most recent ends up with the latest "opened" time.
+  for (const p of [...found].reverse()) {
+    await engine.registry.register(p);
+    out.added.unshift(p.dir);
+    await new Promise((r) => setTimeout(r, 2));
+  }
+  return out;
+}

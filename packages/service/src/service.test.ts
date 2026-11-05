@@ -1457,6 +1457,7 @@ describe('planner', () => {
     for (const path of ['/v1/planner', '/v1/projects/known'])
       expect((await raw({ path })).status).toBe(401);
     for (const path of [
+      '/v1/projects/known/import',
       '/v1/planner/commands',
       '/v1/planner/undo',
       '/v1/planner/slots/x/create-project',
@@ -1512,5 +1513,25 @@ describe('planner', () => {
     expect(view.slots[0]!.project?.id).toBe(made.projectId);
     expect(await client.forgetProject(dir)).toEqual({ removed: true });
     expect((await client.knownProjects()).some((p) => p.id === made.projectId)).toBe(false);
+  });
+
+  it('takes folders an older version remembered, without opening them', async () => {
+    const old = join(root, 'Remembered.tforge');
+    await mkdir(old, { recursive: true });
+    await writeFile(
+      join(old, 'project.json'),
+      JSON.stringify({ id: 'proj_remembered', name: 'Remembered' }),
+    );
+    const out = await client.importKnownProjects([old, join(root, 'Not there.tforge')]);
+    expect(out.added).toHaveLength(1);
+    expect(out.skipped.map((s) => s.reason)).toEqual(['no project there']);
+    expect(await client.knownProjects()).toContainEqual(
+      expect.objectContaining({ id: 'proj_remembered', name: 'Remembered', state: 'ok' }),
+    );
+    expect((await client.listProjects()).some((p) => p.id === 'proj_remembered')).toBe(false);
+    await expect(client.importKnownProjects(Array(51).fill('x'))).rejects.toMatchObject({
+      status: 400,
+    });
+    await client.forgetProject(old);
   });
 });

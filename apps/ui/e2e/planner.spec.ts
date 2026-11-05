@@ -231,3 +231,18 @@ test('removing a planned video is confirmed and can be undone', async ({ page })
   await page.getByRole('button', { name: /Undo/ }).click();
   await expect(row).toHaveCount(1);
 });
+
+test('projects an older version remembered in the browser move to the engine list once', async ({
+  page,
+}) => {
+  const dir = join(t.root, 'Remembered.tforge');
+  await t.engine.createProject(dir, { name: 'Remembered' });
+  await t.engine.closeProject(dir);
+  await t.engine.registry.forget(dir); // the engine does not know it yet, as after an upgrade
+  await page.addInitScript((d) => localStorage.setItem('tforge.recent', JSON.stringify([d])), dir);
+  await page.goto(`${t.svc.url}/#token=${t.svc.token}`);
+  const known = page.getByRole('list', { name: 'Opened before' });
+  await expect(known).toContainText('Remembered');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('tforge.recent'))).toBeNull();
+  expect(await axe(page)).toEqual([]);
+});

@@ -38,6 +38,8 @@ A project has one tab per step. Each tab says what it needs when an earlier step
 | **Review**         | Per version: render a review draft in the background, leave comments at moments on a ruler, read the Quality Gate (what blocks an export, what needs a written reason, what is only worth a look), ask for an optional AI critique, and approve. An approval goes out of date when the picture or sound changes.                                                                                                                |
 | **Export**         | Choose a preset per version (YouTube, Steam, vertical, X, ProRes master), a file name and a loudness target. Export (a cancelled or crashed export resumes where it stopped), and write editor files: FCPXML for Final Cut Pro and DaVinci Resolve, OpenTimelineIO, and an EDL that most editors read. Files land in `<project>/exports/`.                                                                                      |
 
+The top bar also has the **Planner**, a content calendar that is off until you switch it on in **Settings → Features** (see "Planning videos" below).
+
 **Settings** holds AI providers and models, local models, watched folders, the optional AI vision model, and the connection for Claude Code (which can then work on the open project with you, through the same undoable commands). **Setup** is the health check above.
 
 ### Recording from Unity
@@ -211,6 +213,22 @@ From the command line: `tforge presets`, `tforge qc <project> --version <id|mast
 
 **What leaves your computer in M6:** nothing. Rendering, checking, review and handoff are all local; nothing is uploaded to any platform.
 
+### Planning videos (M8)
+
+Switch on **Settings → Features → Content calendar (Planner)** and a **Planner** page appears in the top bar. It plans the videos before they are projects, keeps them together in campaigns, and follows them afterwards.
+
+1. **Plan a video:** "Plan a video" (or the + on a day) takes a title, a date, a campaign, the platforms and, if you know it, the video type. The calendar has a month view and a list; the campaign filter narrows both. Move a video by dragging it to another day, or focus it and press Shift with an arrow key (a day sideways, a week up or down). The Undo and Redo buttons on the page undo calendar changes; a project's own changes are undone in the project.
+2. **Campaigns** are optional groups with a name, a colour and dates. Removing one keeps its videos on the calendar. When a campaign's videos use the same recordings, the campaign lists them under its name.
+3. **Make the project:** the planned video's dialog has **Create project**. The project gets the title, campaign, date, platforms and video type, and one output format per platform (YouTube 16:9, TikTok 9:16, Steam page, X and so on, each with its own size, frame rate and export preset). The folder is `<home>/projects/<campaign>/<title>.tforge` unless you choose another. If anything goes wrong nothing is left behind: no folder, no entry, no link.
+4. **Status** is yours: Idea, Scripted, Capturing, Editing, In review, Scheduled, Published. TrailerForge only suggests the next one when the project has moved on (a storyboard, a recording on a shot, a cut, an approval, an export plus a date) and you press **Apply**. "Published" is never suggested. Once a project exists the calendar shows the project's own date and status; moving the video on the calendar moves the project's date too, and changing the date in the project moves the video.
+5. **Footage you reuse.** Each export notes which recordings and sounds it used. The Footage tab shows "used in" next to each recording, so you can see what a trailer and its teaser share.
+
+Where things live: campaigns and planned videos are in `<home>/planner/planner.json`; the list of projects the app knows is `<home>/projects.json` (it replaces the recent projects an older version kept in the browser, and they are moved over once). A project's own campaign, date, platforms and status stay in its `project.json`. The **Projects** screen lists the known projects ("Opened before") with their status, and a Forget button for folders that moved (the folder itself is never touched).
+
+From the command line: `tforge planner show`, `tforge planner campaign-add --name Launch`, `tforge planner slot-add --title "Release trailer" --date 2026-12-01 --campaign <id> --platform core/youtube,core/tiktok`, `tforge planner slot-move <id> --date <YYYY-MM-DD>`, `tforge planner create-project <slotId> [--dir <folder>]`, `tforge projects` and `tforge projects forget <dir>`. Claude Code can read the calendar and plan, move and link videos over MCP (`planner_*`), and make a project from a planned video in the default folder; the project's own campaign, date and platforms are the `core_project_set-*` tools.
+
+**What leaves your computer in M8:** nothing. The planner does not talk to any platform: it does not publish, schedule uploads or read analytics.
+
 The same from the command line:
 
 ```bash
@@ -224,7 +242,7 @@ tforge capture status ./Ember.tforge --json
 
 ### Keyboard
 
-Press `?` (or click **Shortcuts** in the top bar) for the keys of the page you are on: Ctrl/⌘+Z and Ctrl+Shift+Z or Ctrl+Y for undo and redo everywhere, and on the Cut tab the arrow keys to move the selected clip (Shift: to the next beat; Alt: with the clips after it). The first Tab stop is a "Skip to the page" link.
+Press `?` (or click **Shortcuts** in the top bar) for the keys of the page you are on: Ctrl/⌘+Z and Ctrl+Shift+Z or Ctrl+Y for undo and redo everywhere, and on the Cut tab the arrow keys to move the selected clip (Shift: to the next beat; Alt: with the clips after it); on the Planner, Shift with the arrow keys moves the focused video a day or a week. The first Tab stop is a "Skip to the page" link.
 
 ### Windows build
 

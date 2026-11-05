@@ -320,6 +320,10 @@ class Fake {
       } as never;
     },
     forgetProject: async (dir) => (this.plannerCalls.push(`forget ${dir}`), { removed: true }),
+    importKnownProjects: async (dirs) => (
+      this.plannerCalls.push(`import ${dirs.join(',')}`),
+      { added: dirs, skipped: [] }
+    ),
     llmPreview: async (_id, task) => ({
       task,
       available: true,
@@ -700,6 +704,15 @@ describe('content calendar', () => {
     const { fake, store } = await setup();
     expect(await store.createProjectFromSlot('cal_1', '/p/p9')).toBe('p9');
     expect(fake.plannerCalls[0]).toBe('create cal_1 /p/p9');
+    store.disconnect();
+  });
+
+  it('hands old recent folders to the engine and reloads the calendar', async () => {
+    const { fake, store } = await setup();
+    await store.loadPlanner();
+    fake.plannerCalls.length = 0;
+    expect(await store.importKnownProjects(['/p/b', '/p/a'])).toBe(true);
+    expect(fake.plannerCalls).toEqual(['import /p/b,/p/a', 'planner']);
     store.disconnect();
   });
 
