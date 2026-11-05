@@ -3,6 +3,7 @@ import { useAppState, useStore } from '../app-context.js';
 import { BrowseButton } from '../components/BrowseButton.js';
 import { VideoTypeOptions } from '../components/VideoTypeOptions.js';
 import { examplePath, joinPath } from '../desktop.js';
+import { statusLabel } from '../planner-view.js';
 import { Link, navigate, projectPath } from '../router.js';
 import type { Info } from '../store.js';
 
@@ -29,6 +30,13 @@ function remember(dir: string) {
   }
 }
 
+/** One key for a folder path, whichever slashes and letter case a drive uses. */
+const sameFolder = (dir: string) =>
+  dir
+    .replace(/[\\/]+/g, '/')
+    .replace(/\/$/, '')
+    .toLowerCase();
+
 export function HomePage() {
   const store = useStore();
   const projects = useAppState((s) => s.projects);
@@ -42,9 +50,14 @@ export function HomePage() {
   const [demoing, setDemoing] = useState(false);
   const [recent, setRecent] = useState(readRecent);
   const health = useAppState((s) => s.health);
+  const known = useAppState((s) => s.planner?.projects);
   useEffect(() => {
     if (!health) void store.loadHealth();
   }, [store, health]);
+  useEffect(() => {
+    void store.loadPlanner();
+  }, [store]);
+  const knownDirs = new Set((known ?? []).map((p) => sameFolder(p.dir ?? '')));
 
   const open = async (dir: string) => {
     setBusy(true);
@@ -83,6 +96,39 @@ export function HomePage() {
                 </li>
               );
             })}
+          </ul>
+        </section>
+      )}
+
+      {known && known.length > 0 && (
+        <section aria-labelledby="known-heading">
+          <h2 id="known-heading">Opened before</h2>
+          <ul className="known-projects" aria-label="Opened before">
+            {known.map((p) => (
+              <li key={p.dir ?? p.id} data-project-dir={p.dir ?? undefined}>
+                {p.state === 'ok' && p.dir ? (
+                  <button
+                    type="button"
+                    className="link"
+                    disabled={busy}
+                    onClick={() => void open(p.dir!)}
+                  >
+                    {p.name}
+                  </button>
+                ) : (
+                  <strong>{p.name}</strong>
+                )}
+                {p.status && <span className="chip">{statusLabel(p.status)}</span>}
+                {p.scheduledDate && <span className="muted">{p.scheduledDate}</span>}
+                {p.state !== 'ok' && <span className="chip warn">folder {p.state}</span>}
+                <small className="muted">{p.dir}</small>
+                {p.state !== 'ok' && p.dir && (
+                  <button type="button" onClick={() => void store.forgetProject(p.dir!)}>
+                    Forget
+                  </button>
+                )}
+              </li>
+            ))}
           </ul>
         </section>
       )}
@@ -148,17 +194,19 @@ export function HomePage() {
               </button>
             </div>
           </form>
-          {recent.length > 0 && (
+          {recent.filter((d) => !knownDirs.has(sameFolder(d))).length > 0 && (
             <>
               <h3>Recent</h3>
               <ul className="recent">
-                {recent.map((d) => (
-                  <li key={d}>
-                    <button type="button" className="link" onClick={() => void open(d)}>
-                      {d}
-                    </button>
-                  </li>
-                ))}
+                {recent
+                  .filter((d) => !knownDirs.has(sameFolder(d)))
+                  .map((d) => (
+                    <li key={d}>
+                      <button type="button" className="link" onClick={() => void open(d)}>
+                        {d}
+                      </button>
+                    </li>
+                  ))}
               </ul>
             </>
           )}

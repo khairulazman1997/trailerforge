@@ -10,6 +10,7 @@ import { ConnectPage } from './pages/Connect.js';
 import { HomePage } from './pages/Home.js';
 import { ProjectPage } from './pages/Project.js';
 import { SetupPage } from './pages/Setup.js';
+import { PlannerPage } from './pages/Planner.js';
 import { SettingsPage } from './pages/Settings.js';
 import { Link, projectPath, useRoute } from './router.js';
 import { isTyping } from './shortcuts.js';
@@ -56,6 +57,7 @@ export function App() {
 function Shell({ store }: { store: AppStore }) {
   const route = useRoute();
   const status = useAppState((s) => s.status);
+  const plannerOn = useAppState((s) => s.features.planner);
   const current = route.name === 'project' ? route.id : null;
   const view = useAppState((s) => (current ? s.projects[current] : undefined));
   const busy = useAppState((s) => (current ? busyTask(s, current) : undefined));
@@ -113,6 +115,11 @@ function Shell({ store }: { store: AppStore }) {
               aria-current={route.name === 'project' ? 'page' : undefined}
             >
               {view.project.name}
+            </Link>
+          )}
+          {plannerOn && (
+            <Link to="/planner" aria-current={route.name === 'planner' ? 'page' : undefined}>
+              Planner
             </Link>
           )}
           <Link to="/setup" aria-current={route.name === 'setup' ? 'page' : undefined}>
@@ -176,12 +183,13 @@ function Shell({ store }: { store: AppStore }) {
       </header>
       <ShortcutsDialog
         open={showKeys}
-        tab={route.name === 'project' ? route.tab : null}
+        tab={route.name === 'project' ? route.tab : route.name === 'planner' ? 'planner' : null}
         onClose={() => setShowKeys(false)}
       />
       {route.name === 'home' && <HomePage />}
       {route.name === 'settings' && <SettingsPage />}
       {route.name === 'setup' && <SetupPage />}
+      {route.name === 'planner' && <PlannerPage />}
       {route.name === 'project' && <ProjectPage id={route.id} tab={route.tab} />}
       {route.name === 'not-found' && (
         <main className="page">

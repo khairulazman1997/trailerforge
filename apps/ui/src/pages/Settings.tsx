@@ -15,6 +15,7 @@ export function SettingsPage() {
   const [key, setKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const plannerOn = useAppState((s) => s.features.planner);
 
   useEffect(() => {
     void store.loadSettings();
@@ -25,6 +26,22 @@ export function SettingsPage() {
   return (
     <main className="page narrow-ish">
       <h1>Settings</h1>
+
+      <section aria-labelledby="features-h">
+        <h2 id="features-h">Features</h2>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={plannerOn}
+            onChange={(e) => store.setFeature('planner', e.target.checked)}
+          />{' '}
+          Content calendar (Planner)
+        </label>
+        <p className="muted">
+          Plan videos on a calendar, group them into campaigns, and start a project from a planned
+          video. It adds a Planner page to the top bar. The choice is kept on this computer.
+        </p>
+      </section>
 
       <section aria-labelledby="providers-h">
         <h2 id="providers-h">AI providers</h2>

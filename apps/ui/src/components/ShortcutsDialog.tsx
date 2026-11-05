@@ -9,7 +9,7 @@ export function ShortcutsDialog({
   onClose,
 }: {
   open: boolean;
-  tab: ProjectTab | null;
+  tab: ProjectTab | 'planner' | null;
   onClose: () => void;
 }) {
   return (

@@ -1,7 +1,7 @@
 import type { ProjectTab } from './router.js';
 
 /** Where a shortcut applies: everywhere in the app, or only on one project tab. */
-export type ShortcutScope = 'global' | ProjectTab;
+export type ShortcutScope = 'global' | ProjectTab | 'planner';
 
 export interface Shortcut {
   /** Key combinations that do the same thing, in the order they are shown. */
@@ -42,6 +42,16 @@ export const SHORTCUTS: readonly Shortcut[] = [
   },
   { keys: ['Alt + drag'], what: 'Place or trim a clip freely, without snapping', scope: 'cut' },
   {
+    keys: ['Shift+←', 'Shift+→'],
+    what: 'Move the focused planned video one day earlier or later',
+    scope: 'planner',
+  },
+  {
+    keys: ['Shift+↑', 'Shift+↓'],
+    what: 'Move the focused planned video one week earlier or later',
+    scope: 'planner',
+  },
+  {
     keys: ['Shift + drag'],
     what: 'Move or trim a clip, and the clips after it along',
     scope: 'cut',
@@ -49,7 +59,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
 ];
 
 /** The shortcuts for a page: the global ones first, then the tab's own. */
-export function shortcutsFor(tab: ProjectTab | null): Shortcut[] {
+export function shortcutsFor(tab: ProjectTab | 'planner' | null): Shortcut[] {
   return [
     ...SHORTCUTS.filter((s) => s.scope === 'global'),
     ...SHORTCUTS.filter((s) => tab !== null && s.scope === tab),

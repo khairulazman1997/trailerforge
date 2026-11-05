@@ -160,6 +160,12 @@ export type ClientLike = Pick<
   | 'connectClaudeCode'
   | 'disconnectClaudeCode'
   | 'setWatchedFolders'
+  | 'planner'
+  | 'plannerCommand'
+  | 'plannerUndo'
+  | 'plannerRedo'
+  | 'createProjectFromSlot'
+  | 'forgetProject'
 >;
 
 export type ProviderStatus = Awaited<ReturnType<ServiceClient['llmProviders']>>[number];
@@ -171,6 +177,25 @@ export interface SettingsData {
 }
 
 export type Info = Awaited<ReturnType<ServiceClient['info']>>;
+/** Campaigns, planned videos with their projects' live fields, every known project, platforms. */
+export type PlannerSnapshot = Awaited<ReturnType<ServiceClient['planner']>>;
+
+/** Parts of the app that are switched on by the user (kept in this browser or window). */
+export interface Features {
+  planner: boolean;
+}
+
+const FEATURES_KEY = 'tforge.features';
+
+function readFeatures(): Features {
+  try {
+    const v = JSON.parse(localStorage.getItem(FEATURES_KEY) ?? '{}') as { planner?: unknown };
+    return { planner: v.planner === true };
+  } catch {
+    return { planner: false };
+  }
+}
+
 export type SavedTypesView = Awaited<ReturnType<ServiceClient['savedVideoTypes']>>;
 
 export interface JobUpdate {
@@ -250,6 +275,9 @@ export interface AppState {
   watched: WatchedFoldersView | null;
   /** Video types the user saved from storyboards; null until a screen asks. */
   savedTypes: SavedTypesView | null;
+  /** The content calendar and every known project; null until a screen asks. */
+  planner: PlannerSnapshot | null;
+  features: Features;
   toasts: Toast[];
   /** Last event sequence number applied; used to resume after a dropped stream. */
   lastSeq: number;
@@ -288,6 +316,8 @@ const initial: AppState = {
   visionDownload: null,
   watched: null,
   savedTypes: null,
+  planner: null,
+  features: { planner: false },
   claudeCode: null,
   toasts: [],
   lastSeq: 0,
@@ -328,13 +358,15 @@ export function describeFailure(err: unknown): string {
  * order, with a refetch on any gap), so every window and tool sees the same thing.
  */
 export class AppStore {
-  private state: AppState = initial;
+  private state: AppState;
   private readonly listeners = new Set<() => void>();
   private client: ClientLike | null = null;
   private abort: AbortController | null = null;
   private toastId = 0;
 
-  constructor(private readonly makeClient: (c: Connection) => ClientLike) {}
+  constructor(private readonly makeClient: (c: Connection) => ClientLike) {
+    this.state = { ...initial, features: readFeatures() };
+  }
 
   // ---- external-store plumbing (useSyncExternalStore) ----
   getState = (): AppState => this.state;
@@ -352,7 +384,8 @@ export class AppStore {
     this.disconnect();
     const abort = (this.abort = new AbortController());
     const client = (this.client = this.makeClient(conn));
-    this.set({ ...initial, status: 'connecting' });
+    // What the user switched on belongs to this browser, not to the connection.
+    this.set({ ...initial, features: this.state.features, status: 'connecting' });
     try {
       const info = await client.info();
       this.set({ info, lastSeq: info.lastSeq });
@@ -370,7 +403,7 @@ export class AppStore {
     this.abort?.abort();
     this.abort = null;
     this.client = null;
-    this.set({ ...initial });
+    this.set({ ...initial, features: this.state.features });
   }
 
   private async pump(client: ClientLike, signal: AbortSignal) {
@@ -419,10 +452,16 @@ export class AppStore {
       case 'project.opened': {
         const id = String(data.projectId);
         if (!this.state.projects[id]) await this.refetchProject(id);
+        void this.reloadPlanner();
         break;
       }
       case 'project.closed':
         this.removeProject(String(data.projectId));
+        void this.reloadPlanner();
+        break;
+      case 'planner.changed':
+      case 'project.saved':
+        void this.reloadPlanner();
         break;
       case 'task.updated': {
         const t = data as unknown as TaskView;
@@ -897,6 +936,84 @@ export class AppStore {
   async loadWatched(): Promise<void> {
     const w = await this.run((c) => c.watchedFolders());
     if (w) this.set({ watched: w });
+  }
+
+  // ---- content calendar ----
+  async loadPlanner(): Promise<void> {
+    const v = await this.run((c) => c.planner());
+    if (v) this.set({ planner: v });
+  }
+
+  /** Refresh the calendar when something that shows in it changed (only once a screen asked). */
+  private async reloadPlanner(): Promise<void> {
+    if (!this.state.planner || !this.client) return;
+    try {
+      this.set({ planner: await this.client.planner() });
+    } catch {
+      // the next explicit load reports the problem
+    }
+  }
+
+  /** Switch a part of the app on or off; the choice is kept for this browser or window. */
+  setFeature(name: keyof Features, on: boolean): void {
+    const features = { ...this.state.features, [name]: on };
+    this.set({ features });
+    try {
+      localStorage.setItem(FEATURES_KEY, JSON.stringify(features));
+    } catch {
+      // storage blocked: the choice lasts until the page is closed
+    }
+  }
+
+  /** Run a `planner/*` command; the answer is the new calendar. */
+  async plannerCommand(type: string, payload: unknown): Promise<boolean> {
+    const v = await this.run((c) => c.plannerCommand(type, payload));
+    if (!v) return false;
+    this.set({ planner: v });
+    return true;
+  }
+
+  async plannerHistory(which: 'undo' | 'redo'): Promise<boolean> {
+    const v = await this.run((c) => (which === 'undo' ? c.plannerUndo() : c.plannerRedo()));
+    if (!v) return false;
+    this.set({ planner: v });
+    return true;
+  }
+
+  /** Make the project for a planned video and open it; returns its id. */
+  async createProjectFromSlot(slotId: string, dir?: string): Promise<string | null> {
+    const made = await this.run((c) => c.createProjectFromSlot(slotId, dir));
+    if (!made) return null;
+    this.set({ planner: made.view });
+    return this.openProject(made.dir);
+  }
+
+  /**
+   * Run a command on a project the calendar knows, opening it first when it is closed. Returns
+   * false when the project could not be opened or the command was refused.
+   */
+  async commandOnKnownProject(
+    project: { id: string; dir: string | null },
+    type: string,
+    payload: unknown,
+  ): Promise<boolean> {
+    let id = Object.values(this.state.projects).find((p) => p.project.id === project.id)?.id;
+    if (!id) {
+      if (!project.dir) return false;
+      id = (await this.openProject(project.dir)) ?? undefined;
+    }
+    if (!id) return false;
+    const done = await this.command(id, type, payload);
+    await this.reloadPlanner();
+    return done;
+  }
+
+  /** Take a folder off the known-projects list (the folder is never touched). */
+  async forgetProject(dir: string): Promise<boolean> {
+    const r = await this.run((c) => c.forgetProject(dir));
+    if (!r) return false;
+    await this.loadPlanner();
+    return r.removed;
   }
 
   async setWatched(folders: string[]): Promise<boolean> {

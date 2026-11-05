@@ -35,6 +35,20 @@ class Fake {
   briefFetches = 0;
   handoffList: unknown[] = [];
   keySet = false;
+  /** Calls the calendar routes received, and what the next calendar view will say. */
+  plannerCalls: string[] = [];
+  plannerSlots: { id: string; project: { id: string } | null }[] = [];
+  plannerView = () =>
+    ({
+      campaigns: [],
+      slots: this.plannerSlots,
+      projects: [],
+      platforms: [],
+      canUndo: false,
+      canRedo: false,
+      undoLabel: null,
+      redoLabel: null,
+    }) as never;
 
   emit(type: string, data: unknown): ServiceEventMessage {
     const e = { seq: ++this.seq, type, at: '', data };
@@ -285,6 +299,27 @@ class Fake {
     }),
     removeSavedVideoType: async (id: string) => ({ removed: id }),
     setWatchedFolders: async (folders) => ({ folders, watching: folders.length > 0, problems: [] }),
+    planner: async () => (this.plannerCalls.push('planner'), this.plannerView()),
+    plannerCommand: async (type) => {
+      if (this.failNext) throw this.failNext;
+      this.plannerCalls.push(type);
+      return this.plannerView();
+    },
+    plannerUndo: async () => (this.plannerCalls.push('undo'), this.plannerView()),
+    plannerRedo: async () => (this.plannerCalls.push('redo'), this.plannerView()),
+    createProjectFromSlot: async (slotId, dir) => {
+      this.plannerCalls.push(`create ${slotId} ${dir ?? ''}`.trim());
+      this.projects.set('p9', view('p9', 0, { name: 'Made', n: 0 }));
+      return {
+        projectId: 'p9',
+        dir: '/p/p9',
+        slotId,
+        formatTargetIds: [],
+        warnings: [],
+        view: this.plannerView(),
+      } as never;
+    },
+    forgetProject: async (dir) => (this.plannerCalls.push(`forget ${dir}`), { removed: true }),
     llmPreview: async (_id, task) => ({
       task,
       available: true,
@@ -624,6 +659,57 @@ describe('local models', () => {
     expect(store.getState().localModels).toMatchObject({ available: false, models: [] });
     expect(await store.useOfflineRoutes('qwen3:14b')).toBe(true);
     expect(calls).toEqual(['qwen3:14b']);
+    store.disconnect();
+  });
+});
+
+describe('content calendar', () => {
+  it('stays unloaded until a screen asks, then follows planner and project events', async () => {
+    const { fake, store } = await setup();
+    fake.emit('planner.changed', { kind: 'command', type: 'planner/slot.add', label: '' });
+    await tick();
+    expect(fake.plannerCalls).toEqual([]); // nobody looked at the calendar yet
+    expect(store.getState().planner).toBeNull();
+
+    await store.loadPlanner();
+    expect(store.getState().planner).not.toBeNull();
+    fake.plannerCalls.length = 0;
+    fake.emit('planner.changed', { kind: 'command', type: 'planner/slot.add', label: '' });
+    fake.emit('project.saved', { projectId: 'p1', dir: '/one' });
+    await tick(60);
+    expect(fake.plannerCalls).toEqual(['planner', 'planner']);
+    store.disconnect();
+  });
+
+  it('keeps the calendar the service answers with after a command, undo or redo', async () => {
+    const { fake, store } = await setup();
+    fake.plannerSlots = [{ id: 'cal_1', project: null }];
+    expect(await store.plannerCommand('planner/slot.add', { title: 'x', date: '2026-12-01' })).toBe(
+      true,
+    );
+    expect(store.getState().planner?.slots.map((x) => x.id)).toEqual(['cal_1']);
+    expect(await store.plannerHistory('undo')).toBe(true);
+    expect(await store.plannerHistory('redo')).toBe(true);
+    expect(fake.plannerCalls).toEqual(['planner/slot.add', 'undo', 'redo']);
+    fake.failNext = new ServiceError(422, 'invalid', 'bad date');
+    expect(await store.plannerCommand('planner/slot.move', {})).toBe(false);
+    store.disconnect();
+  });
+
+  it('opens the project made from a planned video', async () => {
+    const { fake, store } = await setup();
+    expect(await store.createProjectFromSlot('cal_1', '/p/p9')).toBe('p9');
+    expect(fake.plannerCalls[0]).toBe('create cal_1 /p/p9');
+    store.disconnect();
+  });
+
+  it('switches features on and off', async () => {
+    const { store } = await setup();
+    expect(store.getState().features.planner).toBe(false);
+    store.setFeature('planner', true);
+    expect(store.getState().features.planner).toBe(true);
+    store.setFeature('planner', false);
+    expect(store.getState().features.planner).toBe(false);
     store.disconnect();
   });
 });

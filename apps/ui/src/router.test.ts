@@ -5,6 +5,7 @@ describe('matchRoute', () => {
   it('matches the app routes', () => {
     expect(matchRoute('/')).toEqual({ name: 'home' });
     expect(matchRoute('/settings')).toEqual({ name: 'settings' });
+    expect(matchRoute('/planner')).toEqual({ name: 'planner' });
     expect(matchRoute('/p/proj_1')).toEqual({ name: 'project', id: 'proj_1', tab: 'overview' });
     expect(matchRoute('/p/proj_1/storyboard/')).toEqual({
       name: 'project',
