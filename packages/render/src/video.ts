@@ -191,8 +191,12 @@ export async function renderVideo(spec: RenderSpec, opts: RenderOptions): Promis
   const full = compileRender(base);
   const workDir = join(opts.workRoot, full.planHash);
   await mkdir(workDir, { recursive: true });
-  // Leftovers of a crashed run are never trusted.
-  for (const f of await readdir(workDir)) if (f.includes('.tmp')) await rm(join(workDir, f));
+  // Leftovers of a crashed run are never trusted. On Windows a killed run's FFmpeg can hold its
+  // temp file for a moment after the parent died (EBUSY), so retry; one still locked is left
+  // for the next sweep: this run names its temps by its own pid and never reads it.
+  for (const f of await readdir(workDir))
+    if (f.includes('.tmp'))
+      await rm(join(workDir, f), { force: true, maxRetries: 8, retryDelay: 100 }).catch(() => {});
 
   const manifestPath = join(workDir, 'manifest.json');
   const build = await ffmpegBuild(tools);

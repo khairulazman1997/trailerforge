@@ -392,7 +392,7 @@ Task breakdown:
 
 Rough budget: 8.1–8.2 on Opus, the rest on Sonnet (about 35% Opus by tokens; the earlier 85% Sonnet estimate left out the stores and the rollback); 55–85k output tokens over 2–3 session windows. Suggested sessions: (1) 8.1–8.2 Opus, 25–35k; (2) 8.3–8.4 Sonnet, 15–25k; (3) 8.5–8.6 Sonnet, 20–30k. A session short of budget stops at a task boundary.
 
-**M8 status (2026-11-06):** 8.1–8.6 done and green here (`pnpm check`, whole `pnpm test:e2e`: 65 passed, 3 skipped). Not done on purpose: platform uploads, reminders, LLM scheduling, calendar sync (see the list above). Open: the user's Windows run of the new Planner screens. `e2e/cut.spec.ts` failed three times in a row on this Windows machine with `EPERM … rename library.json.tmp-… -> library.json` (the same at the pre-M8 commit 1b328af) and then passed in the full run: an intermittent Windows rename failure in `writeFileAtomic`, not caused by M8; a short retry on EPERM/EBUSY there would be the fix.
+**M8 status (2026-11-06):** 8.1–8.6 done and green here (`pnpm check`, whole `pnpm test:e2e`: 65 passed, 3 skipped). Not done on purpose: platform uploads, reminders, LLM scheduling, calendar sync (see the list above). Open: the user's Windows run of the new Planner screens. `e2e/cut.spec.ts` failed three times in a row on this Windows machine with `EPERM … rename library.json.tmp-… -> library.json` (the same at the pre-M8 commit 1b328af) and then passed in the full run: an intermittent Windows rename failure in `writeFileAtomic`, not caused by M8; a short retry on EPERM/EBUSY there would be the fix (done 2026-11-06: `renameRetrying`).
 
 ## Milestone 9 — Unity auto-recording
 

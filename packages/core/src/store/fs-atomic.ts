@@ -18,12 +18,49 @@ export async function writeFileAtomic(path: string, data: string | Uint8Array): 
     await fh.close();
   }
   try {
-    await rename(tmp, path);
+    await renameRetrying(tmp, path);
   } catch (err) {
     await rm(tmp, { force: true });
     throw err;
   }
   await fsyncDir(dirname(path));
+}
+
+/** Waits (ms) between rename attempts: about 1.5 s in all before giving up. */
+const RENAME_BACKOFF = [10, 20, 40, 80, 160, 320, 400, 400] as const;
+const TRANSIENT_RENAME = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+/**
+ * On Windows, renaming over a file fails with EPERM/EBUSY/EACCES while another handle has it
+ * open without delete sharing (a reader in this or another process, a virus scanner, the
+ * search indexer). That lasts milliseconds, so retry with a short backoff. Elsewhere these
+ * errors are real (permissions), so they are thrown at once. The temp file stays in place
+ * between attempts, so a crash still leaves either the old target or the new one.
+ */
+export async function renameRetrying(
+  from: string,
+  to: string,
+  opts: {
+    rename?: (from: string, to: string) => Promise<void>;
+    platform?: NodeJS.Platform;
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<void> {
+  const doRename = opts.rename ?? rename;
+  const platform = opts.platform ?? process.platform;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await doRename(from, to);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      const transient = platform === 'win32' && code !== undefined && TRANSIENT_RENAME.has(code);
+      const wait = RENAME_BACKOFF[attempt];
+      if (!transient || wait === undefined) throw err;
+      await sleep(wait);
+    }
+  }
 }
 
 /** Append and fsync. A crash may leave a torn last line; readers must tolerate that. */
