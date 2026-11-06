@@ -95,6 +95,26 @@ export function createClaudeCodeProvider(opts: ClaudeCodeOptions = {}): LlmProvi
   };
 }
 
+/**
+ * Why the CLI failed, in words. With `--output-format json` it reports errors (an expired login,
+ * a refused model) as a JSON result on stdout and exits 1 with nothing on stderr.
+ */
+export function failureMessage(code: number | null, stdout: string, stderr: string): string {
+  let reason = '';
+  try {
+    const out = JSON.parse(stdout) as CliResult;
+    if (typeof out.result === 'string') reason = out.result.trim();
+  } catch {
+    // Not JSON: fall back to stderr, then raw stdout.
+  }
+  reason ||= stderr.trim() || stdout.trim();
+  if (!reason) return `Claude Code exited with code ${code} without saying why`;
+  reason = reason.slice(-500);
+  if (/authenticat|oauth|log ?in|not logged/i.test(reason))
+    return `Claude Code is not signed in: ${reason}. Run "claude" in a terminal and sign in again (/login), then retry.`;
+  return `Claude Code failed (exit ${code}): ${reason}`;
+}
+
 function run(
   bin: string,
   args: string[],
@@ -125,7 +145,7 @@ function run(
       signal?.removeEventListener('abort', kill);
       if (signal?.aborted) return reject(new Error('cancelled'));
       if (code === 0) resolve(stdout);
-      else reject(new Error(`exit ${code}: ${stderr.trim().slice(-500)}`));
+      else reject(new Error(failureMessage(code, stdout, stderr)));
     });
     child.stdin.end(stdin);
   });
