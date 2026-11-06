@@ -56,6 +56,7 @@ import {
   matchSuggestOp,
   rankTakesOp,
   approveVersionOp,
+  applyCritiqueFixOp,
   draftFileOp,
   exportVersionOp,
   handoffOp,
@@ -859,6 +860,15 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       'GET',
       /^\/v1\/projects\/(?<id>[^/]+)\/review$/,
       async ({ params }) => reviewViewOp(engine, storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/review\/critique\/(?<comment>[^/]+)\/apply$/,
+      async ({ params }) => {
+        const store = storeById(params.id!);
+        notBusy(store);
+        return applyCritiqueFixOp(engine, store, decodeURIComponent(params.comment!));
+      },
     ],
     [
       'POST',

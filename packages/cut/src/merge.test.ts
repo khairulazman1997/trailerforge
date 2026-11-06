@@ -93,6 +93,25 @@ describe('mergeRoughCut', () => {
     expect(c).toEqual(gc);
   });
 
+  it('a storyboard change to an edited shot wins over the hand edit; untouched edits stay', () => {
+    const inp = input();
+    const first = buildRoughCut(inp).timeline;
+    const [, second] = items(first);
+    let trimmed = edit(first, 'rc_shot_parry', (i) => ({ duration: i.duration - 10 * FPF }));
+    trimmed = edit(trimmed, second!.id, (i) => ({ duration: i.duration - 5 * FPF }));
+    // the storyboard now asks for a longer first shot (e.g. a critique fix)
+    const sb = structuredClone(inp.storyboard);
+    const slot = sb.sections.flatMap((s) => s.slots).find((s) => s.id === 'shot_parry')!;
+    slot.duration = { min: 3, ideal: 4, max: 5 };
+    const again = buildRoughCut({ ...inp, storyboard: sb }).timeline;
+    const r = mergeRoughCut(trimmed, again, inp.sources);
+    expect(r.replaced).toEqual(['shot_parry']);
+    expect(r.kept).toEqual([second!.id]);
+    const parry = items(r.timeline).find((i) => i.id === 'rc_shot_parry')!;
+    expect(parry.duration).toBe(items(again).find((i) => i.id === 'rc_shot_parry')!.duration);
+    expect(parry.extensions).toEqual({});
+  });
+
   it("keeps a clip's sound setting (J/L offsets) on regenerate", () => {
     const inp = input();
     const first = buildRoughCut(inp).timeline;

@@ -75,6 +75,8 @@ test('ask for a critique: see what is sent, agree, read the notes, apply one, di
     .getByRole('button', { name: /^Apply the suggestion at .*Cut the hook to 1.5 seconds/ })
     .click();
   await expect.poll(() => hook().duration.ideal).toBe(1.5);
+  // No cut yet in this project, so only the storyboard changed; the toast says so.
+  await expect(page.getByText(/the cut was not rebuilt \(there is no cut yet\)/)).toBeVisible();
   await expect(list.locator('.chip.ok')).toHaveText(/resolved/);
   await expect(page.getByTestId('critique-fix')).toHaveCount(0);
 

@@ -113,6 +113,7 @@ export type ClientLike = Pick<
   | 'cutGrid'
   | 'media'
   | 'generateCut'
+  | 'applyCritiqueFix'
   | 'importFootage'
   | 'analyzeFootage'
   | 'footageMatches'
@@ -1125,6 +1126,25 @@ export class AppStore {
     this.toast(
       'info',
       `Rough cut ready: ${r.items} items, ${r.placeholders} placeholder${r.placeholders === 1 ? '' : 's'}. Undo goes back.`,
+    );
+    return r;
+  }
+
+  /**
+   * Applies a critique note's fix to the storyboard and rebuilds the cut over it, so the change
+   * shows in the cut and the next draft (one undo step). Returns what happened, or null on failure.
+   */
+  async applyCritiqueFix(
+    projectId: string,
+    commentId: string,
+  ): Promise<Awaited<ReturnType<ServiceClient['applyCritiqueFix']>> | null> {
+    const r = await this.run((c) => c.applyCritiqueFix(projectId, commentId));
+    if (!r) return null;
+    this.toast(
+      'info',
+      r.rebuilt
+        ? `Suggestion applied and the cut rebuilt${r.cut?.replacedEdits.length ? ` (your hand edits to ${r.cut.replacedEdits.map((x) => `"${x.title}"`).join(', ')} were replaced)` : ''}. Render a new draft to see it. Undo goes back.`
+        : `Suggestion applied to the storyboard; the cut was not rebuilt (${r.notRebuilt ?? 'unknown reason'}). Undo goes back.`,
     );
     return r;
   }

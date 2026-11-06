@@ -37,6 +37,7 @@ import {
   transformStyle,
   type LengthMode,
   type SourceEdit,
+  rebuildSummary,
 } from '../cut-view.js';
 import { Link, projectPath } from '../router.js';
 import { busyTask } from '../store.js';
@@ -54,6 +55,7 @@ export function CutPage({ id }: { id: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [rebuildNote, setRebuildNote] = useState<string | null>(null);
   const version = view.version;
   const sb = view.project.storyboard;
   const tl = view.project.timelines.find((t) => t.id === TIMELINE_ID);
@@ -86,7 +88,9 @@ export function CutPage({ id }: { id: string }) {
 
   const build = async () => {
     const r = await store.generateCut(id);
-    if (r) setWarnings(r.warnings);
+    if (!r) return;
+    setWarnings(r.warnings);
+    setRebuildNote(rebuildSummary(r.keptEdits.length, r.replacedEdits));
   };
 
   return (
@@ -170,6 +174,12 @@ export function CutPage({ id }: { id: string }) {
         </section>
       )}
 
+      {rebuildNote && (
+        <p className="banner" role="status" data-testid="rebuild-note">
+          {rebuildNote}
+        </p>
+      )}
+
       {warnings.length > 0 && (
         <ul className="banner warn" aria-label="Cut warnings">
           {warnings.map((w) => (
@@ -208,8 +218,10 @@ export function CutPage({ id }: { id: string }) {
         }}
       >
         <p>
-          Clips you edited by hand and locked tracks are kept. Clips you deleted come back, and
-          everything else is made again from the music and your takes. Undo goes back.
+          Clips you edited by hand and locked tracks are kept, unless you changed that shot in the
+          storyboard since: then the storyboard wins and the shot is made again. Clips you deleted
+          come back, and everything else is made again from the music and your takes. Undo goes
+          back.
         </p>
       </ConfirmDialog>
     </>

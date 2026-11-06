@@ -522,7 +522,11 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
     resolution: input.timeline.resolution,
     tracks,
     markers,
-    extensions: { core: { roughCut: { generator: ROUGH_CUT_STEP, version: 1 } } },
+    extensions: {
+      core: {
+        roughCut: { generator: ROUGH_CUT_STEP, version: 1, slotShapes: slotShapes(sb) },
+      },
+    },
   });
   const captioned = placeCaptions(timeline, sb, (c) =>
     decide(
@@ -544,3 +548,19 @@ export function buildRoughCut(input: RoughCutInput): RoughCut {
 
 /** Stable hash of a timeline, for checking that the same inputs give the same cut. */
 export const timelineHash = (t: Timeline) => stableHash(JSON.stringify(t));
+
+/**
+ * What a rebuild compares to tell whether the storyboard changed a slot since the last build:
+ * its kind, length range, card kind and chosen take. A hand-edited clip of a slot whose shape
+ * changed is rebuilt from the storyboard (the newer intent wins); otherwise the edit is kept.
+ */
+export function slotShape(slot: Storyboard['sections'][number]['slots'][number]): string {
+  const d = slot.duration;
+  const tail = slot.kind === 'card' ? `card:${slot.cardKind}` : `shot:${slot.chosenTakeId ?? ''}`;
+  return `${d.min}/${d.ideal}/${d.max}|${tail}`;
+}
+
+/** `slotShape` for every slot of the storyboard, by slot id. */
+export function slotShapes(sb: Pick<Storyboard, 'sections'>): Record<string, string> {
+  return Object.fromEntries(sb.sections.flatMap((s) => s.slots.map((x) => [x.id, slotShape(x)])));
+}

@@ -395,7 +395,13 @@ export interface CutOutcome {
   timelineId: string;
   items: number;
   placeholders: number;
+  /** Items edited by hand that the rebuild kept as they were, by id. */
   keptEdits: string[];
+  /**
+   * Shots and cards whose hand edits were replaced because the storyboard changed them since the
+   * last build (its length, card kind or chosen take): the storyboard is the newer intent.
+   */
+  replacedEdits: { slotId: string; title: string }[];
   warnings: string[];
   /** Footage with no analysis yet (the cut used the middle of those takes). */
   unanalysed: number;
@@ -403,7 +409,8 @@ export interface CutOutcome {
 
 /**
  * Build (or rebuild) the rough cut on the music and apply it as one undo step. Rebuilding keeps
- * locked tracks and clips edited by hand. Needs the music analysed; footage analysis improves it.
+ * locked tracks and clips edited by hand, except clips of slots the storyboard changed since the
+ * last build (those are made again: `replacedEdits`). Needs the music analysed; footage analysis improves it.
  */
 export async function generateCutOp(
   engine: Engine,
@@ -461,6 +468,10 @@ export async function generateCutOp(
     items: items.length,
     placeholders: items.filter((i) => i.kind === 'placeholder').length,
     keptEdits: merged.kept,
+    replacedEdits: merged.replaced.map((slotId) => ({
+      slotId,
+      title: sb.sections.flatMap((x) => x.slots).find((x) => x.id === slotId)?.title || slotId,
+    })),
     // Caption notes are already in the built cut's warnings; the re-placement repeats them.
     warnings: [...new Set([...built.warnings, ...merged.warnings, ...captioned.warnings])],
     unanalysed: attached.filter((id) => sources.has(id) && !sources.get(id)!.footage).length,

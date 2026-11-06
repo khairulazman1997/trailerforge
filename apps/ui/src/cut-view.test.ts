@@ -1,6 +1,7 @@
 import { Timeline } from '@trailerforge/schema';
 import { describe, expect, it } from 'vitest';
 import {
+  rebuildSummary,
   F,
   applySourceEdit,
   canTrim,
@@ -302,5 +303,15 @@ describe('music length', () => {
     expect(musicLengthPlan(tl, { ...music, duration: 10 * F }, bars, 11 * F).longer).toBe(11 * F);
     expect(musicLengthPlan(tl, { ...music, duration: 11 * F }, bars, 11 * F).longer).toBeNull();
     expect(musicLengthPlan(tl, music, bars, null).toSongEnd).toBeNull();
+  });
+});
+
+describe('rebuildSummary', () => {
+  it('says what a rebuild kept and what the storyboard replaced', () => {
+    expect(rebuildSummary(0, [])).toBeNull();
+    expect(rebuildSummary(1, [])).toMatch(/^Kept 1 clip you edited by hand as you left it;/);
+    expect(rebuildSummary(2, [{ title: 'Parry' }])).toMatch(
+      /Kept 2 clips .* them; .* Made "Parry" again from the storyboard/,
+    );
   });
 });

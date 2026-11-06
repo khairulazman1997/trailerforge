@@ -69,6 +69,7 @@ import type {
   matchAcceptOp,
   matchSuggestOp,
   approveVersionOp,
+  applyCritiqueFixOp,
   presetsViewOp,
   qualityOp,
   reviewViewOp,
@@ -588,6 +589,14 @@ export class ServiceClient {
       'POST',
       `/v1/projects/${encodeURIComponent(id)}/review/approve`,
       { variantId, ...(note ? { note } : {}) },
+    );
+  }
+  /** Apply a critique note's fix and rebuild the cut over it (one undo step). */
+  applyCritiqueFix(id: string, commentId: string) {
+    return this.request<Result<typeof applyCritiqueFixOp>>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/review/critique/${encodeURIComponent(commentId)}/apply`,
+      {},
     );
   }
   /** What a critique of this version would send, in words and as data. Sends nothing. */

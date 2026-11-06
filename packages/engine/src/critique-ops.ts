@@ -2,7 +2,7 @@ import { appendDecisions, type ProjectStore } from '@trailerforge/core';
 import { flicksPerFrame, type CritiqueFix } from '@trailerforge/schema';
 import type { Engine } from './engine.js';
 import { buildCritiqueFacts, critique, type CritiqueFacts } from './critique.js';
-import { cutGridOp } from './footage-ops.js';
+import { cutGridOp, generateCutOp, ROUGH_CUT_TIMELINE_ID, type CutOutcome } from './footage-ops.js';
 import { OpError } from './ops.js';
 import { buildVersion, planFindings } from './render-ops.js';
 
@@ -101,4 +101,42 @@ export async function critiqueOp(
     skipped: result.skipped,
     droppedFixes: result.droppedFixes,
   };
+}
+
+export interface ApplyFixOutcome {
+  commentId: string;
+  /** Whether the rough cut was made again so the fix shows in the cut and the drafts. */
+  rebuilt: boolean;
+  /** Why the cut was not rebuilt (no cut yet, the music not analysed...). */
+  notRebuilt?: string;
+  /** The rebuild's result, when it ran. */
+  cut?: CutOutcome;
+}
+
+/**
+ * Apply a critique note's fix (a storyboard change) and rebuild the rough cut over it, so the
+ * change reaches the cut, the drafts and exports: one undo step for both. A shot the fix changed
+ * is made again from the storyboard even when its clip was edited by hand (see `mergeRoughCut`).
+ * Without a cut yet, or when the cut cannot be rebuilt, only the storyboard changes and
+ * `notRebuilt` says why.
+ */
+export async function applyCritiqueFixOp(
+  engine: Engine,
+  store: ProjectStore,
+  commentId: string,
+): Promise<ApplyFixOutcome> {
+  const depth = store.undoDepth;
+  store.dispatch('core/critique.apply-fix', { commentId });
+  const label = 'Apply a critique suggestion';
+  if (!store.state.timelines.some((t) => t.id === ROUGH_CUT_TIMELINE_ID))
+    return { commentId, rebuilt: false, notRebuilt: 'there is no cut yet' };
+  try {
+    const cut = await generateCutOp(engine, store);
+    return { commentId, rebuilt: true, cut };
+  } catch (e) {
+    if (!(e instanceof OpError)) throw e;
+    return { commentId, rebuilt: false, notRebuilt: e.message };
+  } finally {
+    store.joinUndo(depth, label);
+  }
 }

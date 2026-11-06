@@ -7,6 +7,10 @@ import type { TakeSource } from './rough-cut.js';
  * it, for the same slot, at the place the sequence reaches; the next generated item absorbs the
  * difference so the cuts after it stay where the new cut put them (on the beat), as long as its
  * take has the footage for it; otherwise the rest of the picture shifts.
+ *
+ * An edit is kept only while its slot is as it was when the previous cut was built: when the
+ * storyboard changed the slot since (its length, card kind or chosen take, see `slotShape`), the
+ * storyboard is the newer intent and the slot is made again from it (`replaced`).
  */
 
 const edited = (i: { extensions: Record<string, unknown> }) =>
@@ -16,20 +20,33 @@ export interface MergeResult {
   timeline: Timeline;
   /** Edited items kept, by id. */
   kept: string[];
+  /** Slots whose hand-edited items were made again because the storyboard changed them. */
+  replaced: string[];
   warnings: string[];
 }
 
 const PICTURE = new Set(['video', 'graphics']);
+
+/** The slot shapes a rough cut was built from (none on cuts made before they were recorded). */
+const shapesOf = (t: Timeline) =>
+  (t.extensions.core as { roughCut?: { slotShapes?: Record<string, string> } } | undefined)
+    ?.roughCut?.slotShapes;
 
 export function mergeRoughCut(
   previous: Timeline | undefined,
   generated: Timeline,
   sources: ReadonlyMap<string, TakeSource> = new Map(),
 ): MergeResult {
-  if (!previous) return { timeline: generated, kept: [], warnings: [] };
+  if (!previous) return { timeline: generated, kept: [], replaced: [], warnings: [] };
   const warnings: string[] = [];
   const prevTracks = new Map(previous.tracks.map((t) => [t.id, t]));
   const locked = new Set(previous.tracks.filter((t) => t.locked).map((t) => t.id));
+
+  const before = shapesOf(previous);
+  const now = shapesOf(generated);
+  const changed = (slotId: string) =>
+    before?.[slotId] !== undefined && now?.[slotId] !== undefined && before[slotId] !== now[slotId];
+  const replaced = new Set<string>();
 
   // Edited picture items by slot, from unlocked tracks (locked ones are kept whole below).
   const editedBySlot = new Map<string, { item: TimelineItem; trackId: string }[]>();
@@ -37,6 +54,10 @@ export function mergeRoughCut(
     if (!PICTURE.has(t.kind) || locked.has(t.id)) continue;
     for (const item of [...t.items].sort((a, b) => a.start - b.start)) {
       if (!edited(item) || !item.slotId) continue;
+      if (changed(item.slotId)) {
+        replaced.add(item.slotId);
+        continue;
+      }
       editedBySlot.set(item.slotId, [
         ...(editedBySlot.get(item.slotId) ?? []),
         { item, trackId: t.id },
@@ -144,7 +165,12 @@ export function mergeRoughCut(
         },
       }
     : generated.extensions;
-  return { timeline: Timeline.parse({ ...generated, tracks, extensions }), kept, warnings };
+  return {
+    timeline: Timeline.parse({ ...generated, tracks, extensions }),
+    kept,
+    replaced: [...replaced],
+    warnings,
+  };
 }
 
 /**

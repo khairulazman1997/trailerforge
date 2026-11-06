@@ -308,3 +308,25 @@ export function musicLengthPlan(
     pictureEnd,
   };
 }
+
+/**
+ * What a rebuild did with the hand edits, in words: how many clips it kept as edited, and which
+ * shots it made again because the storyboard changed them since. Null when there were none.
+ */
+export function rebuildSummary(
+  kept: number,
+  replaced: readonly { title: string }[],
+): string | null {
+  const parts: string[] = [];
+  if (kept > 0)
+    parts.push(
+      `Kept ${kept} clip${kept === 1 ? '' : 's'} you edited by hand as you left ${kept === 1 ? 'it' : 'them'}; ` +
+        'change a shot in the storyboard to have it made again.',
+    );
+  if (replaced.length > 0)
+    parts.push(
+      `Made ${replaced.map((r) => `"${r.title}"`).join(', ')} again from the storyboard, ` +
+        'which changed since you edited the clip; Undo brings your edit back.',
+    );
+  return parts.length ? parts.join(' ') : null;
+}

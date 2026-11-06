@@ -6,6 +6,11 @@ exports[`buildRoughCut > builds the fixture cut: best take at its best moment, a
     "core": {
       "roughCut": {
         "generator": "core/rough-cut",
+        "slotShapes": {
+          "card_end": "3/3/5|card:cta",
+          "shot_boss": "2/2.5/4|shot:",
+          "shot_parry": "1.5/2/3|shot:",
+        },
         "version": 1,
       },
     },

@@ -222,6 +222,32 @@ export class ProjectStore {
     return next;
   }
 
+  /** How many steps undo can go back; pass it to `joinUndo` to group what follows. */
+  get undoDepth(): number {
+    return this.undoStack.length;
+  }
+
+  /**
+   * Turn every undo step taken since `depth` (an earlier `undoDepth`) into one, so an operation
+   * made of several commands (a fix and the rebuild it needs) is undone with one Undo.
+   */
+  joinUndo(depth: number, label: string): void {
+    this.assertOpen();
+    if (this.undoStack.length - depth < 2) {
+      const last = this.undoStack.at(-1);
+      if (last && this.undoStack.length > depth) last.label = label;
+      return;
+    }
+    const steps = this.undoStack.splice(depth);
+    this.undoStack.push({
+      type: steps[0]!.type,
+      label,
+      patches: steps.flatMap((e) => e.patches),
+      inverse: steps.reverse().flatMap((e) => e.inverse),
+      at: steps[0]!.at,
+    });
+  }
+
   undo(): boolean {
     this.assertOpen();
     const entry = this.undoStack.pop();
