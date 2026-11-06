@@ -19,7 +19,8 @@ import {
 export interface Field {
   name: string;
   label: string;
-  kind: 'text' | 'number' | 'boolean' | 'choice';
+  /** `image`: a picture copied into the project (`{ hash, ext, name }`). */
+  kind: 'text' | 'number' | 'boolean' | 'choice' | 'image';
   choices?: string[];
   min?: number;
   max?: number;
@@ -70,8 +71,14 @@ export function fieldsOf(schema: unknown): Field[] {
         ...(typeof p.maximum === 'number' ? { max: p.maximum } : {}),
       });
     else if (p.type === 'boolean') out.push({ ...base, ...dflt, kind: 'boolean' });
+    else if (isImageSchema(p)) out.push({ ...base, kind: 'image' });
   }
   return out;
+}
+
+function isImageSchema(p: Record<string, unknown>): boolean {
+  const props = p.properties as Record<string, unknown> | undefined;
+  return p.type === 'object' && !!props && 'hash' in props && 'ext' in props;
 }
 
 /** The defaults an effect or transition gets when picked: every field that has one. */

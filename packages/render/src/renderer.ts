@@ -169,14 +169,16 @@ export class FrameRenderer {
     for (const [from, to] of this.aliases)
       out = out.split(`font-family="${escapeAttr(from)}"`).join(`font-family="${escapeAttr(to)}"`);
     const hrefs = [
-      ...new Set([...out.matchAll(/href="(media\/[a-f0-9]{64}\.(svg|png))"/g)].map((m) => m[1]!)),
+      ...new Set(
+        [...out.matchAll(/href="(media\/[a-f0-9]{64}\.(svg|png|jpg))"/g)].map((m) => m[1]!),
+      ),
     ];
     for (const href of hrefs) {
       let data: string | null = null;
       if (this.projectDir) {
         try {
           const bytes = await readFile(join(this.projectDir, href));
-          data = `data:${href.endsWith('.svg') ? 'image/svg+xml' : 'image/png'};base64,${bytes.toString('base64')}`;
+          data = `data:${href.endsWith('.svg') ? 'image/svg+xml' : href.endsWith('.jpg') ? 'image/jpeg' : 'image/png'};base64,${bytes.toString('base64')}`;
         } catch {
           data = null;
         }

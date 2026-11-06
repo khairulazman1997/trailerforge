@@ -19,6 +19,7 @@ import {
   briefStatus,
   analyzeOp,
   brandImportOp,
+  projectFileNames,
   brandViewOp,
   removeSavedTypeOp,
   savedTypesViewOp,
@@ -938,12 +939,10 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       'GET',
       /^\/v1\/projects\/(?<id>[^/]+)\/brand\/files\/(?<name>[^/]+)$/,
       async ({ params, res }) => {
-        // Only the project's own logo and font files, by their `<hash>.<ext>` names.
+        // Only the project's own logo, fonts and card pictures, by their `<hash>.<ext>` names.
         const store = storeById(params.id!);
         const name = decodeURIComponent(params.name!);
-        const b = store.state.brand;
-        const files = [b?.logo, ...(b?.fonts.map((f) => f.file) ?? [])].filter(Boolean);
-        if (!files.some((f) => `${f!.hash}.${f!.ext}` === name))
+        if (!projectFileNames(store.state).has(name))
           throw new HttpError(404, 'not-found', 'not a brand file of this project');
         const bytes = await readFile(join(store.paths.media, name));
         const ext = name.slice(name.lastIndexOf('.') + 1);
@@ -954,6 +953,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
               {
                 svg: 'image/svg+xml',
                 png: 'image/png',
+                jpg: 'image/jpeg',
                 ttf: 'font/ttf',
                 otf: 'font/otf',
                 woff: 'font/woff',
@@ -979,7 +979,7 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
         const store = storeById(params.id!);
         const o = z
           .strictObject({
-            kind: z.enum(['logo', 'font']),
+            kind: z.enum(['logo', 'font', 'image']),
             path: z.string().min(1),
             role: z.enum(['heading', 'body']).optional(),
             family: z.string().min(1).max(100).optional(),

@@ -85,6 +85,17 @@ describe('brand files', () => {
         'logo',
       ),
     ).rejects.toThrow(/script/);
+    // Card pictures: PNG, JPEG or SVG; a logo is never a JPEG.
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+    await expect(
+      importBrandFile(dir, await write('art.jpeg', jpeg), 'image'),
+    ).resolves.toMatchObject({ ext: 'jpg', name: 'art.jpeg' });
+    await expect(importBrandFile(dir, await write('art.jpg', jpeg), 'logo')).rejects.toThrow(
+      /not an SVG or PNG/,
+    );
+    await expect(importBrandFile(dir, await write('f.otf', await font()), 'image')).rejects.toThrow(
+      /not a PNG, JPEG or SVG picture/,
+    );
     await expect(importBrandFile(dir, join(work, 'nope.svg'), 'logo')).rejects.toThrow(
       /cannot read/,
     );

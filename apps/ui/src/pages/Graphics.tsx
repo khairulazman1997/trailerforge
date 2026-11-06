@@ -4,6 +4,7 @@ import { useAppState, useStore } from '../app-context.js';
 import { GraphicPreview } from '../components/GraphicPreview.js';
 import { Link, projectPath } from '../router.js';
 import { busyTask, type Catalog } from '../store.js';
+import { FileImport } from '../components/FileImport.js';
 import { fieldsOf, previewFrame, type Field } from '../graphics-view.js';
 
 type Template = Catalog['templates'][number];
@@ -149,9 +150,10 @@ function Editor({
   const project = view.project;
   const assets = useAppState((s) => s.brandAssets[id]);
   const brand = project.brand;
+  const storyboard = project.storyboard;
   useEffect(() => {
     void store.loadBrandAssets(id);
-  }, [store, id, brand]);
+  }, [store, id, brand, storyboard]);
   const [text, setText] = useState(item.text);
   const [params, setParams] = useState<Record<string, unknown>>(item.params);
   const [at, setAt] = useState(Math.min(1.5, item.seconds / 2));
@@ -245,16 +247,40 @@ function Editor({
             />
           </label>
         )}
-        {fields.map((f) => (
-          <FieldInput
-            key={f.name}
-            f={f}
-            value={params[f.name] as Value | undefined}
-            disabled={disabled}
-            onDraft={(v) => setParams((p) => ({ ...p, [f.name]: v }))}
-            onCommit={(v) => void commit({ params: cleaned({ ...params, [f.name]: v }) })}
-          />
-        ))}
+        {fields
+          .filter((f) => f.name !== 'imagePlacement' || params.image)
+          .map((f) =>
+            f.kind === 'image' ? (
+              <ImageInput
+                key={f.name}
+                f={f}
+                value={params[f.name] as PickedImage | undefined}
+                disabled={disabled}
+                onPick={async (path) => {
+                  const file = await store.importCardImage(id, path);
+                  if (!file) return false;
+                  const next = { ...params, [f.name]: file };
+                  setParams(next);
+                  await commit({ params: cleaned(next) });
+                  return true;
+                }}
+                onRemove={() => {
+                  const next = { ...params, [f.name]: undefined };
+                  setParams(next);
+                  void commit({ params: cleaned(next) });
+                }}
+              />
+            ) : (
+              <FieldInput
+                key={f.name}
+                f={f}
+                value={params[f.name] as Value | undefined}
+                disabled={disabled}
+                onDraft={(v) => setParams((p) => ({ ...p, [f.name]: v }))}
+                onCommit={(v) => void commit({ params: cleaned({ ...params, [f.name]: v }) })}
+              />
+            ),
+          )}
       </div>
 
       <div className="gfx-scrub">
@@ -318,6 +344,41 @@ function Editor({
         </p>
       )}
     </section>
+  );
+}
+
+type PickedImage = { hash: string; ext: string; name: string };
+
+/** A picture for the card: copied into the project when picked, shown by its file name. */
+function ImageInput({
+  f,
+  value,
+  disabled,
+  onPick,
+  onRemove,
+}: {
+  f: Field;
+  value: PickedImage | undefined;
+  disabled: boolean;
+  onPick: (path: string) => Promise<boolean>;
+  onRemove: () => void;
+}) {
+  return (
+    <fieldset className="gfx-image">
+      <legend>{f.label}</legend>
+      <p>{value ? `Using ${value.name}.` : 'No picture.'}</p>
+      <FileImport
+        label="Picture file (PNG, JPEG or SVG)"
+        hint="It is copied into the project. Behind the text it is darkened so the words stay readable."
+        disabled={disabled}
+        onImport={onPick}
+      />
+      {value && (
+        <button type="button" disabled={disabled} onClick={onRemove}>
+          Remove the picture
+        </button>
+      )}
+    </fieldset>
   );
 }
 

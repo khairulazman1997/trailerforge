@@ -13,6 +13,26 @@ const Optional = Text.optional();
 
 type Params = Record<string, unknown>;
 
+/** A picture kept in the project's `media/<hash>.<ext>` (copied in when it is picked). */
+export const CardImage = z.strictObject({
+  hash: z.string().regex(/^[a-f0-9]{64}$/),
+  ext: z.enum(['png', 'jpg', 'svg']),
+  name: z.string().max(200),
+});
+export type CardImage = z.infer<typeof CardImage>;
+
+/** Every card can show a picture: behind the text (darkened so the text reads), or above it. */
+const ImageParams = {
+  image: CardImage.optional(),
+  imagePlacement: z.enum(['background', 'above']).default('background'),
+};
+type ImageParams = { image?: CardImage | undefined; imagePlacement: 'background' | 'above' };
+
+/** How much of the background colour lies over a background picture, so text stays readable. */
+export const IMAGE_SHADE = 0.6;
+/** Share of the safe area's height a picture above the text takes. */
+const IMAGE_ABOVE = 0.45;
+
 function card<P extends Params>(def: {
   id: string;
   name: string;
@@ -20,16 +40,52 @@ function card<P extends Params>(def: {
   params: z.ZodType<P>;
   seconds?: [number, number];
   build: (ctx: TemplateContext<P>) => Layer[];
-}): GraphicTemplate<P> {
+}): GraphicTemplate<P & ImageParams> {
   const [dflt, min] = def.seconds ?? [3, 1.5];
+  const params = (def.params as unknown as z.ZodObject).extend(ImageParams) as unknown as z.ZodType<
+    P & ImageParams
+  >;
   return {
     id: def.id,
     name: def.name,
     kind: 'card',
     serves: def.serves,
-    params: def.params,
+    params,
     duration: { default: Math.round(dflt * SEC), min: Math.round(min * SEC) },
-    build: (ctx) => scene(ctx as TemplateContext<unknown>, def.build(ctx)),
+    build: (ctx) => {
+      const { image, imagePlacement } = ctx.params;
+      if (!image) return scene(ctx as TemplateContext<unknown>, def.build(ctx));
+      const href = `media/${image.hash}.${image.ext}`;
+      const opacity = fade(ctx.duration);
+      if (imagePlacement === 'background') {
+        const full = { x: 0, y: 0, w: ctx.size.width, h: ctx.size.height };
+        return scene(ctx as TemplateContext<unknown>, [
+          { id: 'image', kind: 'image', href, fit: 'cover', box: full, animation: { opacity } },
+          {
+            id: 'image-shade',
+            kind: 'rect',
+            box: full,
+            fill: col(ctx).background,
+            animation: { opacity: fade(ctx.duration, IMAGE_SHADE) },
+          },
+          ...def.build(ctx),
+        ]);
+      }
+      const s = ctx.safe;
+      const h = s.h * IMAGE_ABOVE;
+      const gap = ctx.size.height * 0.03;
+      const below = { ...ctx, safe: { x: s.x, y: s.y + h + gap, w: s.w, h: s.h - h - gap } };
+      return scene(ctx as TemplateContext<unknown>, [
+        {
+          id: 'image',
+          kind: 'image',
+          href,
+          box: { x: s.x, y: s.y, w: s.w, h },
+          animation: { opacity },
+        },
+        ...def.build(below),
+      ]);
+    },
   };
 }
 

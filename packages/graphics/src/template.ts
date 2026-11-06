@@ -118,6 +118,8 @@ export interface ImageLayer extends LayerBase {
   kind: 'image';
   /** A project-relative path such as `media/<hash>.svg`; the renderer resolves it. */
   href: string;
+  /** `contain` (default) shows the whole picture; `cover` fills the box and crops the overflow. */
+  fit?: 'contain' | 'cover';
 }
 
 export type Layer = TextLayer | RectLayer | ImageLayer;
@@ -243,7 +245,7 @@ function drawLayer(l: Layer): string {
   if (l.kind === 'rect')
     return `<rect x="${num(l.box.x)}" y="${num(l.box.y)}" width="${num(l.box.w)}" height="${num(l.box.h)}"${l.radius ? ` rx="${num(l.radius)}"` : ''} fill="${escapeXml(l.fill)}"/>`;
   if (l.kind === 'image')
-    return `<image href="${escapeXml(l.href)}" x="${num(l.box.x)}" y="${num(l.box.y)}" width="${num(l.box.w)}" height="${num(l.box.h)}" preserveAspectRatio="xMidYMid meet"/>`;
+    return `<image href="${escapeXml(l.href)}" x="${num(l.box.x)}" y="${num(l.box.y)}" width="${num(l.box.w)}" height="${num(l.box.h)}" preserveAspectRatio="xMidYMid ${l.fit === 'cover' ? 'slice' : 'meet'}"/>`;
   const anchor = l.layout.align;
   const spacing = l.letterSpacing ? ` letter-spacing="${num(l.letterSpacing)}"` : '';
   const lines = l.layout.lines

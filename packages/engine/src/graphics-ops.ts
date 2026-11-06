@@ -32,6 +32,7 @@ import {
   type Brand,
   type BrandFile,
   type FormatTarget,
+  type Project,
   type Resolution,
 } from '@trailerforge/schema';
 import { z } from 'zod';
@@ -222,6 +223,34 @@ export interface BrandImport {
 }
 
 /**
+ * `<hash>.<ext>` names of the files this project uses from its `media/`: the brand's logo and
+ * fonts and the pictures on its cards. What the service may hand out to the UI.
+ */
+export function projectFileNames(project: Pick<Project, 'brand' | 'storyboard'>): Set<string> {
+  const b = project.brand;
+  const names = new Set<string>();
+  for (const f of [b?.logo, ...(b?.fonts.map((x) => x.file) ?? [])])
+    if (f) names.add(`${f.hash}.${f.ext}`);
+  for (const slot of project.storyboard?.sections.flatMap((s) => s.slots) ?? []) {
+    if (slot.kind !== 'card') continue;
+    const img = cardImageOf(slot.params);
+    if (img) names.add(`${img.hash}.${img.ext}`);
+  }
+  return names;
+}
+
+/** A card's picture from its params, if it has a well-formed one. */
+export function cardImageOf(params: unknown): { hash: string; ext: string } | undefined {
+  const img = (params as { image?: unknown } | undefined)?.image as
+    { hash?: unknown; ext?: unknown } | undefined;
+  return typeof img?.hash === 'string' &&
+    /^[a-f0-9]{64}$/.test(img.hash) &&
+    (img.ext === 'png' || img.ext === 'jpg' || img.ext === 'svg')
+    ? { hash: img.hash, ext: img.ext }
+    : undefined;
+}
+
+/**
  * Copy a logo or font into the project's `media/` (hashed) and set it in the brand kit. Not
  * offered to the MCP server: which files go into a project is the user's choice.
  */
@@ -235,6 +264,8 @@ export async function brandImportOp(
   } catch (err) {
     throw new OpError('usage', err instanceof Error ? err.message : String(err));
   }
+  // A card picture is only copied in: the Graphics tab puts it on the card (one undo step there).
+  if (o.kind === 'image') return { file };
   if (o.kind === 'logo') {
     store.dispatch('core/brand.set-logo', { file });
     return { file };

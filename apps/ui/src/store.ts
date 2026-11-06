@@ -1156,11 +1156,20 @@ export class AppStore {
    * out, and the preview falls back to Inter for them, as the render does for a missing file.
    */
   async loadBrandAssets(projectId: string): Promise<void> {
-    const brand = this.state.projects[projectId]?.project.brand;
-    if (!this.client || !brand) return;
-    const files = [
-      ...(brand.logo ? [{ file: brand.logo }] : []),
-      ...brand.fonts.map((f) => ({ file: f.file, font: f })),
+    const project = this.state.projects[projectId]?.project;
+    const brand = project?.brand;
+    if (!this.client || !project) return;
+    const cardImages = (project.storyboard?.sections.flatMap((s) => s.slots) ?? []).flatMap(
+      (slot) => {
+        const img = slot.kind === 'card' ? cardImageOf(slot.params) : undefined;
+        return img ? [{ file: img }] : [];
+      },
+    );
+    type Font = NonNullable<typeof brand>['fonts'][number];
+    const files: { file: { hash: string; ext: string }; font?: Font }[] = [
+      ...(brand?.logo ? [{ file: brand.logo }] : []),
+      ...(brand?.fonts.map((f) => ({ file: f.file, font: f })) ?? []),
+      ...cardImages,
     ];
     const key = files.map((f) => `${f.file.hash}.${f.file.ext}`).join('|');
     if (this.state.brandAssets[projectId]?.key === key) return;
@@ -1182,7 +1191,7 @@ export class AppStore {
           for (let i = 0; i < bytes.length; i += 0x8000)
             bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
           images[`media/${name}`] =
-            `data:${f.file.ext === 'svg' ? 'image/svg+xml' : 'image/png'};base64,${btoa(bin)}`;
+            `data:${IMAGE_MIME[f.file.ext] ?? 'image/png'};base64,${btoa(bin)}`;
         }
         present.add(name);
       } catch {
@@ -1373,6 +1382,12 @@ export class AppStore {
     }
   }
 
+  /** Copies a picture for a card into the project; the caller puts it on the card. */
+  async importCardImage(projectId: string, path: string) {
+    const r = await this.run((c) => c.importBrandFile(projectId, { kind: 'image', path }));
+    return r ? (r.file as { hash: string; ext: 'png' | 'jpg' | 'svg'; name: string }) : null;
+  }
+
   /** Copies a logo or font (a path on the computer running the engine) into the project. */
   async importBrandFile(
     projectId: string,
@@ -1531,4 +1546,21 @@ export function busyTask(state: AppState, projectId: string): TaskView | undefin
   return Object.values(state.tasks).find(
     (t) => t.projectId === projectId && t.status === 'running' && t.blocking !== false,
   );
+}
+
+const IMAGE_MIME: Record<string, string> = {
+  svg: 'image/svg+xml',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+};
+
+/** A card's picture from its params, if it has a well-formed one. */
+export function cardImageOf(params: unknown): { hash: string; ext: string } | undefined {
+  const img = (params as { image?: { hash?: unknown; ext?: unknown } } | undefined)?.image;
+  return typeof img?.hash === 'string' &&
+    /^[a-f0-9]{64}$/.test(img.hash) &&
+    typeof img.ext === 'string' &&
+    img.ext in IMAGE_MIME
+    ? { hash: img.hash, ext: img.ext }
+    : undefined;
 }

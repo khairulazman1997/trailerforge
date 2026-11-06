@@ -204,3 +204,50 @@ test('cut: effects, a transition into a clip and a sound, all undoable', async (
   await undoButton(page).click();
   await expect(second.getByRole('button', { name: 'Remove whoosh sound' })).toHaveCount(1); // the sample's own cue stays
 });
+
+test('graphics: a card gets a picture, behind the text or above it, and undo removes it', async ({
+  page,
+}) => {
+  // A tiny real PNG (2×2, red).
+  const png = join(t.root, 'key-art.png');
+  writeFileSync(
+    png,
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGP4z8DAwMDAxMDAAAAeBAEAnB3S9QAAAABJRU5ErkJggg==',
+      'base64',
+    ),
+  );
+  await page.goto(`${t.svc.url}/p/${ID}/graphics#token=${t.svc.token}`);
+  const nav = page.getByRole('navigation', { name: 'Cards and on-screen text' });
+  await nav.getByRole('button').first().click();
+  await page.getByLabel('Template').selectOption('core/title-card');
+  const frame = page.getByTestId('gfx-preview');
+  await page.getByLabel(/^Time \(/).fill('1.5');
+
+  const picture = page.getByRole('group', { name: 'Image' });
+  await picture.getByLabel('Picture file (PNG, JPEG or SVG)').fill(png);
+  await picture.getByRole('button', { name: 'Use this file' }).click();
+  await expect(picture).toContainText('Using key-art.png.');
+  // Behind the text, filling the frame, drawn from the project's copy.
+  await expect(frame.locator('image[href^="data:image/png"]')).toHaveCount(1);
+  await expect(frame.locator('image')).toHaveAttribute('preserveAspectRatio', 'xMidYMid slice');
+
+  await page.getByLabel('Image placement').selectOption('above');
+  await expect(frame.locator('image')).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
+  expect(await axe(page)).toEqual([]);
+
+  // The card in the project carries it; undo walks it back.
+  await expect
+    .poll(async () => {
+      const p = await client.getProject(ID);
+      const card = p.project
+        .storyboard!.sections.flatMap((s) => s.slots)
+        .find((s) => s.kind === 'card');
+      return (card?.params as { imagePlacement?: string }).imagePlacement;
+    })
+    .toBe('above');
+  // Picking the picture and its placement in quick succession is one undo step.
+  await undoButton(page).click();
+  await expect(picture).toContainText('No picture.');
+  await expect(frame.locator('image[href^="data:image/png"]')).toHaveCount(0);
+});

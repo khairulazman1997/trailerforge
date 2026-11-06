@@ -16,7 +16,7 @@ export const HexColor = z
 /** A file kept in `media/<hash>.<ext>`. */
 export const BrandFile = z.strictObject({
   hash: ContentHash,
-  ext: z.enum(['svg', 'png', 'ttf', 'otf', 'woff2']),
+  ext: z.enum(['svg', 'png', 'jpg', 'ttf', 'otf', 'woff2']),
   /** The name it had when imported, for display. */
   name: z.string().min(1).max(200),
 });

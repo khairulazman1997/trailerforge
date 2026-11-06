@@ -391,7 +391,7 @@ export class ServiceClient {
   importBrandFile(
     id: string,
     o: {
-      kind: 'logo' | 'font';
+      kind: 'logo' | 'font' | 'image';
       path: string;
       role?: 'heading' | 'body';
       family?: string;

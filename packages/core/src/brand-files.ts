@@ -17,7 +17,8 @@ import { projectPaths } from './store/layout.js';
  * The same file is stored once; nothing is ever deleted here, so undo can always find a file.
  */
 
-export type BrandFileKind = 'logo' | 'font';
+/** `image`: a picture for a card (PNG, JPEG or SVG). */
+export type BrandFileKind = 'logo' | 'font' | 'image';
 
 export class BrandFileError extends Error {
   constructor(message: string) {
@@ -26,13 +27,18 @@ export class BrandFileError extends Error {
   }
 }
 
-const MAX_BYTES = { logo: 5 * 1024 * 1024, font: 10 * 1024 * 1024 } as const;
+const MAX_BYTES = {
+  logo: 5 * 1024 * 1024,
+  font: 10 * 1024 * 1024,
+  image: 25 * 1024 * 1024,
+} as const;
 
 const startsWith = (b: Uint8Array, ...bytes: number[]) => bytes.every((v, i) => b[i] === v);
 
 /** What the content says the file is, or null. Extensions are not trusted. */
 export function sniffBrandFile(bytes: Uint8Array): BrandFile['ext'] | null {
   if (startsWith(bytes, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return 'png';
+  if (startsWith(bytes, 0xff, 0xd8, 0xff)) return 'jpg';
   if (startsWith(bytes, 0x00, 0x01, 0x00, 0x00) || startsWith(bytes, 0x74, 0x72, 0x75, 0x65))
     return 'ttf';
   if (startsWith(bytes, 0x4f, 0x54, 0x54, 0x4f)) return 'otf';
@@ -56,7 +62,13 @@ export function svgProblems(text: string): string[] {
   return out;
 }
 
-/** Copy a logo or font into `media/` by hash; returns what the brand kit stores. */
+const ALLOWED: Record<BrandFileKind, { exts: string[]; what: string }> = {
+  logo: { exts: ['svg', 'png'], what: 'an SVG or PNG logo' },
+  font: { exts: ['ttf', 'otf', 'woff2'], what: 'a TTF, OTF or WOFF2 font' },
+  image: { exts: ['png', 'jpg', 'svg'], what: 'a PNG, JPEG or SVG picture' },
+};
+
+/** Copy a logo, font or card picture into `media/` by hash; returns what the project stores. */
 export async function importBrandFile(
   projectDir: string,
   sourcePath: string,
@@ -74,11 +86,9 @@ export async function importBrandFile(
     throw new BrandFileError(`${name} is larger than ${MAX_BYTES[kind] / 1024 / 1024} MB`);
   const bytes = new Uint8Array(await readFile(sourcePath));
   const ext = sniffBrandFile(bytes);
-  const allowed = kind === 'logo' ? ['svg', 'png'] : ['ttf', 'otf', 'woff2'];
-  if (!ext || !allowed.includes(ext))
-    throw new BrandFileError(
-      `${name} is not ${kind === 'logo' ? 'an SVG or PNG logo' : 'a TTF, OTF or WOFF2 font'}`,
-    );
+  const allowed = ALLOWED[kind];
+  if (!ext || !allowed.exts.includes(ext))
+    throw new BrandFileError(`${name} is not ${allowed.what}`);
   if (ext === 'svg') {
     const problems = svgProblems(new TextDecoder().decode(bytes));
     if (problems.length)

@@ -185,6 +185,38 @@ describe('built-in templates', () => {
     ).toContain('<image');
   });
 
+  it('shows a picture on any card: behind the text (shaded) or above it', () => {
+    const image = { hash: 'e'.repeat(64), ext: 'jpg', name: 'key-art.jpg' };
+    const at = 1.5 * SEC;
+    for (const t of builtinTemplates.filter((x) => x.kind === 'card')) {
+      const bg = build(t.id, HD, { ...(SAMPLE[t.id] as object), image });
+      const [pic, shade] = bg.scene.layers;
+      expect(pic).toMatchObject({
+        kind: 'image',
+        fit: 'cover',
+        href: `media/${'e'.repeat(64)}.jpg`,
+      });
+      expect(pic!.box).toEqual({ x: 0, y: 0, w: HD.width, h: HD.height });
+      expect(shade).toMatchObject({ kind: 'rect' });
+      expect(renderSvg(bg.scene, at)).toContain('preserveAspectRatio="xMidYMid slice"');
+      expect(checkScene(bg.scene, bg.safe)).toEqual([]);
+
+      const above = build(t.id, HD, {
+        ...(SAMPLE[t.id] as object),
+        image,
+        imagePlacement: 'above',
+      });
+      const top = above.scene.layers[0]!;
+      expect(top).toMatchObject({ kind: 'image' });
+      for (const l of above.scene.layers.filter((x) => x.kind === 'text'))
+        expect(l.box.y).toBeGreaterThanOrEqual(top.box.y + top.box.h);
+    }
+    // Without a picture nothing changes (the goldens hold that too).
+    expect(build('core/title-card', HD, SAMPLE['core/title-card']).scene.layers[0]!.kind).toBe(
+      'text',
+    );
+  });
+
   it('refuses unknown parameters', () => {
     expect(() => build('core/title-card', HD, { text: 'x', colour: 'red' })).toThrow(/title-card/);
     expect(() => build('core/caption', HD, { text: 'x'.repeat(201) })).toThrow();

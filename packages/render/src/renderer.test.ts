@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { existsSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -270,6 +270,24 @@ describe('FrameRenderer', () => {
     expect(bright(await r.pixels(svg, '#000000'), region)).toBeGreaterThan(10_000);
     const elsewhere = await FrameRenderer.create({ cacheDir: false });
     expect(bright(await elsewhere.pixels(svg, '#000000'), region)).toBe(0);
+  });
+
+  it('draws a JPEG card picture behind the text, shaded', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'tforge-cardimg-'));
+    await mkdir(join(project, 'media'));
+    const hash = 'b'.repeat(64);
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i',
+      'color=c=white:s=64x36', '-frames:v', '1', join(project, 'media', `${hash}.jpg`)]); // prettier-ignore
+    const image = { hash, ext: 'jpg', name: 'art.jpg' };
+    const s = scene('core/title-card', { text: 'Ember Knight', image });
+    const svg = renderSvg(s, 1.5 * F);
+    const r = await FrameRenderer.create({ projectDir: project, brand: null, cacheDir: false });
+    expect(await r.prepare(svg)).toContain('href="data:image/jpeg;base64,');
+    // A corner, away from the text: the white picture shows through the shade, not black.
+    const corner = { x: 0, y: 0, w: 100, h: 100 };
+    const px = await r.pixels(svg, '#000000');
+    expect(bright(px, corner, 60)).toBe(100 * 100);
+    expect(bright(px, corner, 200)).toBe(0);
   });
 
   it('renders a 1080p frame within its time budget', async () => {
