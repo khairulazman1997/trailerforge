@@ -31,6 +31,19 @@ const TAB_LABEL: Record<ProjectTab, string> = {
   export: 'Export',
 };
 
+/** The open project's sections: the top bar shows these while a project page is open. */
+export function ProjectTabs({ id, tab }: { id: string; tab: ProjectTab }) {
+  return (
+    <nav className="project-tabs" aria-label="Project sections">
+      {(Object.keys(TAB_LABEL) as ProjectTab[]).map((t) => (
+        <Link key={t} to={projectPath(id, t)} aria-current={t === tab ? 'page' : undefined}>
+          {TAB_LABEL[t]}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
   const view = useAppState((s) => s.projects[id]);
   const busy = useAppState((s) => busyTask(s, id));
@@ -46,13 +59,6 @@ export function ProjectPage({ id, tab }: { id: string; tab: ProjectTab }) {
   }
   return (
     <main className="page">
-      <nav className="tabs" aria-label="Project sections">
-        {(Object.keys(TAB_LABEL) as ProjectTab[]).map((t) => (
-          <Link key={t} to={projectPath(id, t)} aria-current={t === tab ? 'page' : undefined}>
-            {TAB_LABEL[t]}
-          </Link>
-        ))}
-      </nav>
       {busy && (
         <p className="banner" role="status">
           Working: {busy.kind}… editing is paused for this project.

@@ -107,6 +107,18 @@ small {
   background: var(--accent);
   color: var(--accent-text);
 }
+.topbar .project-name {
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--text);
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar nav.compact a {
+  padding: 0.35rem 0.5rem;
+}
 .brand {
   font-weight: 700;
   text-decoration: none;

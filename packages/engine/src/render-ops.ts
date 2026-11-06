@@ -28,6 +28,7 @@ import {
   finding,
   gateVerdict,
   overrideDecision,
+  refreshGraphics,
   type GateFinding,
   type GateOverride,
   type GateVerdict,
@@ -144,6 +145,8 @@ export async function buildVersion(
       project.formatTargets.find((f) => f.id === v.formatTargetId)?.platformIds,
     );
   }
+  // Cards and captions as the Graphics tab has them now, not as they were when the cut was built.
+  timeline = refreshGraphics(timeline, project.storyboard);
   if (o.maxHeight) timeline = scaled(timeline, o.maxHeight);
   const warnings: string[] = [];
 

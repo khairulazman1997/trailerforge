@@ -3,6 +3,7 @@ export * from './layout.js';
 export * from './rough-cut.js';
 export * from './merge.js';
 export * from './captions.js';
+export * from './graphics-sync.js';
 export * from './metrics.js';
 export * from './variants.js';
 export * from './reframe.js';

@@ -8,7 +8,7 @@ import { Toasts } from './components/Toasts.js';
 import { clearConnection } from './connection.js';
 import { ConnectPage } from './pages/Connect.js';
 import { HomePage } from './pages/Home.js';
-import { ProjectPage } from './pages/Project.js';
+import { ProjectPage, ProjectTabs } from './pages/Project.js';
 import { SetupPage } from './pages/Setup.js';
 import { PlannerPage } from './pages/Planner.js';
 import { SettingsPage } from './pages/Settings.js';
@@ -85,6 +85,25 @@ function Shell({ store }: { store: AppStore }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [current, store]);
 
+  const mainNav = (
+    <nav aria-label="Main" className={view ? 'compact' : undefined}>
+      <Link to="/" aria-current={route.name === 'home' ? 'page' : undefined}>
+        Projects
+      </Link>
+      {plannerOn && (
+        <Link to="/planner" aria-current={route.name === 'planner' ? 'page' : undefined}>
+          Planner
+        </Link>
+      )}
+      <Link to="/setup" aria-current={route.name === 'setup' ? 'page' : undefined}>
+        Setup
+      </Link>
+      <Link to="/settings" aria-current={route.name === 'settings' ? 'page' : undefined}>
+        Settings
+      </Link>
+    </nav>
+  );
+
   return (
     <>
       <a
@@ -105,31 +124,17 @@ function Shell({ store }: { store: AppStore }) {
         <Link to="/" className="brand">
           TrailerForge
         </Link>
-        <nav aria-label="Main">
-          <Link to="/" aria-current={route.name === 'home' ? 'page' : undefined}>
-            Projects
-          </Link>
-          {view && (
-            <Link
-              to={projectPath(view.id)}
-              aria-current={route.name === 'project' ? 'page' : undefined}
-            >
+        {view && route.name === 'project' && (
+          <>
+            <Link to={projectPath(view.id)} className="project-name" title={view.dir}>
               {view.project.name}
             </Link>
-          )}
-          {plannerOn && (
-            <Link to="/planner" aria-current={route.name === 'planner' ? 'page' : undefined}>
-              Planner
-            </Link>
-          )}
-          <Link to="/setup" aria-current={route.name === 'setup' ? 'page' : undefined}>
-            Setup
-          </Link>
-          <Link to="/settings" aria-current={route.name === 'settings' ? 'page' : undefined}>
-            Settings
-          </Link>
-        </nav>
+            <ProjectTabs id={view.id} tab={route.tab} />
+          </>
+        )}
+        {!view && mainNav}
         <span className="spacer" />
+        {view && mainNav}
         {view && (
           <div className="row" role="group" aria-label="History">
             <button

@@ -10,6 +10,7 @@ import {
 import {
   VariantCache,
   defaultVariants,
+  refreshGraphics,
   timelineHash,
   type DerivedVariant,
   type SoundSetup,
@@ -154,7 +155,7 @@ export async function renderVariantGraphicsOp(
   const derived = await deriveVariantOp(engine, store, variantId);
   const status = await brandStatus(store.paths.dir, store.state.brand);
   const { scenes, warnings } = timelineScenes({
-    timeline: derived.timeline,
+    timeline: refreshGraphics(derived.timeline, store.state.storyboard),
     templates: engine.plugins.registries.graphicTemplates,
     brand: store.state.brand,
     fonts: status.fonts,
