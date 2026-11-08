@@ -3,7 +3,7 @@
 // (`--version`, `commands --json`, `run`, `info`, `render` of a project or a template) with the
 // real CLI's shapes: `{"error": …}` on stdout and exit 1 on failure, numbered PNG frames plus a
 // render log. Modes: ok | old (reports 0.8.0) | newer (reports 0.30.0) | lacking (has no
-// keys.toggleHold) | slow (frames take 150 ms each) | no-alpha | wrong-size |
+// keys.toggleHold) | basic (has none of the richer effect commands) | slow (frames take 150 ms each) | no-alpha | wrong-size |
 // fail-render | drift (different frames every run) | env:<file> (writes its environment to <file>).
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
@@ -38,6 +38,19 @@ const opt = (name) => {
   return i >= 0 ? argv[i + 1] : undefined;
 };
 
+// The richer effect commands (blend modes, mattes, masks, text animators, presets, styles).
+const RICH = [
+  ...['layer.setBlendMode', 'layer.setTrackMatte', 'layer.addMask', 'layer.mask.setFeather'],
+  ...['layer.addTextAnimator', 'layer.addTextAnimatorProperty', 'layer.addTextSelector'],
+  ...['layer.applyTextPreset', 'anim.applyBuiltinPreset', 'layer.style.gradientOverlay'],
+  ...['layer.style.stroke', 'shape.fillStroke', 'prop.editGradient'],
+];
+if (mode !== 'basic') for (const id of [...RICH, 'effect.apply', 'layer.newShape']) KNOWN.add(id);
+// What the real CLI says about a command's parameters, for one of them.
+const DESCRIBED = {
+  'anim.applyBuiltinPreset': { params: { preset: 'string', layers: 'string[]?' } },
+};
+
 const V = mode === 'old' ? '0.8.0' : mode === 'newer' ? '0.30.0' : '0.22.0';
 // Everything TrailerForge sends, plus a few it never uses (as the real list has hundreds).
 const LISTED = [
@@ -45,6 +58,7 @@ const LISTED = [
   ...['layer.newShape', 'layer.newAdjustment', 'layer.rename', 'layer.setSwitch'],
   ...['layer.addShapeItem', 'layer.setParent', 'keys.easyEaseIn', 'keys.easyEaseOut'],
   ...['effect.apply', 'layer.newNull', 'file.newProject', 'file.save'],
+  ...(mode === 'basic' ? [] : RICH),
 ].filter((id) => !(mode === 'lacking' && id === 'keys.toggleHold'));
 
 if (mode.startsWith('env:')) writeFileSync(mode.slice(4), JSON.stringify(process.env));
@@ -53,7 +67,7 @@ if (argv[0] === '--version') {
   process.exit(0);
 }
 if (argv[0] === 'commands') {
-  const list = [...new Set(LISTED)].map((id) => ({ enabled: true, id, label: id }));
+  const list = [...new Set(LISTED)].map((id) => ({ enabled: true, id, label: id, ...DESCRIBED[id] })); // prettier-ignore
   process.stdout.write(JSON.stringify(list) + '\n');
   process.exit(0);
 }

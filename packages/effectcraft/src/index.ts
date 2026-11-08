@@ -9,3 +9,4 @@ export * from './templates-build.js';
 export * from './effect-spec.js';
 export * from './author.js';
 export * from './example.js';
+export * from './effect-examples.js';

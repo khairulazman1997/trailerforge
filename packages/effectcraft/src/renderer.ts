@@ -15,7 +15,8 @@ import type { Scene } from '@trailerforge/graphics';
 import type { MotionRenderJob, MotionRenderResult, MotionRenderer } from '@trailerforge/plugin-api';
 import { FLICKS_PER_SECOND, flicksPerFrame, type Rate } from '@trailerforge/schema';
 import { EffectCraftCli, EffectCraftError, type CliLocation } from './cli.js';
-import { compatProblem, untestedNote } from './compat.js';
+import { compatProblem, describeCommands, untestedNote } from './compat.js';
+import { offeredEffectCommands } from './effect-spec.js';
 import { checkProjectFile, type ProjectHeader } from './project-file.js';
 import { motionContentHash } from './motion-cache.js';
 import { chunkCommands, sceneCommands, type EcCommand } from './scene-commands.js';
@@ -75,6 +76,7 @@ export class EffectCraftRenderer implements MotionRenderer {
   readonly name = 'EffectCraft';
   private readonly cli: EffectCraftCli | null;
   private checked: Promise<Availability> | null = null;
+  private listing: { ids: Set<string> | null; raw: string } | null = null;
 
   constructor(private readonly opts: EffectCraftRendererOptions) {
     this.cli = opts.cli ? new EffectCraftCli(opts.cli) : null;
@@ -127,7 +129,9 @@ export class EffectCraftRenderer implements MotionRenderer {
     try {
       [version, commands] = await this.work(async (cwd) => {
         const v = await this.cli!.version({ cwd, timeoutMs: 30_000 });
-        return [v, v === null ? null : await this.cli!.commands({ cwd, timeoutMs: 30_000 })] as const; // prettier-ignore
+        if (v === null) return [v, null] as const;
+        this.listing = await this.cli!.commandList({ cwd, timeoutMs: 30_000 });
+        return [v, this.listing.ids] as const;
       });
     } catch (e) {
       return { ok: false, kind: 'broken', reason: `effectcraft-cli does not start: ${(e as Error).message}` }; // prettier-ignore
@@ -139,6 +143,26 @@ export class EffectCraftRenderer implements MotionRenderer {
       return { ok: false, kind: 'incompatible', reason: problem, ...(version ? { version } : {}) };
     const note = untestedNote(version!);
     return { ok: true, version: version!, ...(note ? { note } : {}) };
+  }
+
+  /**
+   * What a model may use to author an effect with this build: the allowed commands it lists
+   * (`offered`), its full id list for `effectProblems` (`listed`, null when unknown) and its own
+   * description of the offered commands' parameters (`described`, possibly empty).
+   */
+  async effectCommandSet(): Promise<{
+    offered: string[];
+    listed: Set<string> | null;
+    described: string[];
+  }> {
+    await this.available();
+    const listed = this.listing?.ids ?? null;
+    const offered = offeredEffectCommands(listed);
+    return {
+      offered,
+      listed,
+      described: this.listing ? describeCommands(this.listing.raw, offered) : [],
+    };
   }
 
   supports(templateId: string): boolean {

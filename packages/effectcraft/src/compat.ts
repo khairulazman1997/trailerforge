@@ -1,4 +1,4 @@
-import { EFFECT_COMMANDS } from './effect-spec.js';
+import { BASIC_EFFECT_COMMANDS } from './effect-spec.js';
 
 /**
  * Which EffectCraft TrailerForge works with (plan M10 decision 1, revised 2026-11-09): not one
@@ -13,8 +13,10 @@ export const EFFECTCRAFT_MIN_VERSION = '0.9.2';
 
 /**
  * Every command id TrailerForge sends: the scene writer, the shipped-template author, the
- * example import, and the commands a model may use in a custom effect. A build missing any of
- * them is refused as a whole (with the missing ids named), not half used.
+ * example import, and the basic commands a model may use in a custom effect. A build missing any
+ * of them is refused as a whole (with the missing ids named), not half used. The richer effect
+ * commands (`RICH_EFFECT_COMMANDS`) are optional: a build without some of them is still used, and
+ * the model is offered only what it lists.
  */
 export const REQUIRED_COMMANDS: readonly string[] = [
   ...new Set([
@@ -31,7 +33,7 @@ export const REQUIRED_COMMANDS: readonly string[] = [
     'essential.exportTemplate',
     'file.importLottie',
     'layer.addItem',
-    ...EFFECT_COMMANDS,
+    ...BASIC_EFFECT_COMMANDS,
   ]),
 ];
 
@@ -61,6 +63,39 @@ export function parseCommandIds(stdout: string): Set<string> | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * What `commands --json` says about the given ids beyond `id`, `label` and `enabled` (their
+ * parameters, as the build reports them), one compact line each, cut to `maxPerCommand`
+ * characters. Ids it does not describe are left out; unreadable output gives an empty list.
+ */
+export function describeCommands(
+  stdout: string,
+  ids: readonly string[],
+  maxPerCommand = 700,
+): string[] {
+  let v: unknown;
+  try {
+    v = JSON.parse(stdout);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(v)) return [];
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const c of v)
+    if (c && typeof c === 'object' && typeof (c as { id?: unknown }).id === 'string')
+      byId.set((c as { id: string }).id, c as Record<string, unknown>);
+  const out: string[] = [];
+  for (const id of ids) {
+    const c = byId.get(id);
+    if (!c) continue;
+    const { id: _id, label: _label, enabled: _enabled, ...rest } = c;
+    if (!Object.keys(rest).length) continue;
+    const line = `${id}: ${JSON.stringify(rest)}`;
+    out.push(line.length > maxPerCommand ? `${line.slice(0, maxPerCommand - 1)}…` : line);
+  }
+  return out;
 }
 
 /** Null when this build can be used, else why not, in words. */

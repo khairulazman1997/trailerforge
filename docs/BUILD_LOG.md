@@ -340,9 +340,10 @@ Breakdown 2026-10-29: tasks 10.1–10.7 (with 10.4b–10.4d), ten design default
 
 ## 2026-11-08 (UTC) — EffectCraft merged as M10, pin replaced
 
-| Task                                                | Commit  | Start | End   | Duration | Model | Notes                                                                                                                                         |
-| --------------------------------------------------- | ------- | ----- | ----- | -------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Merge EffectCraft branch as M10                     | c7a5cc2 | -     | -     | -        | Opus  | Branch `claude/optimistic-hawking-kegos6` (built as M8) merged into main; renumbered M10 / 10.x.                                              |
-| No pin: installed EffectCraft + compatibility check | c7075c5 | -     | -     | -        | Opus  | Decision 1 revised by the user: `compat.ts`, installed-copy lookup, approvals/exports note renderer versions, packaging ships no EffectCraft. |
-| Real-CLI checks on 0.22.0 + templates               | f85084d | -     | 17:31 | -        | Opus  | Contract tests, templates built, 1080p/720p title looked at, m10 flow on the real CLI, spike determinism.                                     |
-| Suggest an effect (Graphics)                        | -       | -     | 18:10 | -        | Opus  | Engine op + test, service task/facts route, CLI, MCP, Graphics button, ideas list, e2e.                                                       |
+| Task                                                | Commit  | Start | End   | Duration | Model | Notes                                                                                                                                           |
+| --------------------------------------------------- | ------- | ----- | ----- | -------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Merge EffectCraft branch as M10                     | c7a5cc2 | -     | -     | -        | Opus  | Branch `claude/optimistic-hawking-kegos6` (built as M8) merged into main; renumbered M10 / 10.x.                                                |
+| No pin: installed EffectCraft + compatibility check | c7075c5 | -     | -     | -        | Opus  | Decision 1 revised by the user: `compat.ts`, installed-copy lookup, approvals/exports note renderer versions, packaging ships no EffectCraft.   |
+| Real-CLI checks on 0.22.0 + templates               | f85084d | -     | 17:31 | -        | Opus  | Contract tests, templates built, 1080p/720p title looked at, m10 flow on the real CLI, spike determinism.                                       |
+| Suggest an effect (Graphics)                        | -       | -     | 18:10 | -        | Opus  | Engine op + test, service task/facts route, CLI, MCP, Graphics button, ideas list, e2e.                                                         |
+| Richer AI effects (allowlist, prompts, showcase)    | -       | 19:12 | 19:58 | -        | Opus  | Optional rich commands offered per installed build, refused presets, worked examples in the prompt, `showcase.mjs`; unverified on the real CLI. |

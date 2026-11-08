@@ -2,13 +2,13 @@ import { BUILTIN_PROMPTS_DIR, loadPrompt, type LlmClient } from '@trailerforge/l
 import { EffectCraftError } from './cli.js';
 import {
   AuthoredEffect,
-  EFFECT_COMMANDS,
   EFFECT_COMP,
   EFFECT_MAX_COMMANDS,
   effectCommands,
   effectProblems,
   scrubCliError,
 } from './effect-spec.js';
+import { effectExamplesText } from './effect-examples.js';
 import type { AuthoredProject, EffectCraftRenderer } from './renderer.js';
 
 export const EFFECT_AUTHOR_TASK = 'effectcraft.author';
@@ -96,11 +96,15 @@ export async function authorEffect(
   const signal = o.signal ?? new AbortController().signal;
   const sent = effectWire(req, o.terms);
   const leaked = leakOf(sent, o.terms);
+  const commandSet = await deps.renderer.effectCommandSet();
   if (leaked !== undefined)
     throw new Error('refusing to send: the request still contains knowledge excluded from LLM use');
 
   const attempt = async (effect: AuthoredEffect): Promise<AuthoredProject | string[]> => {
-    const problems = effectProblems(effect.commands, { comps: o.base?.comps ?? [EFFECT_COMP] });
+    const problems = effectProblems(effect.commands, {
+      comps: o.base?.comps ?? [EFFECT_COMP],
+      listed: commandSet.listed,
+    });
     if (problems.length) return problems;
     try {
       return o.base
@@ -141,7 +145,11 @@ export async function authorEffect(
     {
       request,
       comp: EFFECT_COMP,
-      commands: EFFECT_COMMANDS.join(', '),
+      commands: commandSet.offered.join(', '),
+      reported: commandSet.described.length
+        ? `How this EffectCraft describes those commands (its own words win over the notes above):\n${commandSet.described.join('\n')}`
+        : '',
+      examples: effectExamplesText(),
       maxCommands: String(EFFECT_MAX_COMMANDS),
       context: contextText(sent, o.images?.length ?? 0, o.base?.comps ?? [EFFECT_COMP]),
     },
@@ -163,6 +171,7 @@ export async function authorEffect(
       request,
       previous: JSON.stringify(first.value, null, 2),
       problems: r1.map((p) => `- ${p}`).join('\n'),
+      commands: commandSet.offered.join(', '),
     },
     [BUILTIN_PROMPTS_DIR],
   );

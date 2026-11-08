@@ -141,8 +141,13 @@ export class EffectCraftCli {
 
   /** The ids of the commands this build has, or null when it does not list them as JSON. */
   async commands(opts: RunOptions): Promise<Set<string> | null> {
+    return (await this.commandList(opts)).ids;
+  }
+
+  /** The command ids and the raw `commands --json` output (which also describes parameters). */
+  async commandList(opts: RunOptions): Promise<{ ids: Set<string> | null; raw: string }> {
     const r = await this.run(['commands', '--json'], opts);
-    return parseCommandIds(r.stdout);
+    return { ids: parseCommandIds(r.stdout), raw: r.stdout };
   }
 
   async run(args: string[], opts: RunOptions): Promise<RunResult> {
