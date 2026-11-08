@@ -37,6 +37,7 @@ describe('Engine', () => {
       expect(engine.pluginStatus.map((s) => [s.id, s.state])).toEqual([
         ['core', 'active'],
         ['game-trailer', 'active'],
+        ['effectcraft', 'active'],
         ['extra', 'active'],
       ]);
       expect(engine.plugins.registries.platforms.get('core/tiktok')?.maxDuration).toBe(600);

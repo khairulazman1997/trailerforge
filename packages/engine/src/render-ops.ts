@@ -1,7 +1,9 @@
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { recordReuse } from './reuse-ops.js';
 import { presetForPlatforms } from './platforms.js';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { cachedMotionFrames, ecTemplateById, templateMisfit } from '@trailerforge/effectcraft';
+import type { MotionRenderJob, MotionRenderer } from '@trailerforge/plugin-api';
 import {
   CompileError,
   DRAFT_ENCODE,
@@ -95,6 +97,8 @@ export interface VersionBuild {
   /** Per scene: hash of what it draws (the frames' identity) and its frame count. */
   graphics: Map<string, GraphicFrames>;
   sceneMessages: { itemId: string; messages: string[] }[];
+  /** Graphics drawn by a motion renderer (EffectCraft) instead of a built-in template. */
+  motion: MotionItem[];
   contrastIssues: string[];
   beats: number[] | undefined;
   resolved: ResolvedExport;
@@ -103,6 +107,95 @@ export interface VersionBuild {
   /** Identifies the version's content (picture, graphics, sound), not the preset: what approvals vouch for. */
   contentHash: string;
   warnings: string[];
+}
+
+export interface MotionItem {
+  itemId: string;
+  renderer: MotionRenderer;
+  job: Omit<MotionRenderJob, 'outDir'>;
+  contentHash: string;
+}
+
+/**
+ * Graphic items a motion renderer draws (plan M10): `effectcraft/project` items and the shipped
+ * EffectCraft templates. A project-relative `params.project` (`media/<hash>.ecproj`) is resolved
+ * inside the project folder.
+ *
+ * A shipped template that cannot be drawn by EffectCraft (it is unavailable, the file is missing,
+ * the picture has another shape, or the item is longer than the template) is drawn by its built-in
+ * fallback instead, with a warning: `swaps` maps the item to the fallback's template id. A project
+ * file that cannot be drawn is left out with a warning.
+ */
+async function motionItems(
+  engine: Engine,
+  store: ProjectStore,
+  timeline: Timeline,
+  warnings: string[],
+): Promise<{ items: MotionItem[]; swaps: Map<string, string> }> {
+  const renderers = engine.plugins.registries.motionRenderers.list();
+  const items: MotionItem[] = [];
+  const swaps = new Map<string, string>();
+  for (const track of timeline.tracks)
+    for (const item of track.items) {
+      if (item.kind !== 'graphic') continue;
+      const def = ecTemplateById(item.templateId);
+      const renderer =
+        renderers.find((r) => r.supports(item.templateId)) ??
+        (def ? renderers.find((r) => r.id === 'effectcraft/cli') : undefined);
+      if (!renderer && !def) continue;
+      const label = item.label || item.id;
+      const fallback = (why: string) => {
+        swaps.set(item.id, def!.fallback);
+        warnings.push(`"${label}": ${why}; drawn with ${def!.fallback} instead`);
+      };
+      const a = renderer ? await renderer.available() : null;
+      if (!renderer || !a?.ok) {
+        const why = a && !a.ok ? a.reason : 'EffectCraft or its template is not installed';
+        if (def) fallback(`${def.name} needs EffectCraft, which is not available (${why})`);
+        else if (renderer)
+          warnings.push(`"${label}" needs ${renderer.name}, which is not available: ${why}`);
+        continue;
+      }
+      if (def && !renderer.supports(item.templateId)) {
+        fallback(`${def.name} is missing or does not match its recorded hash`);
+        continue;
+      }
+      if (def) {
+        const misfit = templateMisfit(def, timeline.resolution, item.duration / FLICKS_PER_SECOND);
+        if (misfit) {
+          fallback(misfit);
+          continue;
+        }
+      }
+      const params: Record<string, unknown> = { ...item.params };
+      if (typeof params.project === 'string') {
+        const abs = resolve(store.paths.dir, params.project);
+        if (relative(store.paths.dir, abs).startsWith('..') || isAbsolute(params.project)) {
+          warnings.push(`"${label}": its project file must be inside the project folder`);
+          continue;
+        }
+        params.project = abs;
+      }
+      const job = {
+        templateId: item.templateId,
+        params,
+        duration: item.duration,
+        resolution: timeline.resolution,
+        frameRate: timeline.frameRate,
+      };
+      try {
+        items.push({
+          itemId: item.id,
+          renderer,
+          job,
+          contentHash: await renderer.fingerprint(job),
+        });
+      } catch (err) {
+        if (def) fallback(err instanceof Error ? err.message : String(err));
+        else warnings.push(`"${label}": ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  return { items, swaps };
 }
 
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
@@ -184,8 +277,25 @@ export async function buildVersion(
   // Cards and captions.
   const status = await brandStatus(store.paths.dir, project.brand);
   const logoPresent = !status.warnings.some((w) => w.startsWith('The logo'));
+  const { items: motion, swaps } = await motionItems(engine, store, timeline, warnings);
+  const motionIds = new Set(motion.map((m) => m.itemId));
   const { scenes, warnings: sceneWarnings } = timelineScenes({
-    timeline,
+    timeline:
+      motionIds.size || swaps.size
+        ? {
+            ...timeline,
+            tracks: timeline.tracks.map((t) => ({
+              ...t,
+              items: t.items
+                .filter((i) => !motionIds.has(i.id))
+                .map((i) =>
+                  i.kind === 'graphic' && swaps.has(i.id)
+                    ? { ...i, templateId: swaps.get(i.id)! }
+                    : i,
+                ),
+            })),
+          }
+        : timeline,
     templates: engine.plugins.registries.graphicTemplates,
     brand: project.brand,
     fonts: status.fonts,
@@ -216,6 +326,12 @@ export async function buildVersion(
       messages: checkScene(s.scene, safe, s.duration / FLICKS_PER_SECOND),
     });
   }
+  for (const m of motion)
+    graphics.set(m.itemId, {
+      pattern: '',
+      contentHash: m.contentHash,
+      frames: Math.max(1, Math.round(m.job.duration / fpf)),
+    });
   const contrastIssues = project.brand
     ? checkBrandContrast(project.brand.colors).map((c) => c.message)
     : [];
@@ -248,6 +364,7 @@ export async function buildVersion(
     scenes,
     graphics,
     sceneMessages,
+    motion,
     contrastIssues,
     beats,
     resolved,
@@ -272,31 +389,55 @@ async function cutGridBeats(engine: Engine, store: ProjectStore): Promise<number
   return (await cutGridOp(engine, store))?.beats ?? null;
 }
 
-/** Render every card and caption of a build to PNG sequences (cached by what they draw). */
-async function renderGraphics(
+/**
+ * Render every card and caption of a build to PNG sequences (cached by what they draw), and the
+ * motion graphics through their renderer's cache. `nonReproducible` names motion graphics whose
+ * renderer once drew different frames for the same input.
+ */
+export async function renderGraphics(
   store: ProjectStore,
   b: VersionBuild,
   signal: AbortSignal | undefined,
   onProgress?: (done: number, total: number) => void,
-): Promise<Map<string, GraphicFrames>> {
+): Promise<{ frames: Map<string, GraphicFrames>; nonReproducible: string[] }> {
   const out = new Map<string, GraphicFrames>();
-  if (b.scenes.length === 0) return out;
-  const r = await FrameRenderer.create({ projectDir: store.paths.dir, brand: store.state.brand });
+  const nonReproducible: string[] = [];
+  const total = b.scenes.length + b.motion.length;
+  const cacheRoot = join(store.paths.cache, 'render-frames');
   let done = 0;
-  for (const s of b.scenes) {
-    signal?.throwIfAborted();
-    const meta = b.graphics.get(s.itemId)!;
-    const dir = join(store.paths.cache, 'render-frames', meta.contentHash.slice(0, 24));
-    if (!(await exists(join(dir, SEQUENCE_DONE))))
-      await r.renderSequence(s.scene, b.timeline.frameRate, dir, signal ? { signal } : {});
-    out.set(s.itemId, {
-      pattern: join(dir, 'frame_%06d.png'),
-      contentHash: meta.contentHash,
-      frames: meta.frames,
-    });
-    onProgress?.(++done, b.scenes.length);
+  if (b.scenes.length) {
+    const r = await FrameRenderer.create({ projectDir: store.paths.dir, brand: store.state.brand });
+    for (const s of b.scenes) {
+      signal?.throwIfAborted();
+      const meta = b.graphics.get(s.itemId)!;
+      const dir = join(cacheRoot, meta.contentHash.slice(0, 24));
+      if (!(await exists(join(dir, SEQUENCE_DONE))))
+        await r.renderSequence(s.scene, b.timeline.frameRate, dir, signal ? { signal } : {});
+      out.set(s.itemId, {
+        pattern: join(dir, 'frame_%06d.png'),
+        contentHash: meta.contentHash,
+        frames: meta.frames,
+      });
+      onProgress?.(++done, total);
+    }
   }
-  return out;
+  for (const m of b.motion) {
+    signal?.throwIfAborted();
+    const f = await cachedMotionFrames(m.renderer, m.job, {
+      cacheRoot,
+      signal: signal ?? new AbortController().signal,
+      contentHash: m.contentHash,
+    });
+    if (!f.reproducible)
+      nonReproducible.push(`"${m.itemId}" (${m.renderer.name}): ${f.warnings.at(-1) ?? ''}`);
+    out.set(m.itemId, {
+      pattern: join(f.dir, f.pattern),
+      contentHash: m.contentHash,
+      frames: Math.min(f.frames, b.graphics.get(m.itemId)!.frames),
+    });
+    onProgress?.(++done, total);
+  }
+  return { frames: out, nonReproducible };
 }
 
 const exists = (p: string) =>
@@ -584,7 +725,7 @@ interface RenderBuildOptions {
 async function renderBuild(store: ProjectStore, b: VersionBuild, o: RenderBuildOptions) {
   const report = (p: Progress) => o.onProgress?.(p);
   report({ phase: 'graphics', fraction: 0, message: 'Drawing cards and captions' });
-  const graphics = await renderGraphics(store, b, o.signal, (d, t) =>
+  const { frames: graphics, nonReproducible } = await renderGraphics(store, b, o.signal, (d, t) =>
     report({ phase: 'graphics', fraction: 0.1 * (d / t) }),
   );
   const phaseAt: Record<RenderProgress['phase'], number> = {
@@ -601,6 +742,7 @@ async function renderBuild(store: ProjectStore, b: VersionBuild, o: RenderBuildO
       encode: o.encode,
       audioCodec: o.audioCodec,
       loudness: o.loudness,
+      ...(nonReproducible.length ? { nonReproducible } : {}),
       output: o.output,
     },
     {
@@ -850,7 +992,7 @@ export async function handoffOp(
   await requireRenderTools(engine, ['prores_ks']);
   const dir = join(store.paths.exports, 'handoff', keyOf(variantId));
   await mkdir(dir, { recursive: true });
-  const frames = await renderGraphics(store, b, o.signal);
+  const { frames } = await renderGraphics(store, b, o.signal);
   const clips = new Map<string, { path: string; frames: number }>();
   let n = 0;
   for (const [itemId, g] of frames) {

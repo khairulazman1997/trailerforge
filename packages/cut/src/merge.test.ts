@@ -152,6 +152,35 @@ describe('mergeRoughCut', () => {
     );
   });
 
+  it("keeps the user's own tracks (trk_user_…), which the rough cut never makes", () => {
+    const inp = input();
+    const first = buildRoughCut(inp).timeline;
+    const fx = {
+      id: 'trk_user_effects',
+      kind: 'graphics' as const,
+      name: 'Effects',
+      muted: false,
+      locked: false,
+      items: [
+        {
+          id: 'it_effect_burst',
+          kind: 'graphic' as const,
+          start: 0,
+          duration: 10 * F,
+          templateId: 'effectcraft/project',
+          params: { project: `media/${'a'.repeat(64)}.ecproj`, comp: 'tf-effect' },
+          effects: [],
+          extensions: {},
+        },
+      ],
+      transitions: [],
+    };
+    const withFx: Timeline = { ...first, tracks: [...first.tracks, fx] };
+    const { timeline } = mergeRoughCut(withFx, buildRoughCut(inp).timeline, inp.sources);
+    expect(timeline.tracks.find((k) => k.id === 'trk_user_effects')).toEqual(fx);
+    expect(timeline.tracks.at(-1)!.id).toBe('trk_user_effects');
+  });
+
   it('drops an edited clip whose shot left the storyboard, with a warning, and is deterministic', () => {
     const inp = input();
     const first = edit(buildRoughCut(inp).timeline, 'rc_shot_boss', (i) => ({

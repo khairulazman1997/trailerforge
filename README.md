@@ -62,6 +62,7 @@ Takes are written into a hidden `.tfpartial` folder first and moved into place w
 
 - **Never:** your footage, frames, sound, game source code, file names or paths. Rendering, analysis, matching, checking and review all run on your computer. Nothing is uploaded to any platform.
 - **AI requests, only when you ask and only as text.** These cover brief suggestions, the storyboard, capture tips, take ranking and critique. Before a request goes, the app shows which provider gets it, whether that leaves your computer, and exactly what is sent. Game facts you mark "keep out of AI requests" are removed, and a request that would still name one is stopped before it leaves. Shots and takes go out as aliases (`shot-1`, `take-2`). With Ollama, requests go to this computer only.
+- **Custom effects (EffectCraft), the one exception, only when you tick it.** Describing an effect sends text like any AI request (your words, length, picture size, brand colours and font names; an example animation only as its layer names and words; a reference clip only as measurements). Eight pictures of a reference clip go too only if you look at them first and tick "Also send these 8 pictures", only to an AI that can read images, and each time is written to the decision log. EffectCraft itself runs on your computer and never connects to anything.
 - **Downloads, only after you agree.** These are the analysis tools (Python packages through `uv`, once) and the optional AI vision model (checked against a pinned checksum before it is kept).
 - **One door, one log.** Every network request the app makes goes through a single service and is written to `<home>/logs/egress.jsonl` with its purpose, host and size. The log never holds the request's text. `<home>` is `%USERPROFILE%\.trailerforge` on Windows (`~/.trailerforge` elsewhere; `TFORGE_HOME` changes it).
 - **Your keys:** an Anthropic API key is stored by the desktop app with the operating system's encryption (Windows DPAPI through Electron), or in an owner-only file when none is available. Settings says which.
@@ -239,6 +240,17 @@ tforge capture tips ./Ember.tforge            # --group <key>, --force, --overwr
 tforge capture export ./Ember.tforge --format md,html --omit-excluded
 tforge capture status ./Ember.tforge --json
 ```
+
+### Custom motion graphics (M10, EffectCraft)
+
+TrailerForge ships the EffectCraft command-line renderer (version 0.9.2, pinned; MIT/Apache-2.0) and uses it, on the CPU and offline, for motion graphics the built-in cards cannot do. Setup shows whether it is ready. Without it everything still works: cards fall back to the built-in drawing.
+
+- **Ready-made templates.** "Title reveal", "Logo sting" and "Kinetic text" appear in the Graphics tab's template picker. The preview there shows the built-in card as a stand-in; the export draws the EffectCraft version. A 9:16 version, or a card longer than 10 s, uses the built-in card with a warning.
+- **Describe an effect.** Graphics → Custom effects → _Describe an effect…_: your words, the length and where the hit lands, optionally a Lottie `.json` to start from or a reference clip whose style to match. You see exactly what is sent first. The AI's EffectCraft commands are checked (no files, links or code) and run in a scratch project; you get a preview and choose _Add it to the cut_ (undoable) or _Discard_.
+- **From the storyboard.** When EffectCraft is there, the storyboard writer may pick a template for a card and suggest a custom effect for a moment (within the same "most slots stay plain" limit). _Write the N effects the storyboard asks for_ turns those into proposals; nothing is added until you accept one.
+- **Polish by hand.** _Save a copy to edit in EffectCraft_ puts the effect's project in `exports/effectcraft/`; open it in the EffectCraft app, save, and _Use the edited copy_ brings it back (undoable; keep the `tf-effect` composition).
+- **Command line and Claude Code.** `tforge effectcraft status|author|accept|reject|stills`; MCP `effectcraft_status`, `effectcraft_author` (Claude Code can also write the commands itself), `effectcraft_proposals`, `effectcraft_discard`. Accepting stays your decision.
+- **Determinism.** Frames are cached by the EffectCraft version and the effect's content and go into the render plan hash; a re-render that ever drew different frames marks the export "not reproducible" in its manifest.
 
 ### Keyboard
 

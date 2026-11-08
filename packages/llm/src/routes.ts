@@ -40,6 +40,11 @@ export const DEFAULT_ROUTES: z.input<typeof RoutesConfig> = {
       effort: 'medium',
     },
     'critique.run': { provider: 'core/anthropic', model: 'claude-opus-5-5', effort: 'high' },
+    'effectcraft.author': {
+      provider: 'core/anthropic',
+      model: 'claude-opus-5-5',
+      effort: 'medium',
+    },
   },
 };
 

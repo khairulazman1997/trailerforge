@@ -1,3 +1,4 @@
+import { effectcraftStatusOp } from './effectcraft-ops.js';
 import { release } from 'node:os';
 import {
   SIDECAR_SETUP_DISCLOSURE,
@@ -215,14 +216,44 @@ async function visionCheck(engine: Engine): Promise<HealthCheck> {
     : { ...base, status: 'info', detail: 'Not downloaded. Matching recordings to shots works without it.', fix: 'Settings can download it once (you are shown the size and source first).', action: 'open-settings' }; // prettier-ignore
 }
 
+async function effectcraftCheck(engine: Engine): Promise<HealthCheck> {
+  const base = { id: 'effectcraft', title: 'EffectCraft motion graphics (optional)' };
+  const st = await effectcraftStatusOp(engine);
+  if (st.state === 'ready') {
+    const n = st.templates.available.length;
+    return {
+      ...base,
+      status: n === 3 ? 'ok' : 'info',
+      detail: `EffectCraft ${st.version} is ready (the version this app is built for); ${n} of 3 ready-made templates available.`,
+      ...(n === 3 ? {} : { fix: 'The built-in cards are used for the missing templates.' }),
+    };
+  }
+  const fix: Record<typeof st.state, string> = {
+    'not-bundled': 'Cards and captions use the built-in drawing, which needs nothing more.',
+    missing:
+      'Reinstall TrailerForge: its copy of EffectCraft is missing. Meanwhile the built-in cards are used.',
+    'wrong-version': `This app works with EffectCraft ${st.pinned} only. Reinstall TrailerForge, or remove the TFORGE_EFFECTCRAFT setting if you set one.`,
+    broken:
+      'EffectCraft did not start. Reinstall TrailerForge, or check that your antivirus did not quarantine it.',
+  } as never;
+  return {
+    ...base,
+    // Optional: nothing else depends on it, so even a broken copy is only a warning.
+    status: st.state === 'not-bundled' ? 'info' : 'warn',
+    detail: st.reason ?? 'EffectCraft is not available.',
+    fix: fix[st.state],
+  };
+}
+
 /** All the checks, in the order the Setup screen shows them. Reads only. */
 export async function healthOp(engine: Engine): Promise<HealthReport> {
-  const [ffmpeg, analysis, disk, ai, vision] = await Promise.all([
+  const [ffmpeg, analysis, disk, ai, vision, effectcraft] = await Promise.all([
     ffmpegCheck(engine),
     sidecarCheck(engine),
     diskCheck(engine),
     aiCheck(engine),
     visionCheck(engine),
+    effectcraftCheck(engine),
   ]);
   const checks: HealthCheck[] = [
     ...ffmpeg.filter((c) => c.id === 'ffmpeg'),
@@ -230,6 +261,7 @@ export async function healthOp(engine: Engine): Promise<HealthReport> {
     disk,
     ai,
     vision,
+    effectcraft,
     ...ffmpeg.filter((c) => c.id !== 'ffmpeg'),
     {
       id: 'system',

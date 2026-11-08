@@ -22,6 +22,7 @@
     "@trailerforge/compile": "workspace:*",
     "@trailerforge/core": "workspace:*",
     "@trailerforge/cut": "workspace:*",
+    "@trailerforge/effectcraft": "workspace:*",
     "@trailerforge/effects": "workspace:*",
     "@trailerforge/graphics": "workspace:*",
     "@trailerforge/ingest": "workspace:*",

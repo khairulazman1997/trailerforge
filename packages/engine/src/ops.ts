@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { generatorMotion } from './effectcraft-ops.js';
 import { basename, join, resolve } from 'node:path';
 import {
   answerCommands,
@@ -60,6 +61,7 @@ export class OpError extends Error {
       | 'takes-attached'
       | 'gate-blocked'
       | 'missing-tool'
+      | 'effect-refused'
       | 'failed',
     message: string,
     readonly details?: unknown,
@@ -416,7 +418,7 @@ export async function generateStoryboardOp(
   let generated;
   try {
     generated = await generateStoryboard(
-      { llm: engine.llmFor(store), filters: engine.filters() },
+      { llm: engine.llmFor(store), filters: engine.filters(), ...(await generatorMotion(engine)) },
       store.state,
       {
         template,
@@ -484,7 +486,7 @@ export async function regenerateSectionOp(
     throw new OpError('not-found', 'this project has no storyboard yet; generate one first');
   }
   const { payload, decisions } = await regenerateSection(
-    { llm: engine.llmFor(store), filters: engine.filters() },
+    { llm: engine.llmFor(store), filters: engine.filters(), ...(await generatorMotion(engine)) },
     store.state,
     {
       sectionId: opts.sectionId,

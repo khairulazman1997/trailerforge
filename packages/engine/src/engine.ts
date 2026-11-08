@@ -51,8 +51,9 @@ import {
 } from '@trailerforge/media';
 import { excludedTerms, gameTrailerPack } from '@trailerforge/pack-game-trailer';
 import { FilterRegistry } from '@trailerforge/effects';
-import { corePlugin } from './core-plugin.js';
 import { loadSavedTypes, savedTypeSnapshot, type SavedTypesState } from './saved-types-ops.js';
+import { corePlugin, effectcraftPlugin } from './core-plugin.js';
+import { locateCli, type CliLocation } from '@trailerforge/effectcraft';
 import { HandoffHub } from './handoff.js';
 import { openFileSecretStore, type SecretStore } from './secrets.js';
 import { WatchedFolders } from './watched-folders.js';
@@ -83,6 +84,13 @@ export interface EngineOptions {
   visionEmbedder?: (modelDir: string, modelId: string) => VisionEmbedder;
   /** How often watched folders are polled, in ms (default 2,000). */
   watchIntervalMs?: number;
+  /**
+   * The EffectCraft CLI (plan M10). Default: `TFORGE_EFFECTCRAFT` (the desktop app points it at
+   * its bundled copy); null registers no EffectCraft renderer.
+   */
+  effectcraft?: CliLocation | null;
+  /** Folder of the shipped `.ectemplate` files. Default: `TFORGE_EFFECTCRAFT_TEMPLATES`, else the package's own. */
+  effectcraftTemplates?: string;
   /** Disclosure gate for the default client; called before any request leaves the machine. */
   approveSend?: LlmClientOptions['approveSend'];
 }
@@ -134,7 +142,16 @@ export class Engine {
     });
     const host = new PluginHost({ events: bus, featureFlags: opts.featureFlags ?? [] });
     const status = [
-      ...(await host.load([corePlugin, gameTrailerPack, ...(opts.plugins ?? [])])),
+      ...(await host.load([
+        corePlugin,
+        gameTrailerPack,
+        effectcraftPlugin({
+          cli: opts.effectcraft === undefined ? locateCli() : opts.effectcraft,
+          workRoot: join(home, 'cache', 'effectcraft-work'),
+          ...(opts.effectcraftTemplates ? { templatesDir: opts.effectcraftTemplates } : {}),
+        }),
+        ...(opts.plugins ?? []),
+      ])),
       ...(opts.loadUserPlugins === false
         ? []
         : await host.loadFromDirectory(join(home, 'plugins'))),

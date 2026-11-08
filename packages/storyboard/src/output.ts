@@ -31,6 +31,13 @@ export interface InstalledPicks {
   transitions: readonly string[];
   effects: readonly string[];
   sounds: readonly string[];
+  /**
+   * Motion-graphics templates a card may use instead of its built-in one (EffectCraft, plan M10),
+   * each with the card kinds it can draw. Absent or empty: no `template` field at all.
+   */
+  graphics?: readonly { id: string; cardKinds: readonly string[] }[];
+  /** True when a custom effect can be written from a slot's `effectBrief` (EffectCraft is there). */
+  effectBriefs?: boolean;
 }
 
 /** The built-in transitions, effects and generated sounds. */
@@ -79,6 +86,20 @@ function picksShape(installed: InstalledPicks) {
               why: Why,
             })
             .optional(),
+        }
+      : {}),
+    ...(installed.graphics?.length
+      ? {
+          /** Cards only: a motion-graphics template instead of the card's built-in one. */
+          template: z
+            .strictObject({ id: oneOf(installed.graphics.map((g) => g.id)), why: Why })
+            .optional(),
+        }
+      : {}),
+    ...(installed.effectBriefs
+      ? {
+          /** A custom effect to write for this slot later, described in a sentence or two. */
+          effectBrief: z.strictObject({ text: z.string().min(1).max(300), why: Why }).optional(),
         }
       : {}),
   };
@@ -141,6 +162,8 @@ export interface GenPicks {
   };
   effect?: { id: string; params?: Record<string, number | string | boolean>; why: string };
   sound?: { kind: string; position?: 'before' | 'start' | 'end'; why: string };
+  template?: { id: string; why: string };
+  effectBrief?: { text: string; why: string };
 }
 export type GenSlot = Omit<z.infer<typeof GenSlot>, keyof GenPicks> & GenPicks;
 export type GenSection = Omit<z.infer<typeof GenSection>, 'slots'> & { slots: GenSlot[] };

@@ -115,7 +115,19 @@ export interface Preview {
   svg: string;
   warnings: string[];
   seconds: number;
+  /** The built-in template drawn in place of an EffectCraft one (the final render uses EffectCraft). */
+  standIn?: string;
 }
+
+/**
+ * What the browser draws for the shipped EffectCraft templates: their built-in fallback, which has
+ * the same words and params. Mirrors `EC_TEMPLATES` (a test compares them).
+ */
+export const STAND_INS: Readonly<Record<string, string>> = {
+  'effectcraft/title-reveal': 'core/title-card',
+  'effectcraft/logo-sting': 'core/logo-card',
+  'effectcraft/kinetic-text': 'core/tagline-card',
+};
 
 const registry = builtinRegistry();
 
@@ -134,7 +146,8 @@ export function previewFrame(o: {
   /** `<hash>.<ext>` names of the brand's logo and fonts that the browser has loaded. */
   present?: ReadonlySet<string>;
 }): Preview | { error: string } {
-  const t = registry.get(o.templateId);
+  const standIn = STAND_INS[o.templateId];
+  const t = registry.get(standIn ?? o.templateId);
   if (!t)
     return {
       error: `The preview does not know the template ${o.templateId}; it is drawn in the final render.`,
@@ -160,6 +173,7 @@ export function previewFrame(o: {
       svg: renderSvg(scene, at),
       warnings: [...new Set(checkScene(scene, safe, o.seconds))],
       seconds: o.seconds,
+      ...(standIn ? { standIn } : {}),
     };
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };

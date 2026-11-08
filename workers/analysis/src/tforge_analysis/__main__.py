@@ -14,6 +14,11 @@ def main() -> None:
 
         return analyze_footage(params, progress)
 
+    def reference(params, progress):
+        from .reference import analyze_reference
+
+        return analyze_reference(params, progress)
+
     def frames(params, progress):
         from .vision import embed_frames
 
@@ -27,6 +32,7 @@ def main() -> None:
     # Heavy libraries load on first use, so `ping` answers at once.
     server.register("analyze.music", music, progress=True)
     server.register("analyze.footage", footage, progress=True)
+    server.register("analyze.reference", reference, progress=True)
     server.register("vision.embed_frames", frames, progress=True)
     server.register("vision.embed_texts", texts, progress=True)
     server.serve()

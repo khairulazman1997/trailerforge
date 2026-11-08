@@ -83,6 +83,20 @@ describe('renderVideo', { timeout: 120_000 }, () => {
     expect(planSegments(50, rate(30000, 1001), 1).map((s) => s.frames)).toEqual([30, 20]);
   });
 
+  it('records why a render may not be reproducible, also when it resumes', async () => {
+    const why = ['"it_title" (EffectCraft): drew different frames for the same input'];
+    const out = join(root, 'out', 'flagged.mp4');
+    const r = await renderVideo(
+      { ...spec(out), nonReproducible: why },
+      { workRoot: join(root, 'work-n') },
+    );
+    expect(r.manifest).toMatchObject({ reproducible: false, notReproducibleBecause: why });
+    expect(r.warnings).toContain(why[0]);
+    const again = await renderVideo(spec(out), { workRoot: join(root, 'work-n') });
+    expect(again.manifest.reproducible).toBe(true);
+    expect(again.manifest.notReproducibleBecause).toBeUndefined();
+  });
+
   it('resumes after a cancel with only the missing segments, to the same bytes', async () => {
     const clean = await renderVideo(spec(join(root, 'out', 'clean.mp4')), {
       workRoot: join(root, 'work-a'),

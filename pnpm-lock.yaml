@@ -119,6 +119,9 @@ importers:
       '@playwright/test':
         specifier: ^1.64.1
         version: 1.64.1
+      '@trailerforge/effectcraft':
+        specifier: workspace:*
+        version: link:../../packages/effectcraft
       '@trailerforge/engine':
         specifier: workspace:*
         version: link:../../packages/engine
@@ -225,6 +228,24 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/effectcraft:
+    dependencies:
+      '@trailerforge/graphics':
+        specifier: workspace:*
+        version: link:../graphics
+      '@trailerforge/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@trailerforge/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@trailerforge/schema':
+        specifier: workspace:*
+        version: link:../schema
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
   packages/effects:
     dependencies:
       '@trailerforge/schema':
@@ -251,6 +272,9 @@ importers:
       '@trailerforge/cut':
         specifier: workspace:*
         version: link:../cut
+      '@trailerforge/effectcraft':
+        specifier: workspace:*
+        version: link:../effectcraft
       '@trailerforge/effects':
         specifier: workspace:*
         version: link:../effects

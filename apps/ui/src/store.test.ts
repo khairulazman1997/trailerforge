@@ -251,6 +251,17 @@ class Fake {
     setupAnalysis: async () => ({ id: 't', kind: 'analysis-setup', status: 'running' }) as never,
     critiqueFacts: async () => ({ variantId: null, summary: ['x'], wire: {}, excluded: 0 }),
     applyCritiqueFix: async () => ({ rebuilt: false, warnings: [] }),
+    effectcraft: async () => ({ state: 'not-bundled', pinned: '0.9.2', templates: { available: [], problems: [] } }), // prettier-ignore
+    effectRequestPreview: async () => ({ wire: {}, stills: { possible: false }, excluded: 0 }),
+    effectProposals: async () => [],
+    effectItems: async () => [],
+    acceptEffect: async () => ({ itemId: 'it', project: 'media/x.ecproj', start: 0, duration: 1 }),
+    rejectEffect: async () => ({ removed: 'fx' }),
+    effectFrame: async () => new Blob(),
+    exportEffect: async () => ({ path: '/x', fileName: 'x.ecproj' }),
+    reimportEffect: async () => ({ project: 'media/x.ecproj', warnings: [] }),
+    referenceStills: async () => ({ stills: [] }),
+    referenceStill: async () => new Blob(),
     secrets: async () =>
       ({
         anthropicApiKey: { set: this.keySet, source: this.keySet ? 'stored' : null },

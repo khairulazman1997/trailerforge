@@ -66,6 +66,19 @@ import {
   healthOp,
   setupSidecarOp,
   critiqueOp,
+  authorEffectOp,
+  effectItemsOp,
+  exportEffectOp,
+  reimportEffectOp,
+  effectRequestPreviewOp,
+  effectBriefsOp,
+  effectProposalsOp,
+  effectcraftStatusOp,
+  acceptEffectOp,
+  rejectEffectOp,
+  proposalFrameOp,
+  referenceStillsOp,
+  referenceStillFileOp,
   qualityOp,
   renderDraftOp,
   reviewViewOp,
@@ -181,6 +194,7 @@ export function describeError(err: unknown): HttpError {
       'takes-attached': 409,
       'gate-blocked': 422,
       'missing-tool': 422,
+      'effect-refused': 422,
       failed: 502,
     }[err.code];
     return new HttpError(status, err.code, err.message, err.details);
@@ -296,6 +310,28 @@ const TaskRequest = z.discriminatedUnion('kind', [
     options: z.strictObject({ overwriteChosen: z.boolean().optional() }).default({}),
   }),
   z.strictObject({ kind: z.literal('critique'), options: VersionOptions }),
+  z.strictObject({
+    kind: z.literal('effectcraft-author'),
+    options: z.strictObject({
+      words: z.string().max(2000).default(''),
+      seconds: z.number().min(0.5).max(20),
+      landAt: z.number().min(0).optional(),
+      example: z.strictObject({ file: z.string().min(1) }).optional(),
+      reference: z
+        .strictObject({
+          file: z.string().min(1),
+          stills: z
+            .strictObject({ consent: z.literal(true), sha256: z.array(z.string()).max(16) })
+            .optional(),
+        })
+        .optional(),
+      slotId: z.string().optional(),
+    }),
+  }),
+  z.strictObject({
+    kind: z.literal('effectcraft-briefs'),
+    options: z.strictObject({}).default({}),
+  }),
   z.strictObject({ kind: z.literal('render-draft'), options: VersionOptions }),
   z.strictObject({
     kind: z.literal('export'),
@@ -413,6 +449,17 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
   });
 
   const stores = () => [...engine.projects.values()];
+  const pngResponse = async (res: ServerResponse, file: string) => {
+    const size = (await stat(file)).size;
+    res.writeHead(200, {
+      ...SECURITY_HEADERS,
+      'Content-Type': 'image/png',
+      'Content-Length': size,
+      'Cache-Control': 'no-store',
+    });
+    await pipeline(createReadStream(file), res);
+    return STREAMING;
+  };
   const storeById = (id: string): ProjectStore => {
     const store = stores().find((s) => s.state.id === id);
     if (!store) throw new HttpError(404, 'not-open', `project "${id}" is not open`);
@@ -669,6 +716,108 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
       },
     ],
     ['GET', /^\/v1\/health$/, async () => healthOp(engine)],
+    ['GET', /^\/v1\/effectcraft$/, async () => effectcraftStatusOp(engine)],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/effects$/,
+      async ({ params }) => effectItemsOp(storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/effects\/(?<item>[^/]+)\/export$/,
+      async ({ params }) => exportEffectOp(storeById(params.id!), { itemId: params.item! }),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/effects\/(?<item>[^/]+)\/reimport$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        notBusy(store);
+        const o = z.strictObject({ file: z.string().min(1) }).parse(await body());
+        const r = await reimportEffectOp(engine, store, { itemId: params.item!, file: o.file });
+        await store.save();
+        return r;
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/request-preview$/,
+      async ({ params, body }) => {
+        const o = z
+          .strictObject({
+            words: z.string().max(2000).default(''),
+            seconds: z.number().min(0.5).max(20),
+            landAt: z.number().min(0).optional(),
+          })
+          .parse(await body());
+        return effectRequestPreviewOp(engine, storeById(params.id!), {
+          words: o.words,
+          seconds: o.seconds,
+          ...(o.landAt !== undefined ? { landAt: o.landAt } : {}),
+        });
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/proposals$/,
+      async ({ params }) => effectProposalsOp(storeById(params.id!)),
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/proposals\/(?<pid>[^/]+)\/accept$/,
+      async ({ params, body }) => {
+        const store = storeById(params.id!);
+        notBusy(store);
+        const o = z
+          .strictObject({ at: z.number().min(0).optional() })
+          .default({})
+          .parse(await body());
+        const r = await acceptEffectOp(engine, store, {
+          proposalId: params.pid!,
+          ...(o.at !== undefined ? { at: o.at } : {}),
+        });
+        await store.save();
+        return r;
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/proposals\/(?<pid>[^/]+)\/reject$/,
+      async ({ params }) => rejectEffectOp(storeById(params.id!), { proposalId: params.pid! }),
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/proposals\/(?<pid>[^/]+)\/frames\/(?<n>\d+)$/,
+      async ({ params, res }) => {
+        const file = await proposalFrameOp(storeById(params.id!), params.pid!, Number(params.n));
+        if (!file) throw new HttpError(404, 'not-found', 'no such preview frame');
+        return pngResponse(res, file);
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/stills$/,
+      async ({ params, body }) => {
+        const o = z.strictObject({ file: z.string().min(1) }).parse(await body());
+        const r = await referenceStillsOp(engine, storeById(params.id!), o);
+        // The app shows them through the route below; paths stay on this computer.
+        return { stills: r.stills.map(({ index, at, sha256 }) => ({ index, at, sha256 })) };
+      },
+    ],
+    [
+      'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/stills\/(?<n>\d+)$/,
+      async ({ params, query, res }) => {
+        const file = await referenceStillFileOp(
+          engine,
+          storeById(params.id!),
+          query.get('file') ?? '',
+          Number(params.n),
+        );
+        if (!file) throw new HttpError(404, 'not-found', 'no such still');
+        return pngResponse(res, file);
+      },
+    ],
     [
       'POST',
       /^\/v1\/demo$/,
@@ -1273,6 +1422,30 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             out = await rankTakesOp(engine, store, { ...t.options, signal });
           else if (t.kind === 'critique')
             out = await critiqueOp(engine, store, t.options.variantId, { signal });
+          else if (t.kind === 'effectcraft-author') {
+            const o = t.options;
+            out = await authorEffectOp(
+              engine,
+              store,
+              {
+                words: o.words,
+                seconds: o.seconds,
+                ...(o.landAt !== undefined ? { landAt: o.landAt } : {}),
+                ...(o.example ? { example: o.example } : {}),
+                ...(o.reference
+                  ? {
+                      reference: {
+                        file: o.reference.file,
+                        ...(o.reference.stills ? { stills: o.reference.stills } : {}),
+                      },
+                    }
+                  : {}),
+                ...(o.slotId ? { slotId: o.slotId } : {}),
+              },
+              { signal },
+            );
+          } else if (t.kind === 'effectcraft-briefs')
+            out = await effectBriefsOp(engine, store, { signal });
           else {
             out = await scanKnowledgeOp(engine, store, {
               ...t.options,

@@ -21,6 +21,8 @@ import {
   handoffCommand,
   presetsCommand,
   critiqueCommand,
+  effectcraftCommand,
+  effectcraftStatusCommand,
   demoCommand,
   doctorCommand,
   qcCommand,
@@ -94,6 +96,15 @@ Usage:
                                                           Render with the preset, check the file, deliver to exports/render (--preset saves the choice)
   tforge handoff <dir> [--version <id|master>] [--format fcpxml,otio,edl]
                                                           Files for an editor: FCPXML, OpenTimelineIO, EDL, with alpha clips for cards and captions
+  tforge effectcraft status                               Is the bundled EffectCraft usable (version, templates)? Exit 1 when it is not ready
+  tforge effectcraft author <dir> --text <words> --seconds <s> [--land-at <s>] [--accept --at <s>]
+                                                          Ask the AI for a custom EffectCraft effect (text only); prints the proposal and its preview frames
+                 [--example <lottie.json|.ecproj>] [--reference <clip> [--send-stills]]
+                                                          --example starts from an animation; --reference sends only measurements of the clip,
+                                                          plus the stills from \`effectcraft stills\` when you add --send-stills
+  tforge effectcraft stills <dir> --reference <clip>      Make the 8 stills --send-stills would send, so you can look at them first
+  tforge effectcraft accept|reject <dir> <proposalId> [--at <s>]
+                                                          Put a proposed effect on the Effects track at --at seconds (one undo step), or discard it
   tforge review list|comment|resolve|reopen|approve|revoke <dir> [<commentId>] [--version <id|master>] [--at <s>] [--text <t>] [--note <t>]
                                                           Comments on a version and approval (goes stale when the version changes)
   tforge mcp [dir] [--repo-root <path>]...                Serve the project to Claude Code over MCP (stdio)
@@ -185,6 +196,11 @@ export async function main(
         override: { type: 'string', multiple: true },
         at: { type: 'string' },
         text: { type: 'string' },
+        seconds: { type: 'string' },
+        'land-at': { type: 'string' },
+        example: { type: 'string' },
+        reference: { type: 'string' },
+        'send-stills': { type: 'boolean', default: false },
         todo: { type: 'boolean', default: false },
         date: { type: 'string' },
         campaign: { type: 'string' },
@@ -212,6 +228,7 @@ export async function main(
     'sfx',
     'review',
     'types',
+    'effectcraft',
   ].includes(positionals[0] ?? '');
   const cmd = twoWord ? `${positionals[0]} ${positionals[1] ?? ''}`.trim() : positionals[0];
   const arg = positionals[twoWord ? 2 : 1];
@@ -320,6 +337,11 @@ export async function main(
       start: o.start,
       end: o.end,
       type: o.type,
+      seconds: o.seconds,
+      landAt: o['land-at'],
+      example: o.example,
+      reference: o.reference,
+      sendStills: o['send-stills'],
     },
   };
   try {
@@ -440,6 +462,15 @@ export async function main(
         return need(arg, '<dir>') ? await exportCommand(ctx, arg) : 2;
       case 'handoff':
         return need(arg, '<dir>') ? await handoffCommand(ctx, arg) : 2;
+      case 'effectcraft status':
+        return await effectcraftStatusCommand(ctx);
+      case 'effectcraft author':
+      case 'effectcraft accept':
+      case 'effectcraft reject':
+      case 'effectcraft stills':
+        return need(arg, '<dir>')
+          ? await effectcraftCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
+          : 2;
       case 'review list':
       case 'review comment':
       case 'review resolve':

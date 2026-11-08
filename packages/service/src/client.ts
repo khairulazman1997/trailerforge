@@ -5,6 +5,9 @@ import type { Project } from '@trailerforge/schema';
 export type {
   BriefField,
   DemoOutcome,
+  EffectCraftStatus,
+  EffectItemView,
+  EffectRequestPreview,
   HealthCheck,
   HealthReport,
   CritiqueFactsView,
@@ -43,6 +46,7 @@ import type {
   WatchedFoldersView,
 } from '@trailerforge/engine';
 import type { BriefForm, BriefSuggestion } from '@trailerforge/engine';
+import type { EffectCraftStatus, EffectItemView, EffectRequestPreview } from '@trailerforge/engine';
 import type { CaptureStatus, CaptureView, ExportOutcome, RenderedPack } from '@trailerforge/engine';
 import type {
   analyzeOp,
@@ -141,6 +145,20 @@ export type TaskRequest =
   /** Rewrite every section with open storyboard comments (or just `sectionIds`) from them. */
   | { kind: 'refine-storyboard'; options?: { sectionIds?: string[]; keepEdited?: boolean } }
   | { kind: 'rank-takes'; options?: { overwriteChosen?: boolean } }
+  /** Write a custom effect (a proposal with a preview; nothing changes until accepted). */
+  | {
+      kind: 'effectcraft-author';
+      options: {
+        words?: string;
+        seconds: number;
+        landAt?: number;
+        example?: { file: string };
+        reference?: { file: string; stills?: { consent: true; sha256: string[] } };
+        slotId?: string;
+      };
+    }
+  /** Write a proposal for every effect brief the storyboard has that has none yet. */
+  | { kind: 'effectcraft-briefs'; options?: Record<string, never> }
   /** Ask the AI to critique a version (`variantId` null = the master cut); notes land on the Review tab. */
   | { kind: 'critique'; options: { variantId: string | null } }
   /** Render a 720p review draft of a version (`variantId` null = the master cut). */
@@ -324,6 +342,87 @@ export class ServiceClient {
   /** Is this computer ready? FFmpeg, the analysis tools, disk space, AI and the vision model. */
   health() {
     return this.request<HealthReport>('GET', '/v1/health');
+  }
+  /** Is the bundled EffectCraft usable, and which of its templates are there? */
+  effectcraft() {
+    return this.request<EffectCraftStatus>('GET', '/v1/effectcraft');
+  }
+  /** What "Describe an effect" would send to the AI, before anything is sent. */
+  effectRequestPreview(id: string, input: { words: string; seconds: number; landAt?: number }) {
+    return this.request<EffectRequestPreview>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/request-preview`,
+      input,
+    );
+  }
+  /** Custom effects waiting for a yes or no. */
+  effectProposals(id: string) {
+    return this.request<EffectProposalView[]>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/proposals`,
+    );
+  }
+  /** Put a proposed effect on the timeline at `at` seconds (default: where its shot starts). */
+  acceptEffect(id: string, proposalId: string, at?: number) {
+    return this.request<{ itemId: string; project: string; start: number; duration: number }>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/proposals/${encodeURIComponent(proposalId)}/accept`,
+      at !== undefined ? { at } : {},
+    );
+  }
+  rejectEffect(id: string, proposalId: string) {
+    return this.request<{ removed: string }>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/proposals/${encodeURIComponent(proposalId)}/reject`,
+      {},
+    );
+  }
+  /** One preview frame of a proposed effect, as a PNG Blob. */
+  effectFrame(id: string, proposalId: string, frame: number): Promise<Blob> {
+    return this.blobAt(
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/proposals/${encodeURIComponent(proposalId)}/frames/${frame}`,
+    );
+  }
+  private async blobAt(path: string): Promise<Blob> {
+    const res = await this.fetchFn(`${this.opts.baseUrl}${path}`, {
+      headers: { Authorization: `Bearer ${this.opts.token}` },
+    });
+    if (!res.ok) throw new ServiceError(res.status, 'http', res.statusText);
+    return res.blob();
+  }
+  /** The custom effects on the cut. */
+  effectItems(id: string) {
+    return this.request<EffectItemView[]>('GET', `/v1/projects/${encodeURIComponent(id)}/effectcraft/effects`); // prettier-ignore
+  }
+  /** Copy an effect's project into the project's exports folder, to polish in the EffectCraft app. */
+  exportEffect(id: string, itemId: string) {
+    return this.request<{ path: string; fileName: string }>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/effects/${encodeURIComponent(itemId)}/export`,
+      {},
+    );
+  }
+  /** Use an edited copy from now on (one undo step). */
+  reimportEffect(id: string, itemId: string, file: string) {
+    return this.request<{ project: string; warnings: string[] }>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/effects/${encodeURIComponent(itemId)}/reimport`,
+      { file },
+    );
+  }
+  /** Make the stills of a reference clip that would be sent, for the user to look at first. */
+  referenceStills(id: string, file: string) {
+    return this.request<{ stills: { index: number; at: number; sha256: string }[] }>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/stills`,
+      { file },
+    );
+  }
+  /** One still of a reference clip (what would be sent), as a PNG Blob. */
+  referenceStill(id: string, file: string, index: number): Promise<Blob> {
+    return this.blobAt(
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/stills/${index}?file=${encodeURIComponent(file)}`,
+    );
   }
   /** Create the analysis environment (a task; uv's lines arrive as `setup.progress` events). */
   setupAnalysis() {
@@ -788,4 +887,22 @@ export class ServiceClient {
       reader.releaseLock();
     }
   }
+}
+
+/** A custom effect waiting for the user (the engine's stored proposal, without any paths). */
+export interface EffectProposalView {
+  id: string;
+  timelineId: string;
+  slotId?: string;
+  name: string;
+  summary: string;
+  seconds: number;
+  landAt?: number;
+  frames?: number;
+  still?: number;
+  createdAt: string;
+  provider?: string;
+  model?: string;
+  /** The request as it went to the AI; none for effects written by Claude Code. */
+  sent: Record<string, unknown> | null;
 }

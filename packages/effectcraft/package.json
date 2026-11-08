@@ -1,0 +1,31 @@
+{
+  "name": "@trailerforge/effectcraft",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build:templates": "node scripts/build-templates.mjs"
+  },
+  "dependencies": {
+    "@trailerforge/graphics": "workspace:*",
+    "@trailerforge/llm": "workspace:*",
+    "@trailerforge/plugin-api": "workspace:*",
+    "@trailerforge/schema": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

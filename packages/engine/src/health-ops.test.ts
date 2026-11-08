@@ -69,7 +69,7 @@ describe.skipIf(!posix)('health and the render preflight', () => {
     expect(r.checks.find((c) => c.id === 'disk')!.status).toMatch(/ok|warn/);
     expect(r.checks.find((c) => c.id === 'ai')!.status).toBe('info'); // mock only
     expect(r.checks.find((c) => c.id === 'hardware')!.detail).toMatch(/None found/);
-    expect(r.checks.map((c) => c.id)).toEqual(['ffmpeg', 'analysis', 'disk', 'ai', 'vision', 'ffmpeg-text', 'hardware', 'system']); // prettier-ignore
+    expect(r.checks.map((c) => c.id)).toEqual(['ffmpeg', 'analysis', 'disk', 'ai', 'vision', 'effectcraft', 'ffmpeg-text', 'hardware', 'system']); // prettier-ignore
     expect(r.sidecarSetup.approxMegabytes).toBeGreaterThan(100);
   });
 

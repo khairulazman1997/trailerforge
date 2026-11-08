@@ -117,11 +117,20 @@ export class LlmClient {
 
   async generate<T>(
     task: string,
-    req: { system: string; prompt: string; schema: z.ZodType<T> },
+    req: {
+      system: string;
+      prompt: string;
+      schema: z.ZodType<T>;
+      images?: { mediaType: 'image/png'; data: string }[];
+    },
     signal: AbortSignal = new AbortController().signal,
   ): Promise<LlmResult<T> & { provider: string; fellBack: boolean }> {
     const route = await resolveRoute(this.routes, task, (id) => this.isAvailable(id));
     const provider = this.opts.providers(route.provider)!;
+    if (req.images?.length && !provider.vision)
+      throw new Error(
+        `${provider.name} cannot look at images; choose an AI that can (for example Claude through the Anthropic API) for "${task}"`,
+      );
     if (
       provider.sendsDataOffDevice &&
       this.opts.approveSend &&

@@ -196,17 +196,35 @@ export interface MotionRenderJob {
   duration: Flicks;
   resolution: z.infer<typeof Resolution>;
   frameRate: z.infer<typeof Rate>;
-  /** Output file; renderers write video with alpha (e.g. ProRes 4444). */
-  outPath: string;
+  /**
+   * Folder for the frames: transparent RGBA PNGs `frame_%06d.png` from 0, plus a `SEQUENCE_DONE` marker
+   * written last (the same layout as the built-in renderer's sequences). Renderers never write
+   * video: the compiler encodes (plan decision M10-2).
+   */
+  outDir: string;
 }
 
-/** Renders graphics/motion segments. Built-in canvas renderer by default; EffectCraft optional. */
+export interface MotionRenderResult {
+  dir: string;
+  /** `frame_%06d.png`. */
+  pattern: string;
+  frames: number;
+  warnings: string[];
+}
+
+/** Renders graphics/motion segments. Built-in SVG renderer by default; EffectCraft optional. */
 export interface MotionRenderer {
   id: string;
   name: string;
-  available(): Promise<{ ok: true } | { ok: false; reason: string }>;
+  available(): Promise<{ ok: true; version?: string } | { ok: false; reason: string }>;
   supports(templateId: string): boolean;
-  render(job: MotionRenderJob, signal: AbortSignal): Promise<{ outPath: string }>;
+  /**
+   * What the frames depend on, as a hash: the renderer and its version plus the job's inputs
+   * by content (never by path). Equal fingerprints draw equal frames; it keys the frame cache and
+   * goes into the render plan hash.
+   */
+  fingerprint(job: Omit<MotionRenderJob, 'outDir'>): Promise<string>;
+  render(job: MotionRenderJob, signal: AbortSignal): Promise<MotionRenderResult>;
 }
 
 export interface LlmRequest<T> {
@@ -217,6 +235,11 @@ export interface LlmRequest<T> {
   schema: z.ZodType<T>;
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  /**
+   * Still images sent with the prompt (PNG, base64). Only for the rare request the user agreed
+   * to, frame by frame (plan M10 decision 10); only providers with `vision` take them.
+   */
+  images?: { mediaType: 'image/png'; data: string }[];
 }
 
 export interface LlmResult<T> {
@@ -235,6 +258,8 @@ export interface LlmProvider {
   kind: 'api' | 'local-cli' | 'interactive' | 'mock';
   /** Whether requests leave the machine (shown in the disclosure UI). */
   sendsDataOffDevice: boolean;
+  /** Whether it can read `images` (default: no; a request with images is then refused). */
+  vision?: boolean;
   available(): Promise<{ ok: true } | { ok: false; reason: string }>;
   generate<T>(request: LlmRequest<T>, signal: AbortSignal): Promise<LlmResult<T>>;
 }

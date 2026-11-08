@@ -24,6 +24,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.10.2",
     "@playwright/test": "^1.64.1",
+    "@trailerforge/effectcraft": "workspace:*",
     "@trailerforge/engine": "workspace:*",
     "@trailerforge/llm": "workspace:*",
     "@trailerforge/plugin-api": "workspace:*",

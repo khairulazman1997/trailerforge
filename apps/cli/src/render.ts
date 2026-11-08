@@ -15,6 +15,12 @@ import {
   type Engine,
   type HandoffFormat,
   type Progress,
+  acceptEffectOp,
+  effectcraftStatusOp,
+  authorEffectOp,
+  rejectEffectOp,
+  referenceStillsOp,
+  shownReferenceStills,
 } from '@trailerforge/engine';
 import { fail, type CmdCtx } from './m2.js';
 
@@ -322,4 +328,93 @@ export async function reviewCommand(
       await store.save();
     }
   });
+}
+
+/** `tforge effectcraft author|accept|reject`: custom effects by words (plan M10). */
+export async function effectcraftCommand(
+  ctx: CmdCtx,
+  sub: string,
+  dir: string,
+  proposalId: string | undefined,
+): Promise<number> {
+  const num = (v: string | undefined, what: string): number | undefined => {
+    if (v === undefined) return undefined;
+    const n = Number(v);
+    if (!Number.isFinite(n)) throw new OpError('usage', `${what} must be a number of seconds`);
+    return n;
+  };
+  return withProject(ctx, dir, async (engine, store) => {
+    if (sub === 'stills') {
+      if (!ctx.flags.reference) throw new OpError('usage', 'name the clip with --reference');
+      const r = await referenceStillsOp(engine, store, { file: ctx.flags.reference });
+      ctx.emit(
+        [
+          `These ${r.stills.length} stills are what --send-stills would send (nothing has been sent):`,
+          ...r.stills.map((s) => `  ${s.at.toFixed(2)} s  ${s.path}`),
+        ].join('\n'),
+        r,
+      );
+      return 0;
+    }
+    if (sub === 'author') {
+      if (!ctx.flags.text)
+        throw new OpError('usage', 'say what the effect should look like with --text');
+      const seconds = num(ctx.flags.seconds, '--seconds') ?? 3;
+      const landAt = num(ctx.flags.landAt, '--land-at');
+      let stills: { consent: true; sha256: string[] } | undefined;
+      if (ctx.flags.sendStills) {
+        if (!ctx.flags.reference) throw new OpError('usage', '--send-stills needs --reference');
+        // Exactly the stills `tforge effectcraft stills` made for you to look at.
+        const shown = await shownReferenceStills(engine, store, ctx.flags.reference);
+        stills = { consent: true, sha256: shown.map((s) => s.sha256) };
+      }
+      const p = await authorEffectOp(engine, store, {
+        words: ctx.flags.text,
+        seconds,
+        ...(landAt !== undefined ? { landAt } : {}),
+        ...(ctx.flags.example ? { example: { file: ctx.flags.example } } : {}),
+        ...(ctx.flags.reference
+          ? { reference: { file: ctx.flags.reference, ...(stills ? { stills } : {}) } }
+          : {}),
+      });
+      const lines = [
+        `Proposal ${p.id}: "${p.name}" — ${p.summary}`,
+        `  ${p.seconds} s, preview frames in ${p.preview.dir} (${p.preview.frames} frames; still = frame ${p.preview.still})`,
+        ...(p.repaired.length ? [`  repaired once: ${p.repaired.join('; ')}`] : []),
+        ...p.warnings.map((w) => `  warning: ${w}`),
+      ];
+      if (ctx.flags.accept) {
+        const r = await acceptEffectOp(engine, store, { proposalId: p.id, at: num(ctx.flags.at, '--at') ?? 0 }); // prettier-ignore
+        lines.push(`Accepted: ${r.itemId} on the Effects track (one undo step)`);
+        ctx.emit(lines.join('\n'), { proposal: p, accepted: r });
+      } else {
+        lines.push(`Accept with: tforge effectcraft accept ${dir} ${p.id} --at <seconds>`);
+        ctx.emit(lines.join('\n'), p);
+      }
+      return 0;
+    }
+    if (!proposalId) throw new OpError('usage', 'missing <proposalId>');
+    if (sub === 'accept') {
+      const r = await acceptEffectOp(engine, store, { proposalId, at: num(ctx.flags.at, '--at') ?? 0 }); // prettier-ignore
+      ctx.emit(`Accepted: ${r.itemId} on the Effects track (one undo step)`, r);
+      return 0;
+    }
+    const r = await rejectEffectOp(store, { proposalId });
+    ctx.emit(`Discarded ${r.removed}`, r);
+    return 0;
+  });
+}
+
+/** `tforge effectcraft status`: the bundled EffectCraft and its templates. */
+export async function effectcraftStatusCommand(ctx: CmdCtx): Promise<number> {
+  const st = await effectcraftStatusOp(ctx.engine);
+  const lines = [
+    st.state === 'ready'
+      ? `EffectCraft ${st.version}: ready (pinned ${st.pinned})`
+      : `EffectCraft: ${st.state}${st.reason ? ` — ${st.reason}` : ''} (pinned ${st.pinned})`,
+    `Templates: ${st.templates.available.length ? st.templates.available.join(', ') : 'none available'}`,
+    ...st.templates.problems.map((p) => `  ${p}`),
+  ];
+  ctx.emit(lines.join('\n'), st);
+  return st.state === 'ready' ? 0 : 1;
 }
