@@ -100,6 +100,15 @@ export async function startTestService(
           commands: [{ command: 'layer.newText', params: { name: 'T', text: 'EMBER' } }],
         };
       },
+      'effectcraft.suggest': (req: LlmRequest<unknown>) => {
+        prompts.push(req.prompt);
+        return {
+          ideas: [
+            { about: 'shot-1', words: 'Sparks fly on the parry', seconds: 1.5, landAt: 0.5, why: 'Sells the hit.' }, // prettier-ignore
+            { about: 'overall', words: 'A slow vignette pulse', seconds: 2, why: 'Sets the mood.' },
+          ],
+        };
+      },
       'critique.run': (req: LlmRequest<unknown>) => {
         prompts.push(req.prompt);
         return {

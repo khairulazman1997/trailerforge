@@ -72,6 +72,8 @@ import {
   reimportEffectOp,
   effectRequestPreviewOp,
   effectBriefsOp,
+  effectSuggestFactsOp,
+  suggestEffectsOp,
   effectProposalsOp,
   effectcraftStatusOp,
   acceptEffectOp,
@@ -330,6 +332,10 @@ const TaskRequest = z.discriminatedUnion('kind', [
   }),
   z.strictObject({
     kind: z.literal('effectcraft-briefs'),
+    options: z.strictObject({}).default({}),
+  }),
+  z.strictObject({
+    kind: z.literal('effectcraft-suggest'),
     options: z.strictObject({}).default({}),
   }),
   z.strictObject({ kind: z.literal('render-draft'), options: VersionOptions }),
@@ -759,6 +765,11 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
     ],
     [
       'GET',
+      /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/suggest\/facts$/,
+      async ({ params }) => effectSuggestFactsOp(engine, storeById(params.id!)),
+    ],
+    [
+      'GET',
       /^\/v1\/projects\/(?<id>[^/]+)\/effectcraft\/proposals$/,
       async ({ params }) => effectProposalsOp(storeById(params.id!)),
     ],
@@ -886,13 +897,14 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             'brief.suggest',
             'capture.tips',
             'critique.run',
+            'effectcraft.suggest',
           ])
           .safeParse(query.get('task'));
         if (!task.success)
           throw new HttpError(
             400,
             'bad-request',
-            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips or critique.run',
+            'task must be storyboard.generate, storyboard.regenerate-section, brief.suggest, capture.tips, critique.run or effectcraft.suggest',
           );
         return llmPreviewOp(engine, storeById(params.id!), task.data);
       },
@@ -1446,6 +1458,8 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
             );
           } else if (t.kind === 'effectcraft-briefs')
             out = await effectBriefsOp(engine, store, { signal });
+          else if (t.kind === 'effectcraft-suggest')
+            out = await suggestEffectsOp(engine, store, { signal });
           else {
             out = await scanKnowledgeOp(engine, store, {
               ...t.options,

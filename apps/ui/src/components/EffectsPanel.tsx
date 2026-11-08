@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   EffectCraftStatus,
+  EffectIdea,
   EffectItemView,
   EffectProposalView,
+  EffectSuggestions,
 } from '@trailerforge/service/client';
 import { useAppState, useStore } from '../app-context.js';
 import { desktop } from '../desktop.js';
 import { EC_STATE_LABEL, parseSeconds, proposalFrame } from '../effectcraft-view.js';
 import { Link } from '../router.js';
 import { BrowseButton } from './BrowseButton.js';
-import { EffectDialog } from './EffectDialog.js';
+import { EffectDialog, type EffectDraft } from './EffectDialog.js';
+import { SuggestEffectDialog } from './SuggestEffectDialog.js';
 import { useBlobUrl } from './useBlobUrl.js';
 
 /**
@@ -25,7 +28,13 @@ export function EffectsPanel({ id }: { id: string }) {
   const [status, setStatus] = useState<EffectCraftStatus | null>(null);
   const [proposals, setProposals] = useState<EffectProposalView[]>([]);
   const [items, setItems] = useState<EffectItemView[]>([]);
-  const [open, setOpen] = useState(false);
+  // The dialog is open with this draft (empty for "Describe an effect…", an idea when picked).
+  const [draft, setDraft] = useState<EffectDraft | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestTask, setSuggestTask] = useState<string | null>(null);
+  const suggestion = suggestTask ? tasks[suggestTask] : undefined;
+  const ideas =
+    suggestion?.status === 'succeeded' ? (suggestion.result as EffectSuggestions).ideas : null;
 
   // Proposals are made by tasks; look again when one of them settles.
   const settled = Object.values(tasks).filter(
@@ -34,6 +43,7 @@ export function EffectsPanel({ id }: { id: string }) {
   const running = Object.values(tasks).some(
     (t) => t.projectId === id && t.kind.startsWith('effectcraft') && t.status === 'running',
   );
+  const thinking = suggestion?.status === 'running';
 
   // Looked at again after every change: `tick` is bumped by the buttons below.
   const [tick, setTick] = useState(0);
@@ -88,8 +98,11 @@ export function EffectsPanel({ id }: { id: string }) {
             </p>
           )}
           <div className="row">
-            <button type="button" onClick={() => setOpen(true)} disabled={running}>
+            <button type="button" onClick={() => setDraft({})} disabled={running}>
               Describe an effect…
+            </button>
+            <button type="button" onClick={() => setSuggesting(true)} disabled={running}>
+              Suggest an effect…
             </button>
             {unwritten > 0 && (
               <button
@@ -100,10 +113,35 @@ export function EffectsPanel({ id }: { id: string }) {
                 Write the {unwritten} effect{unwritten === 1 ? '' : 's'} the storyboard asks for
               </button>
             )}
-            {running && <span role="status">Writing an effect…</span>}
+            {running && (
+              <span role="status">{thinking ? 'Thinking of effects…' : 'Writing an effect…'}</span>
+            )}
           </div>
           {/* Mounted only while open: every opening starts clean, so agreeing to send pictures never carries over. */}
-          {open && <EffectDialog id={id} open onClose={() => setOpen(false)} />}
+          {draft && (
+            <EffectDialog
+              id={id}
+              open
+              initial={draft}
+              {...(draft.slotId ? { slotId: draft.slotId } : {})}
+              onClose={() => setDraft(null)}
+            />
+          )}
+          {suggesting && (
+            <SuggestEffectDialog
+              id={id}
+              onStarted={setSuggestTask}
+              onClose={() => setSuggesting(false)}
+            />
+          )}
+          {ideas && (
+            <Ideas
+              ideas={ideas}
+              disabled={running}
+              onPick={(i) => setDraft(ideaDraft(i))}
+              onDismiss={() => setSuggestTask(null)}
+            />
+          )}
 
           {proposals.length > 0 && (
             <ul className="proposals" aria-label="Effects waiting for your decision">
@@ -129,6 +167,53 @@ export function EffectsPanel({ id }: { id: string }) {
           )}
         </>
       )}
+    </section>
+  );
+}
+
+const ideaDraft = (i: EffectIdea): EffectDraft => ({
+  words: i.words,
+  seconds: i.seconds,
+  ...(i.landAt !== undefined ? { landAt: i.landAt } : {}),
+  ...(i.slotId ? { slotId: i.slotId } : {}),
+});
+
+function Ideas({
+  ideas,
+  disabled,
+  onPick,
+  onDismiss,
+}: {
+  ideas: EffectIdea[];
+  disabled: boolean;
+  onPick: (i: EffectIdea) => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <section className="effect-ideas" aria-label="Suggested effects" data-testid="effect-ideas">
+      <h3>Suggested effects</h3>
+      {ideas.length === 0 ? (
+        <p className="hint">The AI had no effect to suggest for this cut.</p>
+      ) : (
+        <ol>
+          {ideas.map((i) => (
+            <li key={i.words}>
+              <p>{i.words}</p>
+              <p className="hint">
+                {i.seconds} s{i.landAt !== undefined ? `, the hit at ${i.landAt} s` : ''}
+                {i.slotLabel ? ` · on “${i.slotLabel}” (${i.atSeconds} s)` : ''}
+                {i.why ? ` · ${i.why}` : ''}
+              </p>
+              <button type="button" disabled={disabled} onClick={() => onPick(i)}>
+                Write this effect…
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+      <button type="button" onClick={onDismiss}>
+        Clear the suggestions
+      </button>
     </section>
   );
 }

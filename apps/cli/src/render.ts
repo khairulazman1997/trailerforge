@@ -20,6 +20,8 @@ import {
   authorEffectOp,
   rejectEffectOp,
   referenceStillsOp,
+  effectSuggestFactsOp,
+  suggestEffectsOp,
   shownReferenceStills,
 } from '@trailerforge/engine';
 import { fail, type CmdCtx } from './m2.js';
@@ -351,6 +353,27 @@ export async function effectcraftCommand(
         [
           `These ${r.stills.length} stills are what --send-stills would send (nothing has been sent):`,
           ...r.stills.map((s) => `  ${s.at.toFixed(2)} s  ${s.path}`),
+        ].join('\n'),
+        r,
+      );
+      return 0;
+    }
+    if (sub === 'suggest') {
+      if (ctx.flags.show) {
+        const f = await effectSuggestFactsOp(engine, store);
+        ctx.emit(['Suggest an effect would send:', ...f.summary.map((l) => `  - ${l}`)].join('\n'), f); // prettier-ignore
+        return 0;
+      }
+      const r = await suggestEffectsOp(engine, store);
+      ctx.emit(
+        [
+          `${r.ideas.length} effect idea${r.ideas.length === 1 ? '' : 's'} (nothing stored):`,
+          ...r.ideas.flatMap((i, n) => [
+            `  ${n + 1}. ${i.words}`,
+            `     ${i.seconds} s${i.landAt !== undefined ? `, hit at ${i.landAt} s` : ''}${i.slotLabel ? `, on "${i.slotLabel}" at ${i.atSeconds} s` : ''}${i.why ? ` — ${i.why}` : ''}`,
+            `     tforge effectcraft author ${dir} --text ${JSON.stringify(i.words)} --seconds ${i.seconds}${i.landAt !== undefined ? ` --land-at ${i.landAt}` : ''}`,
+          ]),
+          ...r.skipped.map((s) => `  skipped an idea about ${s.about} (${s.reason})`),
         ].join('\n'),
         r,
       );

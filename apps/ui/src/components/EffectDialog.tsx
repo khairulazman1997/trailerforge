@@ -9,6 +9,14 @@ import { useBlobUrl } from './useBlobUrl.js';
 
 type Still = { index: number; at: number; sha256: string };
 
+/** What the dialog opens with: empty, or an idea from "Suggest an effect". */
+export interface EffectDraft {
+  words?: string;
+  seconds?: number;
+  landAt?: number;
+  slotId?: string;
+}
+
 /**
  * "Describe an effect": the words, the length and the hit point, optionally an example animation
  * or a reference clip; the AI that would be asked and exactly what it would be sent, before
@@ -19,16 +27,19 @@ export function EffectDialog({
   open,
   onClose,
   slotId,
+  initial = {},
 }: {
   id: string;
   open: boolean;
   onClose: () => void;
   slotId?: string;
+  /** Read once: the dialog is mounted per opening. */
+  initial?: EffectDraft;
 }) {
   const store = useStore();
-  const [words, setWords] = useState('');
-  const [seconds, setSeconds] = useState('3');
-  const [landAt, setLandAt] = useState('');
+  const [words, setWords] = useState(initial.words ?? '');
+  const [seconds, setSeconds] = useState(String(initial.seconds ?? 3));
+  const [landAt, setLandAt] = useState(initial.landAt !== undefined ? String(initial.landAt) : '');
   const [example, setExample] = useState('');
   const [reference, setReference] = useState('');
   const [stills, setStills] = useState<Still[] | null>(null);

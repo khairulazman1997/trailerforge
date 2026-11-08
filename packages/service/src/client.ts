@@ -11,6 +11,9 @@ export type {
   HealthCheck,
   HealthReport,
   CritiqueFactsView,
+  EffectIdea,
+  EffectSuggestFactsView,
+  EffectSuggestions,
   CritiqueOutcome,
   BriefForm,
   BriefSuggestion,
@@ -32,6 +35,7 @@ export type {
 import type {
   ApplyFixOutcome,
   CritiqueFactsView,
+  EffectSuggestFactsView,
   HealthReport,
   LlmPreview,
   LocalModelsView,
@@ -159,6 +163,8 @@ export type TaskRequest =
     }
   /** Write a proposal for every effect brief the storyboard has that has none yet. */
   | { kind: 'effectcraft-briefs'; options?: Record<string, never> }
+  /** Ask the AI for up to three custom effect ideas; the result is `EffectSuggestions`, nothing is stored. */
+  | { kind: 'effectcraft-suggest'; options?: Record<string, never> }
   /** Ask the AI to critique a version (`variantId` null = the master cut); notes land on the Review tab. */
   | { kind: 'critique'; options: { variantId: string | null } }
   /** Render a 720p review draft of a version (`variantId` null = the master cut). */
@@ -453,7 +459,8 @@ export class ServiceClient {
       | 'storyboard.regenerate-section'
       | 'brief.suggest'
       | 'capture.tips'
-      | 'critique.run',
+      | 'critique.run'
+      | 'effectcraft.suggest',
   ) {
     return this.request<LlmPreview>(
       'GET',
@@ -696,6 +703,13 @@ export class ServiceClient {
       'POST',
       `/v1/projects/${encodeURIComponent(id)}/review/critique/${encodeURIComponent(commentId)}/apply`,
       {},
+    );
+  }
+  /** What "Suggest an effect" would send, in words and as data. Sends nothing. */
+  effectSuggestFacts(id: string) {
+    return this.request<EffectSuggestFactsView>(
+      'GET',
+      `/v1/projects/${encodeURIComponent(id)}/effectcraft/suggest/facts`,
     );
   }
   /** What a critique of this version would send, in words and as data. Sends nothing. */

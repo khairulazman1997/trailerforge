@@ -104,6 +104,7 @@ Usage:
                                                           plus the stills from \`effectcraft stills\` when you add --send-stills
   tforge effectcraft stills <dir> --reference <clip>      Make the 8 stills --send-stills would send, so you can look at them first
   tforge effectcraft accept|reject <dir> <proposalId> [--at <s>]
+  tforge effectcraft suggest <dir> [--show]               Up to 3 effect ideas from the AI (text only; --show: what would be sent)
                                                           Put a proposed effect on the Effects track at --at seconds (one undo step), or discard it
   tforge review list|comment|resolve|reopen|approve|revoke <dir> [<commentId>] [--version <id|master>] [--at <s>] [--text <t>] [--note <t>]
                                                           Comments on a version and approval (goes stale when the version changes)
@@ -468,6 +469,7 @@ export async function main(
       case 'effectcraft accept':
       case 'effectcraft reject':
       case 'effectcraft stills':
+      case 'effectcraft suggest':
         return need(arg, '<dir>')
           ? await effectcraftCommand(ctx, cmd.split(' ')[1]!, arg, positionals[3])
           : 2;

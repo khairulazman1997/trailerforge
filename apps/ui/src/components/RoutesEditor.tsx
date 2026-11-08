@@ -26,6 +26,8 @@ const TASK_LABEL: Record<string, string> = {
   'cut.rank-takes': 'Take ranking',
   'reference.template': 'Template from a reference video',
   'critique.run': 'AI critique',
+  'effectcraft.author': 'Write a custom effect',
+  'effectcraft.suggest': 'Suggest an effect',
 };
 
 const toDraft = (r?: {

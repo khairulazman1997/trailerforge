@@ -40,6 +40,7 @@ import {
   authorEffectOp,
   effectcraftStatusOp,
   effectProposalsOp,
+  suggestEffectsOp,
   rejectEffectOp,
   AuthoredEffect,
   healthOp,
@@ -916,6 +917,19 @@ export function createMcpServer(opts: McpServerOptions): Server {
     },
     async run() {
       return effectcraftStatusOp(engine);
+    },
+  });
+
+  add({
+    mutates: false,
+    tool: {
+      name: 'effectcraft_suggest',
+      description:
+        "Ask the configured AI for up to three custom effect ideas for the cut (text only: the brief, each shot's words, the effects already on the cut and the brand colours and font names; never footage, frames, sound, file names, ids or game facts the user excluded). Each idea is the words to pass to effectcraft_author, a length, an optional hit point and the slot it belongs on. Nothing is stored or written; needs EffectCraft.",
+      inputSchema: object({}),
+    },
+    async run(args) {
+      return suggestEffectsOp(engine, await project(args));
     },
   });
 

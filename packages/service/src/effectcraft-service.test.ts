@@ -21,7 +21,8 @@ const good = {
   summary: 'The title snaps in.',
   commands: [{ command: 'layer.newText', params: { name: 'T', text: 'EMBER' } }],
 };
-const mock = createMockProvider({ 'effectcraft.author': good }, 'core/mock', { vision: true });
+const ideas = { ideas: [{ about: 'overall', words: 'A soft vignette pulse', seconds: 2, why: 'Mood.' }] }; // prettier-ignore
+const mock = createMockProvider({ 'effectcraft.author': good, 'effectcraft.suggest': ideas }, 'core/mock', { vision: true }); // prettier-ignore
 const llm = new LlmClient({
   providers: (id) => (id === 'core/mock' ? mock : undefined),
   routes: RoutesConfig.parse({ default: { provider: 'core/mock' }, fallbacks: [] }),
@@ -60,6 +61,20 @@ describe('EffectCraft over the service', { timeout: 120_000 }, () => {
     expect(await client.effectcraft()).toMatchObject({ state: 'ready', version: '0.22.0' });
     const h = await client.health();
     expect(h.checks.find((c) => c.id === 'effectcraft')).toMatchObject({ title: expect.stringMatching(/EffectCraft/) }); // prettier-ignore
+  });
+
+  it('suggests effect ideas: facts first, then a task whose result is the ideas', async () => {
+    const f = await client.effectSuggestFacts(ID);
+    expect(f.summary.at(-1)).toMatch(/Never sent/);
+    expect(await client.llmPreview(ID, 'effectcraft.suggest')).toMatchObject({ provider: { id: 'core/mock' } }); // prettier-ignore
+    const t = await client.startTask(ID, { kind: 'effectcraft-suggest' });
+    expect(await client.waitForTask(t.id)).toMatchObject({
+      status: 'succeeded',
+      result: {
+        ideas: [{ words: 'A soft vignette pulse', seconds: 2, why: 'Mood.' }],
+        skipped: [],
+      },
+    });
   });
 
   it('shows what would be sent before anything is sent', async () => {

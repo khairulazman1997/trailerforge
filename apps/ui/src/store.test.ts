@@ -258,6 +258,7 @@ class Fake {
     acceptEffect: async () => ({ itemId: 'it', project: 'media/x.ecproj', start: 0, duration: 1 }),
     rejectEffect: async () => ({ removed: 'fx' }),
     effectFrame: async () => new Blob(),
+    effectSuggestFacts: async () => ({ summary: [], wire: {}, excluded: 0 }),
     exportEffect: async () => ({ path: '/x', fileName: 'x.ecproj' }),
     reimportEffect: async () => ({ project: 'media/x.ecproj', warnings: [] }),
     referenceStills: async () => ({ stills: [] }),

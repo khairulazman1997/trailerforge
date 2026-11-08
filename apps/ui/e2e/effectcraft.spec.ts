@@ -106,6 +106,35 @@ test('describe an effect: see what is sent, preview it, add it to the cut, undo,
   await expect(page.getByRole('article', { name: /Proposed effect/ })).toHaveCount(0);
 });
 
+test('suggest an effect: see what is sent, pick an idea, and it fills in "Describe an effect"', async ({
+  page,
+}) => {
+  await page.goto(`${t.svc.url}/p/${ID}/graphics#token=${t.svc.token}`);
+  await page.getByRole('button', { name: 'Suggest an effect…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Suggest an effect' });
+  await expect(dialog.getByTestId('suggest-disclosure')).toContainText('this stays on your computer'); // prettier-ignore
+  await expect(dialog.getByTestId('suggest-sent')).toContainText('shots in order');
+  expect(await axe(page)).toEqual([]);
+  await dialog.getByRole('button', { name: 'Suggest effects' }).click();
+
+  const ideas = page.getByRole('region', { name: 'Suggested effects' });
+  await expect(ideas.getByRole('listitem')).toHaveCount(2, { timeout: 30_000 });
+  await expect(ideas).toContainText('Sparks fly on the parry');
+  await expect(ideas).toContainText('Sells the hit.');
+  expect(await axe(page)).toEqual([]);
+  expect(effects()).toHaveLength(0);
+
+  await ideas.getByRole('button', { name: 'Write this effect…' }).first().click();
+  const describe = page.getByRole('dialog', { name: 'Describe an effect' });
+  await expect(describe.getByLabel('What should it look like?')).toHaveValue('Sparks fly on the parry'); // prettier-ignore
+  await expect(describe.getByLabel('Length (seconds)')).toHaveValue('1.5');
+  await expect(describe.getByLabel('The hit lands at (seconds, optional)')).toHaveValue('0.5');
+  await describe.getByRole('button', { name: 'Cancel' }).click();
+  await ideas.getByRole('button', { name: 'Clear the suggestions' }).click();
+  await expect(ideas).toHaveCount(0);
+  await expect(page.getByRole('article', { name: /Proposed effect/ })).toHaveCount(0);
+});
+
 test('a reference clip: stills are shown first and sent only after you agree', async ({ page }) => {
   t.prompts.length = 0;
   await page.goto(`${t.svc.url}/p/${ID}/graphics#token=${t.svc.token}`);

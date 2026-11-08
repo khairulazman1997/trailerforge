@@ -85,7 +85,7 @@ export async function effectcraftRenderer(engine: Engine): Promise<EffectCraftRe
   return r;
 }
 
-function masterTimeline(store: ProjectStore): Timeline {
+export function masterTimeline(store: ProjectStore): Timeline {
   const tl =
     store.state.timelines.find((t) => t.id === 'tl_rough') ??
     store.state.timelines.find((t) => !t.variantId);

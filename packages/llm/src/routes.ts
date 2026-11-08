@@ -45,6 +45,11 @@ export const DEFAULT_ROUTES: z.input<typeof RoutesConfig> = {
       model: 'claude-opus-5-5',
       effort: 'medium',
     },
+    'effectcraft.suggest': {
+      provider: 'core/anthropic',
+      model: 'claude-sonnet-5-5',
+      effort: 'medium',
+    },
   },
 };
 

@@ -112,6 +112,7 @@ export type ClientLike = Pick<
   | 'acceptEffect'
   | 'rejectEffect'
   | 'effectFrame'
+  | 'effectSuggestFacts'
   | 'exportEffect'
   | 'reimportEffect'
   | 'referenceStills'
@@ -1110,7 +1111,8 @@ export class AppStore {
       | 'storyboard.regenerate-section'
       | 'brief.suggest'
       | 'capture.tips'
-      | 'critique.run',
+      | 'critique.run'
+      | 'effectcraft.suggest',
   ): Promise<LlmPreview | null> {
     return (await this.run((c) => c.llmPreview(projectId, task))) ?? null;
   }
