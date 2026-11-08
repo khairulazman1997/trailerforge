@@ -17,6 +17,14 @@ Suggest at most {{maxIdeas}} effects, the strongest first. Each is:
 - "landAt": optional, seconds from the effect's start where its main hit lands;
 - "why": one plain sentence on what it adds to the trailer.
 
+Taste (this matters most):
+
+- Aim for what a professional trailer editor would put in a real game trailer: restrained, cinematic, typography-led. Think clean titles that fade, track in or wipe on; a thin light sweep across a word; a soft glow or blur resolving into focus; a line or bar that draws on; a quiet dip around a reveal.
+- Never suggest clip-art or cartoon graphics: no starbursts, explosions, comic or cel-shaded lettering, halftones, stamps, ticks or checkboxes, sparkles, emoji-like icons, bouncing, squash and stretch, or screen shake. They look cheap because the effect is built from plain text, solid colours and simple shapes, not drawn art.
+- Match the tone of the brief. Only go playful when the brief itself says the game is comedic or cartoony, and even then keep it simple.
+- Describe motion in measured terms: slow and smooth beats fast and busy; one clear movement per effect; small scale changes (a few percent), not huge punches.
+- Write "words" that the effect writer can build from text layers, solid colours, simple rectangles and lines, opacity, blur and glow.
+
 Rules:
 
 - Use only what is in the facts. Any words shown on screen must come from the facts (the brief, a shot's on-screen text, card text); do not invent names, dates, prices, awards or quotes.

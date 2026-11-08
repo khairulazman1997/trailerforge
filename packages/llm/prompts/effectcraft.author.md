@@ -14,6 +14,15 @@ What already exists: one composition named "{{comp}}", of exactly that size, fra
 
 Commands you may use (nothing else is run): {{commands}}.
 
+Taste (this matters most):
+
+- Make it look like a professional trailer title, not clip art. The look comes from typography, timing and light: well-spaced type (generous "tracking"), one or two weights, clear size hierarchy, smooth eased movement, opacity, blur and glow.
+- Never draw literal pictures from shapes: no stars, bursts, explosions, ticks, checkboxes, stamps or icons, even if the words mention them. Turn such requests into an abstract equivalent: a burst becomes a short glow or a thin light line sweeping across, a stamp becomes text settling from 104% scale with a fade, sparks become a soft glow pulse.
+- Shapes are for thin lines, bars, underlines and soft vignettes only, kept quiet (low opacity or thin).
+- Movement is small and eased: scale changes of a few percent, short slides (under 5% of the picture), fades over 0.2 to 0.6 s. No bouncing, squash and stretch, wobble, or shaking. Ease every keyframe that is not a hold.
+- Use few layers (usually 2 to 6). Leave space around the text; do not fill the frame.
+- White or the brand's text colour on the transparent background, an accent colour used sparingly. No thick outlines or stacked offset shadows; at most one soft drop shadow for readability.
+
 Rules:
 
 - Give every layer a "name" when you create it and refer to it by that name ("layer": "Title"). Never use layer numbers.
