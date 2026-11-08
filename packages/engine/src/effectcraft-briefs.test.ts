@@ -80,7 +80,10 @@ afterAll(async () => {
 
 describe('effect briefs', { timeout: 120_000 }, () => {
   it('generation is offered briefs only when EffectCraft is there', async () => {
-    expect(await generatorMotion(engine)).toEqual({ motion: { templates: [], briefs: true } });
+    // The shipped templates are offered too when their folder has them (it does once they are built).
+    expect(await generatorMotion(engine)).toEqual({
+      motion: { templates: expect.any(Array), briefs: true },
+    });
     const bare = await Engine.start({ home: join(root, 'h2'), autosaveMs: 0, loadUserPlugins: false, effectcraft: null }); // prettier-ignore
     try {
       expect(await generatorMotion(bare)).toEqual({});

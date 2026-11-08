@@ -10,13 +10,14 @@ import { createMockProvider, LlmClient, RoutesConfig } from '@trailerforge/llm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createDemoOp } from './demo-ops.js';
 import { acceptEffectOp, authorEffectOp } from './effectcraft-ops.js';
+import { locateCli } from '@trailerforge/effectcraft';
 import { Engine } from './engine.js';
 import { buildVersion, exportVersionOp } from './render-ops.js';
 
 /**
  * M10 whole flow: the demo project, a custom EffectCraft title written by the (mock) AI, accepted
  * onto the cut, exported twice from scratch to identical bytes; not one network connection.
- * EffectCraft is the stand-in CLI here (the real one is checked by the Windows run).
+ * EffectCraft is the stand-in CLI, or the real one when `TFORGE_EFFECTCRAFT` names it.
  */
 
 const STUB = fileURLToPath(
@@ -53,7 +54,7 @@ beforeAll(async () => {
     autosaveMs: 0,
     loadUserPlugins: false,
     llm,
-    effectcraft: { bin: process.execPath, prefixArgs: [STUB, 'ok'] },
+    effectcraft: locateCli() ?? { bin: process.execPath, prefixArgs: [STUB, 'ok'] },
   });
   const demo = await createDemoOp(engine);
   store = await engine.openProject(demo.dir);

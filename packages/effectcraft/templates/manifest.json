@@ -1,0 +1,17 @@
+{
+  "effectcraft": "0.22.0",
+  "templates": {
+    "effectcraft/title-reveal": {
+      "file": "title-reveal.ectemplate",
+      "sha256": "d069ed6a4544dec1820f03040c027907bd645e7c8b0af264066e9250d2089598"
+    },
+    "effectcraft/logo-sting": {
+      "file": "logo-sting.ectemplate",
+      "sha256": "b265f103366bfc6d391d9ce4847c86904ebbe773964a93502581ba37290a8225"
+    },
+    "effectcraft/kinetic-text": {
+      "file": "kinetic-text.ectemplate",
+      "sha256": "0bee301ec9f3531520bd926a94ee76aa938af2fb2a4845727a0ea094b21bd8e7"
+    }
+  }
+}

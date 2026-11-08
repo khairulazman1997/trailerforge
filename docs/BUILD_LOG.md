@@ -337,3 +337,11 @@ Breakdown 2026-10-29: tasks 10.1–10.7 (with 10.4b–10.4d), ten design default
 | After 10.5 | 87% | 83% | user's reading, before 10.6 |
 | 10.7 | (this) | 2026-11-03 19:43 | 19:48 | | Opus | `engine/src/m10-flow.test.ts`: demo project → a custom EffectCraft title written by the (mock) AI → accepted onto the cut → the master exported twice from scratch (render, frames and quality caches removed) to identical bytes and poster, decision recorded, no socket/DNS/fetch. It found that the stand-in CLI drew a new random colour every frame, which the output Quality Gate rightly refused as a strobe (20 flashes a second): the stub now draws one colour per render with a band moving a pixel a frame. README "Custom motion graphics (M10, EffectCraft)" and the privacy note's one exception (reference-clip pictures, only when ticked); `docs/NEXT_SESSION.md` items 5–6 (the real-CLI and Windows checks); PLAN M10 status. **M10 complete here** except what needs the real EffectCraft or Windows. |
 | After 10.6 | 95% | 84% | user's reading, before 10.7 |
+
+## 2026-11-08 (UTC) — EffectCraft merged as M10, pin replaced
+
+| Task                                                | Commit  | Start | End   | Duration | Model | Notes                                                                                                                                         |
+| --------------------------------------------------- | ------- | ----- | ----- | -------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Merge EffectCraft branch as M10                     | c7a5cc2 | 16:40 | 16:55 | ~15 min  | Opus  | Branch `claude/optimistic-hawking-kegos6` (built as M8) merged into main; renumbered M10 / 10.x.                                              |
+| No pin: installed EffectCraft + compatibility check | c7075c5 | 17:00 | 17:50 | ~50 min  | Opus  | Decision 1 revised by the user: `compat.ts`, installed-copy lookup, approvals/exports note renderer versions, packaging ships no EffectCraft. |
+| Real-CLI checks on 0.22.0 + templates               | (this)  | 17:50 | 18:10 | ~20 min  | Opus  | Contract tests, templates built, 1080p/720p title looked at, m10 flow on the real CLI, spike determinism.                                     |
