@@ -57,7 +57,7 @@ afterAll(async () => {
 
 describe('EffectCraft over the service', { timeout: 120_000 }, () => {
   it('reports status and a Setup row', async () => {
-    expect(await client.effectcraft()).toMatchObject({ state: 'ready', version: '0.9.2' });
+    expect(await client.effectcraft()).toMatchObject({ state: 'ready', version: '0.22.0' });
     const h = await client.health();
     expect(h.checks.find((c) => c.id === 'effectcraft')).toMatchObject({ title: expect.stringMatching(/EffectCraft/) }); // prettier-ignore
   });

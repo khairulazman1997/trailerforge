@@ -17,7 +17,14 @@ import {
   EffectCraftCli,
   locateCli,
   parseCliVersion,
-  pinProblem,
+  compareVersions,
+  compatProblem,
+  EFFECTCRAFT_TESTED_VERSION,
+  findInstalledCli,
+  installedCliCandidates,
+  parseCommandIds,
+  REQUIRED_COMMANDS,
+  resolveCliForApp,
   sceneCommands,
   sweepWorkRoot,
   type CliLocation,
@@ -100,37 +107,77 @@ const sha = async (p: string) =>
     .digest('hex');
 const ac = () => new AbortController().signal;
 
-describe('version pin', () => {
-  it('reads the CLI banner and accepts only the pinned version', () => {
-    expect(parseCliVersion('effectcraft-cli 0.9.2\n')).toBe('0.9.2');
+describe('compatibility', () => {
+  it('reads the CLI banner and the command list, and compares versions', () => {
+    expect(parseCliVersion('effectcraft-cli 0.22.0\n')).toBe('0.22.0');
     expect(parseCliVersion('something else')).toBeNull();
-    expect(pinProblem('0.9.2')).toBeNull();
-    expect(pinProblem('0.9.3')).toMatch(/not the pinned 0\.9\.2/);
-    expect(pinProblem(null)).toMatch(/did not report/);
+    expect(parseCommandIds('[{"id":"comp.new"},{"id":"prop.set","enabled":false},{}]')).toEqual(
+      new Set(['comp.new', 'prop.set']),
+    );
+    expect(parseCommandIds('not json')).toBeNull();
+    expect(compareVersions('0.22.0', '0.9.2')).toBeGreaterThan(0);
+    expect(compareVersions('0.9.2', '0.9.2')).toBe(0);
+    expect(compareVersions('1.0.0-beta.1', '1.0.0')).toBe(0);
   });
 
-  it('finds the CLI only through TFORGE_EFFECTCRAFT', () => {
+  it('accepts any recent build that has every command, and says which are missing', () => {
+    const all = new Set(REQUIRED_COMMANDS);
+    expect(compatProblem('0.22.0', all)).toBeNull();
+    expect(compatProblem('3.1.0', all)).toBeNull();
+    expect(compatProblem('0.8.0', all)).toMatch(/older than 0\.9\.2/);
+    expect(compatProblem(null, all)).toMatch(/did not report/);
+    expect(compatProblem('0.22.0', null)).toMatch(/did not list its commands/);
+    const less = new Set([...all].filter((c) => c !== 'keys.toggleHold' && c !== 'effect.apply'));
+    expect(compatProblem('0.30.0', less)).toBe(
+      'EffectCraft 0.30.0 lacks commands this app uses: keys.toggleHold, effect.apply',
+    );
+  });
+
+  it('the engine finds the CLI only through TFORGE_EFFECTCRAFT', () => {
     expect(locateCli({})).toBeNull();
     expect(locateCli({ TFORGE_EFFECTCRAFT: ' /opt/ec/effectcraft-cli ' })).toEqual({
       bin: '/opt/ec/effectcraft-cli',
     });
   });
 
-  it('available(): ready, wrong version, missing, not bundled', async () => {
+  it('the app finds the installed copy; the variable wins, and empty switches it off', () => {
+    const env = { ProgramFiles: 'C:\\Program Files', PATH: 'C:\\bin;C:\\tools' };
+    const exe = join('C:\\Program Files', 'EffectCraft', 'effectcraft-cli.exe');
+    expect(installedCliCandidates(env, 'win32')).toEqual([
+      exe,
+      join('C:\\bin', 'effectcraft-cli.exe'),
+      join('C:\\tools', 'effectcraft-cli.exe'),
+    ]);
+    expect(findInstalledCli(env, 'win32', (p) => p === exe)).toBe(exe);
+    expect(findInstalledCli(env, 'win32', () => false)).toBeNull();
+    expect(resolveCliForApp(env, 'win32', (p) => p === exe)).toBe(exe);
+    expect(resolveCliForApp({ ...env, TFORGE_EFFECTCRAFT: '/dev/ec' }, 'win32', () => true)).toBe('/dev/ec'); // prettier-ignore
+    expect(resolveCliForApp({ ...env, TFORGE_EFFECTCRAFT: '' }, 'win32', () => true)).toBe('');
+    expect(resolveCliForApp(env, 'win32', () => false)).toBeUndefined();
+    expect(installedCliCandidates({}, 'darwin')[0]).toBe(
+      '/Applications/EffectCraft.app/Contents/MacOS/effectcraft-cli',
+    );
+  });
+
+  it('available(): ready, untested, too old, lacking a command, missing, not installed', async () => {
     expect(await new EffectCraftRenderer({ cli: stub(), workRoot: work }).available()).toEqual({
       ok: true,
-      version: '0.9.2',
+      version: EFFECTCRAFT_TESTED_VERSION,
     });
+    const newer = await new EffectCraftRenderer({ cli: stub('newer'), workRoot: work }).available();
+    expect(newer).toEqual({ ok: true, version: '0.30.0', note: expect.stringMatching(/tested with 0\.22\.0/) }); // prettier-ignore
     const old = await new EffectCraftRenderer({ cli: stub('old'), workRoot: work }).available();
-    expect(old).toEqual({ ok: false, reason: 'effectcraft-cli 0.8.0 is not the pinned 0.9.2' });
+    expect(old).toEqual({ ok: false, kind: 'incompatible', version: '0.8.0', reason: expect.stringMatching(/older than/) }); // prettier-ignore
+    const lacking = await new EffectCraftRenderer({ cli: stub('lacking'), workRoot: work }).available(); // prettier-ignore
+    expect(lacking).toMatchObject({ ok: false, kind: 'incompatible', reason: /lacks commands this app uses: keys\.toggleHold$/ }); // prettier-ignore
     const gone = new EffectCraftRenderer({ cli: { bin: join(root, 'nope') }, workRoot: work });
-    expect(await gone.available()).toMatchObject({ ok: false, reason: /missing at/ });
+    expect(await gone.available()).toMatchObject({ ok: false, kind: 'missing', reason: /missing at/ }); // prettier-ignore
     const none = new EffectCraftRenderer({ cli: null, workRoot: work });
-    expect(await none.available()).toMatchObject({ ok: false, reason: /not bundled/ });
+    expect(await none.available()).toMatchObject({ ok: false, kind: 'not-installed' });
     expect(await leftovers()).toEqual([]);
   });
 
-  it('refuses to render with a version outside the pin', async () => {
+  it('refuses to render with an incompatible build', async () => {
     const r = new EffectCraftRenderer({ cli: stub('old'), workRoot: work });
     await expect(r.renderScene(scene(), rate, join(root, 'out'), ac())).rejects.toMatchObject({
       code: 'version',
@@ -224,7 +271,7 @@ describe('EffectCraftRenderer on the stub CLI', () => {
     expect(res).toMatchObject({ dir: out, pattern: 'frame_%06d.png', frames: 15 });
     expect(res.project).toMatchObject({
       path: `${out}.ecproj`,
-      header: { savedBy: '0.9.2', schema: 2 },
+      header: { savedBy: '0.22.0', schema: 2 },
     });
     expect(res.project.sha256).toBe(await sha(`${out}.ecproj`));
     expect(res.warnings).toHaveLength(3);
@@ -348,22 +395,28 @@ describe('EffectCraftRenderer on the stub CLI', () => {
 });
 
 describe('project files', () => {
-  it('accepts only the pinned schema that EffectCraft opens', async () => {
+  it('accepts any EffectCraft project the installed copy opens; newer files warn', async () => {
     const cli = new EffectCraftCli(stub());
     const cwd = join(root, 'cwd');
     await mkdir(cwd, { recursive: true });
     const f = join(root, 'p.ecproj');
-    await writeFile(f, JSON.stringify({ savedBy: '0.9.2', schema: 2, comps: [] }));
-    expect(await checkProjectFile(cli, f, { cwd })).toMatchObject({ warnings: [] });
+    const running = { cwd, runningVersion: '0.22.0' };
+    await writeFile(f, JSON.stringify({ savedBy: '0.22.0', schema: 2, comps: [] }));
+    expect(await checkProjectFile(cli, f, running)).toMatchObject({ warnings: [] });
     await writeFile(f, JSON.stringify({ savedBy: '0.9.1', schema: 2, comps: [] }));
-    expect((await checkProjectFile(cli, f, { cwd })).warnings).toEqual([
-      'saved by EffectCraft 0.9.1, rendered with 0.9.2',
+    expect((await checkProjectFile(cli, f, running)).warnings).toEqual([]);
+    await writeFile(f, JSON.stringify({ savedBy: '0.30.0', schema: 2, comps: [] }));
+    expect((await checkProjectFile(cli, f, running)).warnings).toEqual([
+      'saved by EffectCraft 0.30.0, newer than the installed 0.22.0',
     ]);
+    await writeFile(f, JSON.stringify({ savedBy: '1.0.0', comps: [] }));
+    await expect(checkProjectFile(cli, f, { cwd })).rejects.toThrow(/no `schema` field/);
+    // The installed copy is the judge: one that cannot open the file refuses it.
     await writeFile(f, JSON.stringify({ savedBy: '1.0.0', schema: 3, comps: [] }));
-    await expect(checkProjectFile(cli, f, { cwd })).rejects.toThrow(/schema 3 is not the pinned/);
+    await expect(checkProjectFile(cli, f, { cwd })).rejects.toMatchObject({ code: 'bad-project' });
     await writeFile(f, '{ nope');
     await expect(checkProjectFile(cli, f, { cwd })).rejects.toThrow(/not JSON/);
-    await writeFile(f, JSON.stringify({ savedBy: '0.9.2', schema: 2, bogus: 1 }));
+    await writeFile(f, JSON.stringify({ savedBy: '0.22.0', schema: 2, bogus: 1 }));
     await expect(checkProjectFile(cli, f, { cwd })).rejects.toMatchObject({
       code: 'bad-project',
       message: /cannot open it: .*missing field settings/,
@@ -383,12 +436,12 @@ describe('project files', () => {
   });
 });
 
-// The real pinned CLI, when one is built (`TFORGE_EFFECTCRAFT=…/effectcraft-cli`).
+// The real CLI, when one is named (`TFORGE_EFFECTCRAFT=…/effectcraft-cli`).
 const real = locateCli();
 describe.skipIf(!real)('EffectCraftRenderer on the real effectcraft-cli', () => {
   it('renders a scene to transparent PNG frames, identical twice', async () => {
     const r = new EffectCraftRenderer({ cli: real, workRoot: work });
-    expect(await r.available()).toEqual({ ok: true, version: '0.9.2' });
+    expect(await r.available()).toMatchObject({ ok: true, version: expect.any(String) });
     const a = await r.renderScene(scene(), rate, join(root, 'a'), ac());
     const b = await r.renderScene(scene(), rate, join(root, 'b'), ac());
     expect([a.frames, b.frames]).toEqual([15, 15]);

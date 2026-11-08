@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import { Engine } from '@trailerforge/engine';
+import { Engine, resolveCliForApp } from '@trailerforge/engine';
 import { DEFAULT_APP_PORT, startService } from '@trailerforge/service';
 import { openSafeSecretStore, type SafeStorageLike } from './safe-secrets.js';
 import { isSafeExternalUrl, isServiceUrl } from './window-policy.js';
@@ -18,6 +18,11 @@ export interface WindowLike {
 export interface DesktopHost {
   /** Per-user app data folder (Electron `app.getPath('userData')`). */
   dataDir: string;
+  /**
+   * The EffectCraft CLI to drive: default `TFORGE_EFFECTCRAFT`, else the user's installed copy
+   * (`resolveCliForApp`); null switches it off. TrailerForge does not ship EffectCraft.
+   */
+  effectcraft?: string | null;
   /** Folder of the built UI. */
   uiDir: string;
   /** Port to try first (tests pass 0 for any free port). Default `DEFAULT_APP_PORT`. */
@@ -52,7 +57,12 @@ export async function startDesktop(host: DesktopHost): Promise<Desktop> {
     host.safeStorage,
     join(host.dataDir, 'secrets.json'),
   );
-  const engine = await Engine.start({ home: host.dataDir, secrets });
+  const ec = host.effectcraft === undefined ? resolveCliForApp() : host.effectcraft;
+  const engine = await Engine.start({
+    home: host.dataDir,
+    secrets,
+    effectcraft: ec ? { bin: ec } : null,
+  });
   let svc;
   try {
     svc = await startService({

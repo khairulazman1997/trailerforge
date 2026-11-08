@@ -251,7 +251,7 @@ class Fake {
     setupAnalysis: async () => ({ id: 't', kind: 'analysis-setup', status: 'running' }) as never,
     critiqueFacts: async () => ({ variantId: null, summary: ['x'], wire: {}, excluded: 0 }),
     applyCritiqueFix: async () => ({ rebuilt: false, warnings: [] }),
-    effectcraft: async () => ({ state: 'not-bundled', pinned: '0.9.2', templates: { available: [], problems: [] } }), // prettier-ignore
+    effectcraft: async () => ({ state: 'not-installed', tested: '0.22.0', templates: { available: [], problems: [] } }), // prettier-ignore
     effectRequestPreview: async () => ({ wire: {}, stills: { possible: false }, excluded: 0 }),
     effectProposals: async () => [],
     effectItems: async () => [],

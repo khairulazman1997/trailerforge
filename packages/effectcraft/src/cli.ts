@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
-import { parseCliVersion } from './pin.js';
+import { delimiter, join } from 'node:path';
+import { parseCliVersion, parseCommandIds } from './compat.js';
 
 export type EffectCraftErrorCode =
   'missing' | 'version' | 'failed' | 'cancelled' | 'timeout' | 'bad-project' | 'bad-output';
@@ -19,20 +19,71 @@ export class EffectCraftError extends Error {
 }
 
 export interface CliLocation {
-  /** The executable (the bundled `effectcraft-cli.exe`, or a development build). */
+  /** The executable: the user's installed `effectcraft-cli`, or a development build. */
   bin: string;
   /** Arguments put before every call; tests run a stub as `node stub.mjs <mode>`. */
   prefixArgs?: string[];
 }
 
 /**
- * Where the CLI is: `TFORGE_EFFECTCRAFT` (the desktop app sets it to the copy bundled in its
- * `resources/effectcraft` folder; developers point it at their own build of the pinned tag).
- * Nothing searches PATH or the user's install folders: the bundled, pinned build is the one used.
+ * Where the CLI is, from `TFORGE_EFFECTCRAFT` only (tests and the engine use this: nothing is
+ * found by accident). The app's entry points call `resolveCliForApp`, which also looks for an
+ * installed copy and sets the variable.
  */
 export function locateCli(env: NodeJS.ProcessEnv = process.env): CliLocation | null {
   const bin = env.TFORGE_EFFECTCRAFT?.trim();
   return bin ? { bin } : null;
+}
+
+/**
+ * The places an EffectCraft install puts its CLI, in the order they are tried: the standard
+ * install folders, then each folder on PATH.
+ */
+export function installedCliCandidates(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  const exe = platform === 'win32' ? 'effectcraft-cli.exe' : 'effectcraft-cli';
+  const out: string[] = [];
+  if (platform === 'win32') {
+    for (const root of [
+      env.ProgramFiles,
+      env['ProgramFiles(x86)'],
+      env.LOCALAPPDATA && join(env.LOCALAPPDATA, 'Programs'),
+    ])
+      // prettier-ignore
+      if (root) out.push(join(root, 'EffectCraft', exe));
+  } else if (platform === 'darwin') {
+    out.push('/Applications/EffectCraft.app/Contents/MacOS/effectcraft-cli');
+    if (env.HOME) out.push(join(env.HOME, 'Applications/EffectCraft.app/Contents/MacOS/effectcraft-cli')); // prettier-ignore
+  }
+  const path = env.PATH ?? env.Path ?? '';
+  const sep = platform === 'win32' ? ';' : delimiter;
+  for (const dir of path.split(sep)) if (dir.trim()) out.push(join(dir.trim(), exe));
+  return out;
+}
+
+/** The first installed copy of the CLI, or null. */
+export function findInstalledCli(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  exists: (path: string) => boolean = existsSync,
+): string | null {
+  return installedCliCandidates(env, platform).find((p) => exists(p)) ?? null;
+}
+
+/**
+ * For the app's entry points (desktop app, `tforge`): `TFORGE_EFFECTCRAFT` when it is set (an
+ * empty value switches EffectCraft off), else the installed copy, else none. Returns the value to
+ * put into `TFORGE_EFFECTCRAFT` for the engine, or undefined to leave it unset.
+ */
+export function resolveCliForApp(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  exists: (path: string) => boolean = existsSync,
+): string | undefined {
+  if (env.TFORGE_EFFECTCRAFT !== undefined) return env.TFORGE_EFFECTCRAFT;
+  return findInstalledCli(env, platform, exists) ?? undefined;
 }
 
 export interface RunOptions {
@@ -86,6 +137,12 @@ export class EffectCraftCli {
   async version(opts: RunOptions): Promise<string | null> {
     const r = await this.run(['--version'], opts);
     return parseCliVersion(r.stdout);
+  }
+
+  /** The ids of the commands this build has, or null when it does not list them as JSON. */
+  async commands(opts: RunOptions): Promise<Set<string> | null> {
+    const r = await this.run(['commands', '--json'], opts);
+    return parseCommandIds(r.stdout);
   }
 
   async run(args: string[], opts: RunOptions): Promise<RunResult> {

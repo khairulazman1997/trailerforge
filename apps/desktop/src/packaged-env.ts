@@ -3,7 +3,7 @@ import { join } from 'node:path';
 /**
  * Where an installed app finds what ships beside it. The installer puts these under the app's
  * `resources` folder: the bundled fonts, the analysis sidecar's source, a pinned `uv` and the
- * pinned `effectcraft-cli`. The
+ * EffectCraft templates (EffectCraft itself is the user's own install, found at start). The
  * Python environment is built (after the user agrees, on the Setup screen) in the per-user data
  * folder, never inside the install folder, and never automatically.
  */
@@ -17,12 +17,6 @@ export function packagedEnv(o: {
     TFORGE_SIDECAR_DIR: join(o.resourcesPath, 'analysis'),
     TFORGE_UV: join(o.resourcesPath, 'uv', o.platform === 'win32' ? 'uv.exe' : 'uv'),
     TFORGE_EFFECTCRAFT_TEMPLATES: join(o.resourcesPath, 'effectcraft', 'templates'),
-    // The pinned EffectCraft CLI (plan M10 decision 1); the only copy TrailerForge drives.
-    TFORGE_EFFECTCRAFT: join(
-      o.resourcesPath,
-      'effectcraft',
-      o.platform === 'win32' ? 'effectcraft-cli.exe' : 'effectcraft-cli',
-    ),
     TFORGE_SIDECAR_AUTO_SETUP: '0',
     UV_PROJECT_ENVIRONMENT: join(o.userData, 'analysis-env'),
   };

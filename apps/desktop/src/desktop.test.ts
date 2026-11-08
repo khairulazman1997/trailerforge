@@ -32,6 +32,7 @@ async function harness() {
   };
   const host: DesktopHost = {
     dataDir: join(dir, 'engine'),
+    effectcraft: null,
     port: 0,
     uiDir: ui,
     safeStorage: {

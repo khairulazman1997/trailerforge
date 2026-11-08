@@ -410,8 +410,8 @@ export async function effectcraftStatusCommand(ctx: CmdCtx): Promise<number> {
   const st = await effectcraftStatusOp(ctx.engine);
   const lines = [
     st.state === 'ready'
-      ? `EffectCraft ${st.version}: ready (pinned ${st.pinned})`
-      : `EffectCraft: ${st.state}${st.reason ? ` — ${st.reason}` : ''} (pinned ${st.pinned})`,
+      ? `EffectCraft ${st.version}: ready${st.path ? ` (${st.path})` : ''}${st.note ? ` — ${st.note}` : ''}`
+      : `EffectCraft: ${st.state}${st.reason ? ` — ${st.reason}` : ''} (tested with ${st.tested})`,
     `Templates: ${st.templates.available.length ? st.templates.available.join(', ') : 'none available'}`,
     ...st.templates.problems.map((p) => `  ${p}`),
   ];

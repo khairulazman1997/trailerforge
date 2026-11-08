@@ -85,8 +85,8 @@ export interface EngineOptions {
   /** How often watched folders are polled, in ms (default 2,000). */
   watchIntervalMs?: number;
   /**
-   * The EffectCraft CLI (plan M10). Default: `TFORGE_EFFECTCRAFT` (the desktop app points it at
-   * its bundled copy); null registers no EffectCraft renderer.
+   * The EffectCraft CLI (plan M10). Default: `TFORGE_EFFECTCRAFT` (the desktop app and `tforge`
+   * set it to the user's installed copy, see `resolveCliForApp`); null registers no renderer.
    */
   effectcraft?: CliLocation | null;
   /** Folder of the shipped `.ectemplate` files. Default: `TFORGE_EFFECTCRAFT_TEMPLATES`, else the package's own. */

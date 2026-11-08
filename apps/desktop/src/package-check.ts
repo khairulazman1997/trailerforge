@@ -18,13 +18,13 @@ export function checkPackage(unpacked: string): string[] {
   need(`${app}/preload.cjs`, 'the window preload');
   need(`${res}/ui/index.html`, 'the built interface');
   need(`${res}/uv/uv.exe`, 'the pinned uv that builds the analysis environment');
-  need(`${res}/effectcraft/effectcraft-cli.exe`, 'the pinned EffectCraft CLI (motion graphics)');
-  for (const f of ['LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE'])
-    need(`${res}/effectcraft/${f}`, "EffectCraft's licence terms, which must ship with it");
   need(
     `${res}/effectcraft/templates/manifest.json`,
     'the EffectCraft templates (run build:templates)',
   );
+  // EffectCraft itself is the user's own install, never shipped.
+  if (existsSync(join(unpacked, res, 'effectcraft', 'effectcraft-cli.exe')))
+    problems.push('resources/effectcraft contains effectcraft-cli.exe; EffectCraft is not shipped');
   need(`${res}/analysis/pyproject.toml`, 'the analysis sidecar source');
   need(`${res}/analysis/uv.lock`, "the sidecar's pinned packages");
   need(`${res}/analysis/.python-version`, "the sidecar's Python version");

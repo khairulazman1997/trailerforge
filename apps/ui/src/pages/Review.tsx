@@ -160,7 +160,11 @@ function VersionReview({ id, view }: { id: string; view: View }) {
           </button>
         )}
       </div>
-      <p className="muted">{label.hint}</p>
+      <p className="muted" data-testid="approval-hint">
+        {view.staleBecause
+          ? `${view.staleBecause}: the motion graphics may look different. Approve again after a look.`
+          : label.hint}
+      </p>
 
       <h3>Draft</h3>
       {src ? (

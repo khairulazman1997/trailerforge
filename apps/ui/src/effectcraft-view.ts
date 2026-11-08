@@ -3,9 +3,9 @@ import type { EffectProposalView } from '@trailerforge/service/client';
 /** The words for each EffectCraft state, as the Graphics tab shows them. */
 export const EC_STATE_LABEL = {
   ready: 'EffectCraft is ready',
-  'not-bundled': 'EffectCraft is not part of this build',
+  'not-installed': 'EffectCraft is not installed',
   missing: 'EffectCraft is missing',
-  'wrong-version': 'EffectCraft is the wrong version',
+  incompatible: 'This EffectCraft cannot be used',
   broken: 'EffectCraft does not start',
 } as const;
 

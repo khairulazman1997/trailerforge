@@ -96,7 +96,7 @@ Usage:
                                                           Render with the preset, check the file, deliver to exports/render (--preset saves the choice)
   tforge handoff <dir> [--version <id|master>] [--format fcpxml,otio,edl]
                                                           Files for an editor: FCPXML, OpenTimelineIO, EDL, with alpha clips for cards and captions
-  tforge effectcraft status                               Is the bundled EffectCraft usable (version, templates)? Exit 1 when it is not ready
+  tforge effectcraft status                               Is EffectCraft installed and usable (version, templates)? Exit 1 when it is not ready
   tforge effectcraft author <dir> --text <words> --seconds <s> [--land-at <s>] [--accept --at <s>]
                                                           Ask the AI for a custom EffectCraft effect (text only); prints the proposal and its preview frames
                  [--example <lottie.json|.ecproj>] [--reference <clip> [--send-stills]]

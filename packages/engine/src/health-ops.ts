@@ -221,25 +221,31 @@ async function effectcraftCheck(engine: Engine): Promise<HealthCheck> {
   const st = await effectcraftStatusOp(engine);
   if (st.state === 'ready') {
     const n = st.templates.available.length;
+    const ok = n === 3 && !st.note;
+    const fixes = [
+      ...(st.note ? [`${st.note}. If effects look wrong, report it, or install EffectCraft ${st.tested}.`] : []), // prettier-ignore
+      ...(n === 3 ? [] : ['The built-in cards are used for the missing templates.']),
+    ];
     return {
       ...base,
-      status: n === 3 ? 'ok' : 'info',
-      detail: `EffectCraft ${st.version} is ready (the version this app is built for); ${n} of 3 ready-made templates available.`,
-      ...(n === 3 ? {} : { fix: 'The built-in cards are used for the missing templates.' }),
+      status: ok ? 'ok' : 'info',
+      detail: `EffectCraft ${st.version} is ready${st.path ? ` (${st.path})` : ''}; ${n} of 3 ready-made templates available.`, // prettier-ignore
+      ...(fixes.length ? { fix: fixes.join(' ') } : {}),
     };
   }
   const fix: Record<typeof st.state, string> = {
-    'not-bundled': 'Cards and captions use the built-in drawing, which needs nothing more.',
+    'not-installed':
+      'Cards and captions use the built-in drawing, which needs nothing more. To add custom motion graphics, install EffectCraft (storytold/effectcraft) and restart TrailerForge.',
     missing:
-      'Reinstall TrailerForge: its copy of EffectCraft is missing. Meanwhile the built-in cards are used.',
-    'wrong-version': `This app works with EffectCraft ${st.pinned} only. Reinstall TrailerForge, or remove the TFORGE_EFFECTCRAFT setting if you set one.`,
+      'EffectCraft is not where TFORGE_EFFECTCRAFT says. Fix or remove that setting, or reinstall EffectCraft. Meanwhile the built-in cards are used.',
+    incompatible: `Update EffectCraft (this app was tested with ${st.tested}). Meanwhile the built-in cards are used.`,
     broken:
-      'EffectCraft did not start. Reinstall TrailerForge, or check that your antivirus did not quarantine it.',
+      'EffectCraft did not start. Reinstall it, or check that your antivirus did not quarantine it.',
   } as never;
   return {
     ...base,
     // Optional: nothing else depends on it, so even a broken copy is only a warning.
-    status: st.state === 'not-bundled' ? 'info' : 'warn',
+    status: st.state === 'not-installed' ? 'info' : 'warn',
     detail: st.reason ?? 'EffectCraft is not available.',
     fix: fix[st.state],
   };

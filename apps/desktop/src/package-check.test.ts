@@ -10,10 +10,6 @@ const FILES = [
   'resources/app/preload.cjs',
   'resources/ui/index.html',
   'resources/uv/uv.exe',
-  'resources/effectcraft/effectcraft-cli.exe',
-  'resources/effectcraft/LICENSE-MIT',
-  'resources/effectcraft/LICENSE-APACHE',
-  'resources/effectcraft/NOTICE',
   'resources/effectcraft/templates/manifest.json',
   'resources/analysis/pyproject.toml',
   'resources/analysis/uv.lock',
@@ -43,13 +39,15 @@ describe('checkPackage', () => {
   });
   it('names what is missing and what should not be there', () => {
     const files = FILES.filter(
-      (f) => !f.endsWith('uv.exe') && !f.includes('win32-x64') && !f.endsWith('NOTICE'),
+      (f) => !f.endsWith('uv.exe') && !f.includes('win32-x64') && !f.endsWith('manifest.json'),
     );
+    files.push('resources/effectcraft/effectcraft-cli.exe');
     files.push('resources/app/node_modules/@resvg/resvg-js-linux-x64-gnu/a.node');
     files.push('resources/analysis/.venv/x');
     const problems = checkPackage(tree(files)).join('\n');
     expect(problems).toMatch(/uv\.exe/);
-    expect(problems).toMatch(/effectcraft\/NOTICE \(EffectCraft's licence/);
+    expect(problems).toMatch(/templates\/manifest\.json/);
+    expect(problems).toMatch(/EffectCraft is not shipped/);
     expect(problems).toMatch(/Windows binary/);
     expect(problems).toMatch(/linux-x64-gnu/);
     expect(problems).toMatch(/\.venv/);

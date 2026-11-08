@@ -22,3 +22,4 @@ export * from './saved-types-ops.js';
 export * from './planner-ops.js';
 export * from './platforms.js';
 export * from './reuse-ops.js';
+export { resolveCliForApp } from '@trailerforge/effectcraft';

@@ -104,6 +104,7 @@ export const approve = defineCommand({
     planHash: ContentHash,
     note: z.string().max(500).optional(),
     approvedAt: IsoDateTime.optional(),
+    renderers: z.record(z.string().min(1).max(80), z.string().min(1).max(80)).optional(),
   }),
   label: () => 'Approve version',
   apply: (d, p) => {
@@ -114,6 +115,7 @@ export const approve = defineCommand({
       planHash: p.planHash,
       approvedAt: p.approvedAt ?? new Date().toISOString(),
       ...(p.note ? { note: p.note } : {}),
+      ...(p.renderers && Object.keys(p.renderers).length ? { renderers: p.renderers } : {}),
     });
   },
 });

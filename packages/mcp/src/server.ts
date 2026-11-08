@@ -910,7 +910,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
     tool: {
       name: 'effectcraft_status',
       description:
-        'Is the bundled EffectCraft (motion graphics) usable? Returns its state (ready, not-bundled, missing, wrong-version, broken), the version it found against the one this app is built for, the ready-made templates that are available and what is wrong with the others. Reads only.',
+        'Is EffectCraft (motion graphics) installed and usable? Returns its state (ready, not-installed, missing, incompatible, broken), the version found and the one this app was tested with, a note when they differ, the ready-made templates that are available and what is wrong with the others. Reads only.',
       inputSchema: object({}),
       annotations: ReadOnly,
     },

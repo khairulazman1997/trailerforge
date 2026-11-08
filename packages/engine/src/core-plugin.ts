@@ -10,7 +10,6 @@ import { MediaError, makeProxy, probe } from '@trailerforge/media';
 import { definePlugin, PLUGIN_API_VERSION } from '@trailerforge/plugin-api';
 import { effectcraftCommands } from './effectcraft-commands.js';
 import {
-  EFFECTCRAFT_VERSION,
   EffectCraftRenderer,
   defaultTemplatesDir,
   ecGraphicTemplates,
@@ -101,8 +100,9 @@ export const corePlugin = definePlugin({
 /**
  * EffectCraft as a motion renderer (plan M10), registered even when the CLI is absent so the
  * Setup page and the graphics pipeline can say why it is unavailable. The shipped templates are
- * registered as graphics templates only when EffectCraft is available and their files are there
- * and match their recorded hashes; otherwise slots that name them use the built-in fallback.
+ * registered as graphics templates only when EffectCraft passes its compatibility check and their
+ * files are there, match their recorded hashes and were not made by a newer EffectCraft;
+ * otherwise slots that name them use the built-in fallback.
  */
 export function effectcraftPlugin(o: {
   cli: CliLocation | null;
@@ -115,19 +115,16 @@ export function effectcraftPlugin(o: {
     version: '0.1.0',
     apiVersion: PLUGIN_API_VERSION,
     async register(ctx) {
-      const { files, problems } = loadTemplateFiles(
-        o.templatesDir ?? defaultTemplatesDir(),
-        EFFECTCRAFT_VERSION,
-      );
-      const renderer = new EffectCraftRenderer({
-        cli: o.cli,
-        workRoot: o.workRoot,
-        templates: files,
-        templateProblems: problems,
-      });
+      const renderer = new EffectCraftRenderer({ cli: o.cli, workRoot: o.workRoot });
       ctx.motionRenderers.register(renderer);
       for (const command of effectcraftCommands) ctx.commands.register(command);
-      if (!(await renderer.available()).ok) return;
+      const a = await renderer.available();
+      if (!a.ok) return;
+      const { files, problems } = loadTemplateFiles(
+        o.templatesDir ?? defaultTemplatesDir(),
+        a.version,
+      );
+      renderer.useTemplates(files, problems);
       for (const t of ecGraphicTemplates(new Set(Object.keys(files))))
         ctx.graphicTemplates.register(t);
     },

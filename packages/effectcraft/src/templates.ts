@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { builtinRegistry, type GraphicTemplate } from '@trailerforge/graphics';
 import { FLICKS_PER_SECOND } from '@trailerforge/schema';
+import { compareVersions } from './compat.js';
 import type { EcCommand } from './scene-commands.js';
 
 /**
@@ -184,11 +185,12 @@ export interface TemplateFile {
 /**
  * The shipped templates that exist and match the manifest's hashes, by template id. Missing or
  * changed files are left out (with the reason in `problems`): a template that cannot be trusted is
- * not offered, and its slots use the built-in fallback.
+ * not offered, and its slots use the built-in fallback. Templates made by a newer EffectCraft than
+ * `runningVersion` are not offered either (an older copy may not read them); older ones are.
  */
 export function loadTemplateFiles(
   dir: string,
-  expectedVersion: string,
+  runningVersion: string,
 ): { files: Record<string, TemplateFile>; problems: string[] } {
   const files: Record<string, TemplateFile> = {};
   const problems: string[] = [];
@@ -198,11 +200,11 @@ export function loadTemplateFiles(
   } catch {
     return { files, problems: [`no EffectCraft templates found in ${dir}`] };
   }
-  if (manifest.effectcraft !== expectedVersion)
+  if (compareVersions(manifest.effectcraft, runningVersion) > 0)
     return {
       files,
       problems: [
-        `the templates were made with EffectCraft ${manifest.effectcraft}, not ${expectedVersion}`,
+        `the templates were made with EffectCraft ${manifest.effectcraft}, newer than the installed ${runningVersion}: update EffectCraft`,
       ],
     };
   for (const def of EC_TEMPLATES) {

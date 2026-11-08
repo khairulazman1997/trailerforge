@@ -2,12 +2,12 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { EffectCraftCli } from './cli.js';
-import { EFFECTCRAFT_VERSION, pinProblem } from './pin.js';
+import { compatProblem } from './compat.js';
 import { chunkCommands } from './scene-commands.js';
 import { EC_TEMPLATES, templateAuthoringCommands, type TemplateManifest } from './templates.js';
 
 /**
- * Makes the shipped `.ectemplate` files into `outDir` with the pinned CLI (through its commands)
+ * Makes the shipped `.ectemplate` files into `outDir` with the installed CLI (through its commands)
  * and writes `manifest.json` with their hashes. `cwd` is scratch space for the CLI.
  */
 export async function buildTemplateFiles(
@@ -15,10 +15,11 @@ export async function buildTemplateFiles(
   outDir: string,
   cwd: string,
 ): Promise<TemplateManifest> {
-  const problem = pinProblem(await cli.version({ cwd }));
+  const version = await cli.version({ cwd });
+  const problem = compatProblem(version, version ? await cli.commands({ cwd }) : null);
   if (problem) throw new Error(problem);
   await mkdir(outDir, { recursive: true });
-  const manifest: TemplateManifest = { effectcraft: EFFECTCRAFT_VERSION, templates: {} };
+  const manifest: TemplateManifest = { effectcraft: version!, templates: {} };
   for (const def of EC_TEMPLATES) {
     const dest = join(outDir, def.file);
     const project = join(cwd, `${def.file}.ecproj`);

@@ -106,6 +106,8 @@ export interface VersionBuild {
   compileError: string | undefined;
   /** Identifies the version's content (picture, graphics, sound), not the preset: what approvals vouch for. */
   contentHash: string;
+  /** Versions of the motion renderers that draw part of it, by name (e.g. EffectCraft); empty when none. */
+  renderers: Record<string, string>;
   warnings: string[];
 }
 
@@ -370,8 +372,30 @@ export async function buildVersion(
     resolved,
     compileError,
     contentHash,
+    renderers: await rendererVersions(motion),
     warnings: [...new Set([...status.warnings, ...warnings])],
   };
+}
+
+/** The version of each motion renderer the items use, by its name. */
+async function rendererVersions(motion: MotionItem[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const r of new Set(motion.map((m) => m.renderer))) {
+    const a = await r.available();
+    if (a.ok && a.version) out[r.name] = a.version;
+  }
+  return out;
+}
+
+/** Why an approval no longer holds, when an outside renderer was updated since; else undefined. */
+export function rendererChange(
+  approved: Record<string, string> | undefined,
+  now: Record<string, string>,
+): string | undefined {
+  const changed = Object.entries(approved ?? {})
+    .filter(([name, v]) => now[name] !== undefined && now[name] !== v)
+    .map(([name, v]) => `${name} was updated (${v} → ${now[name]})`);
+  return changed.length ? `${changed.join('; ')} since this was approved` : undefined;
 }
 
 const probed = new Map<string, Promise<MediaInfo | null>>();
@@ -507,6 +531,8 @@ export interface VersionReview {
   contentHash: string | null;
   approval: ApprovalState;
   approvedAt?: string;
+  /** For a stale approval: an outside renderer (EffectCraft) was updated since, in words. */
+  staleBecause?: string;
   openComments: number;
   comments: number;
   /** A review draft of exactly this content exists. */
@@ -534,6 +560,9 @@ export async function reviewViewOp(engine: Engine, store: ProjectStore): Promise
     const approval = project.review.approvals.find((a) => a.variantId === id);
     const comments = project.review.comments.filter((c) => c.variantId === id);
     const verdict = gateVerdict(planFindings(b));
+    const state = approvalState(project.review, id, b.compileError ? null : b.contentHash);
+    const staleBecause =
+      state === 'stale' ? rendererChange(approval?.renderers, b.renderers) : undefined;
     out.push({
       variantId: id,
       name: b.name,
@@ -541,8 +570,9 @@ export async function reviewViewOp(engine: Engine, store: ProjectStore): Promise
       size: b.timeline.resolution,
       seconds: Math.round((timelineDuration(b.timeline) / FLICKS_PER_SECOND) * 100) / 100,
       contentHash: b.compileError ? null : b.contentHash,
-      approval: approvalState(project.review, id, b.compileError ? null : b.contentHash),
+      approval: state,
       ...(approval ? { approvedAt: approval.approvedAt } : {}),
+      ...(staleBecause ? { staleBecause } : {}),
       openComments: comments.filter((c) => !c.resolved).length,
       comments: comments.length,
       draftReady: await exists(draftPath(store, id, b.contentHash)),
@@ -575,6 +605,7 @@ export async function approveVersionOp(
     variantId: o.variantId,
     planHash: b.contentHash,
     ...(o.note ? { note: o.note } : {}),
+    ...(Object.keys(b.renderers).length ? { renderers: b.renderers } : {}),
   });
   return { contentHash: b.contentHash };
 }
@@ -790,6 +821,8 @@ export interface ExportResult {
   contentHash: string;
   preset: string;
   reproducible: boolean;
+  /** Versions of the outside renderers (EffectCraft) that drew part of it, by name. */
+  renderers?: Record<string, string>;
   /** Findings that did not block (warnings and overridden errors). */
   findings: GateFinding[];
   overridden: string[];
@@ -923,6 +956,7 @@ export async function exportVersionOp(
     contentHash: b.contentHash,
     preset: b.resolved.preset.id,
     reproducible: r.manifest.reproducible,
+    ...(Object.keys(b.renderers).length ? { renderers: b.renderers } : {}),
     findings: [
       ...planVerdict.warnings,
       ...outVerdict.warnings,

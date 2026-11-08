@@ -51,7 +51,7 @@ afterAll(async () => {
 });
 
 describe('EffectCraft status', { timeout: 60_000 }, () => {
-  it('says ready, not bundled, missing, wrong version or broken, with the Setup row to match', async () => {
+  it('says ready, untested, not installed, missing, incompatible or broken, with the Setup row to match', async () => {
     const row = async (e: Engine) =>
       (await healthOp(e)).checks.find((c) => c.id === 'effectcraft')!;
 
@@ -61,36 +61,44 @@ describe('EffectCraft status', { timeout: 60_000 }, () => {
     });
     expect(await effectcraftStatusOp(ready)).toMatchObject({
       state: 'ready',
-      version: '0.9.2',
-      pinned: '0.9.2',
+      version: '0.22.0',
+      tested: '0.22.0',
       templates: { available: expect.arrayContaining(['effectcraft/title-reveal']), problems: [] },
     });
-    expect(await row(ready)).toMatchObject({ status: 'ok', detail: expect.stringMatching(/0\.9\.2 is ready.*3 of 3/) }); // prettier-ignore
+    expect(await row(ready)).toMatchObject({ status: 'ok', detail: expect.stringMatching(/0\.22\.0 is ready.*3 of 3/) }); // prettier-ignore
 
     const noTemplates = await start('notpl', { effectcraft: stub('ok'), effectcraftTemplates: join(root, 'none') }); // prettier-ignore
     expect(await effectcraftStatusOp(noTemplates)).toMatchObject({ state: 'ready', templates: { available: [], problems: [expect.stringMatching(/no EffectCraft templates/)] } }); // prettier-ignore
     expect(await row(noTemplates)).toMatchObject({ status: 'info', detail: expect.stringMatching(/0 of 3/) }); // prettier-ignore
 
     const none = await start('none', { effectcraft: null });
-    expect(await effectcraftStatusOp(none)).toMatchObject({ state: 'not-bundled' });
+    expect(await effectcraftStatusOp(none)).toMatchObject({ state: 'not-installed' });
     expect(await row(none)).toMatchObject({
       status: 'info',
-      fix: expect.stringMatching(/built-in/),
+      fix: expect.stringMatching(/built-in.*install EffectCraft/),
     });
 
     const gone = await start('gone', { effectcraft: { bin: join(root, 'nope') } });
     expect(await effectcraftStatusOp(gone)).toMatchObject({ state: 'missing' });
     expect(await row(gone)).toMatchObject({
       status: 'warn',
-      fix: expect.stringMatching(/Reinstall/),
+      fix: expect.stringMatching(/TFORGE_EFFECTCRAFT/),
     });
 
     const old = await start('old', { effectcraft: stub('old') });
-    expect(await effectcraftStatusOp(old)).toMatchObject({ state: 'wrong-version', version: '0.8.0', reason: expect.stringMatching(/not the pinned 0\.9\.2/) }); // prettier-ignore
+    expect(await effectcraftStatusOp(old)).toMatchObject({ state: 'incompatible', version: '0.8.0', reason: expect.stringMatching(/older than 0\.9\.2/) }); // prettier-ignore
     expect(await row(old)).toMatchObject({
       status: 'warn',
-      fix: expect.stringMatching(/0\.9\.2 only/),
+      fix: expect.stringMatching(/Update EffectCraft \(this app was tested with 0\.22\.0\)/),
     });
+
+    const lacking = await start('lacking', { effectcraft: stub('lacking') });
+    expect(await effectcraftStatusOp(lacking)).toMatchObject({ state: 'incompatible', reason: expect.stringMatching(/lacks commands this app uses: keys\.toggleHold/) }); // prettier-ignore
+
+    // A newer build that passes the check is used, with a note on Setup.
+    const newer = await start('newer', { effectcraft: stub('newer'), effectcraftTemplates: templates }); // prettier-ignore
+    expect(await effectcraftStatusOp(newer)).toMatchObject({ state: 'ready', version: '0.30.0', note: expect.stringMatching(/tested with 0\.22\.0/), templates: { available: expect.arrayContaining(['effectcraft/title-reveal']) } }); // prettier-ignore
+    expect(await row(newer)).toMatchObject({ status: 'info', fix: expect.stringMatching(/passed the compatibility check/) }); // prettier-ignore
 
     const broken = await start('broken', { effectcraft: { bin: process.execPath, prefixArgs: ['-e', 'process.exit(3)'] } }); // prettier-ignore
     expect(await effectcraftStatusOp(broken)).toMatchObject({ state: 'broken' });

@@ -15,7 +15,7 @@ import type { Scene } from '@trailerforge/graphics';
 import type { MotionRenderJob, MotionRenderResult, MotionRenderer } from '@trailerforge/plugin-api';
 import { FLICKS_PER_SECOND, flicksPerFrame, type Rate } from '@trailerforge/schema';
 import { EffectCraftCli, EffectCraftError, type CliLocation } from './cli.js';
-import { pinProblem } from './pin.js';
+import { compatProblem, untestedNote } from './compat.js';
 import { checkProjectFile, type ProjectHeader } from './project-file.js';
 import { motionContentHash } from './motion-cache.js';
 import { chunkCommands, sceneCommands, type EcCommand } from './scene-commands.js';
@@ -26,8 +26,18 @@ export const PROJECT_TEMPLATE_ID = 'effectcraft/project';
 export const SEQUENCE_DONE = 'SEQUENCE_DONE';
 const WORK_PREFIX = 'ec-';
 
+/** Whether the CLI can be used: its version (and a note when it is not the tested one), or why not. */
+export type Availability =
+  | { ok: true; version: string; note?: string }
+  | {
+      ok: false;
+      kind: 'not-installed' | 'missing' | 'incompatible' | 'broken';
+      reason: string;
+      version?: string;
+    };
+
 export interface EffectCraftRendererOptions {
-  /** The bundled CLI, or null when this build has none (then `available()` says why). */
+  /** The installed CLI, or null when none was found (then `available()` says why). */
   cli: CliLocation | null;
   /** Scratch space for runs; each run gets its own folder, removed when it ends. */
   workRoot: string;
@@ -55,7 +65,7 @@ export interface AuthoredProject {
 }
 
 /**
- * EffectCraft as a `MotionRenderer` (plan M10): drives the pinned `effectcraft-cli` headless on
+ * EffectCraft as a `MotionRenderer` (plan M10): drives the installed `effectcraft-cli` headless on
  * the CPU and returns transparent PNG frames, never video. Every run works in its own folder
  * under `workRoot` with an isolated config, and only a complete, checked frame folder reaches
  * `outDir`; cancelling kills the process and removes the run's files.
@@ -64,18 +74,17 @@ export class EffectCraftRenderer implements MotionRenderer {
   readonly id = 'effectcraft/cli';
   readonly name = 'EffectCraft';
   private readonly cli: EffectCraftCli | null;
-  private checked: Promise<{ ok: true; version: string } | { ok: false; reason: string }> | null =
-    null;
+  private checked: Promise<Availability> | null = null;
 
   constructor(private readonly opts: EffectCraftRendererOptions) {
     this.cli = opts.cli ? new EffectCraftCli(opts.cli) : null;
   }
 
-  /** Opens a `.ecproj` with the pinned EffectCraft: its schema must be the pinned one and it must load cleanly. */
+  /** Opens a `.ecproj` with the installed EffectCraft: it must be an EffectCraft project that loads cleanly. */
   async checkFile(file: string, signal: AbortSignal): Promise<{ warnings: string[] }> {
     const cli = await this.ready();
     return this.work(async (cwd) => {
-      const r = await checkProjectFile(cli, file, { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000 }); // prettier-ignore
+      const r = await checkProjectFile(cli, file, { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000, ...(await this.running()) }); // prettier-ignore
       return { warnings: r.warnings };
     });
   }
@@ -85,23 +94,51 @@ export class EffectCraftRenderer implements MotionRenderer {
     return this.opts.templateProblems ?? [];
   }
 
-  /** Bundled, starts, and is exactly the pinned version. Checked once per renderer. */
-  available(): Promise<{ ok: true; version: string } | { ok: false; reason: string }> {
+  /** The CLI's path, or null when none was found. */
+  cliPath(): string | null {
+    return this.opts.cli?.bin ?? null;
+  }
+
+  /** Replace the shipped templates (the plugin loads them once the running version is known). */
+  useTemplates(
+    templates: NonNullable<EffectCraftRendererOptions['templates']>,
+    problems: string[],
+  ): void {
+    this.opts.templates = templates;
+    this.opts.templateProblems = problems;
+  }
+
+  /**
+   * Installed, starts, and passes the compatibility check (a recent enough version with every
+   * command TrailerForge sends). Checked once per renderer.
+   */
+  available(): Promise<Availability> {
     this.checked ??= this.check();
     return this.checked;
   }
 
-  private async check(): Promise<{ ok: true; version: string } | { ok: false; reason: string }> {
-    if (!this.cli) return { ok: false, reason: 'EffectCraft is not bundled with this build' };
+  private async check(): Promise<Availability> {
+    if (!this.cli)
+      return { ok: false, kind: 'not-installed', reason: 'EffectCraft is not installed' };
     if (!this.cli.exists())
-      return { ok: false, reason: `effectcraft-cli is missing at ${this.cli.location.bin}` };
+      return { ok: false, kind: 'missing', reason: `effectcraft-cli is missing at ${this.cli.location.bin}` }; // prettier-ignore
+    let version: string | null;
+    let commands: Set<string> | null;
     try {
-      const version = await this.work((cwd) => this.cli!.version({ cwd, timeoutMs: 30_000 }));
-      const problem = pinProblem(version);
-      return problem ? { ok: false, reason: problem } : { ok: true, version: version! };
+      [version, commands] = await this.work(async (cwd) => {
+        const v = await this.cli!.version({ cwd, timeoutMs: 30_000 });
+        return [v, v === null ? null : await this.cli!.commands({ cwd, timeoutMs: 30_000 })] as const; // prettier-ignore
+      });
     } catch (e) {
-      return { ok: false, reason: `effectcraft-cli does not start: ${(e as Error).message}` };
+      return { ok: false, kind: 'broken', reason: `effectcraft-cli does not start: ${(e as Error).message}` }; // prettier-ignore
     }
+    if (version === null)
+      return { ok: false, kind: 'broken', reason: 'effectcraft-cli did not report a version: it may not be EffectCraft' }; // prettier-ignore
+    const problem = compatProblem(version, commands);
+    if (problem)
+      return { ok: false, kind: 'incompatible', reason: problem, ...(version ? { version } : {}) };
+    const note = untestedNote(version!);
+    return { ok: true, version: version!, ...(note ? { note } : {}) };
   }
 
   supports(templateId: string): boolean {
@@ -151,7 +188,9 @@ export class EffectCraftRenderer implements MotionRenderer {
       if (job.templateId === PROJECT_TEMPLATE_ID) {
         const project = job.params.project;
         if (typeof project !== 'string') throw new Error('params.project must be a file path');
-        warnings.push(...(await checkProjectFile(cli, project, run)).warnings);
+        warnings.push(
+          ...(await checkProjectFile(cli, project, { ...run, ...(await this.running()) })).warnings,
+        );
         const comp = job.params.comp;
         source = [project, ...(typeof comp === 'string' ? ['--comp', comp] : [])];
       } else {
@@ -225,7 +264,10 @@ export class EffectCraftRenderer implements MotionRenderer {
             : ['--project', tmp, '--save', 'run', ...chunk, '--json'],
           run,
         );
-      const { header, warnings } = await checkProjectFile(cli, tmp, run);
+      const { header, warnings } = await checkProjectFile(cli, tmp, {
+        ...run,
+        ...(await this.running()),
+      });
       const bytes = await readFile(tmp);
       await mkdir(dirname(dest), { recursive: true });
       await moveInto(tmp, dest);
@@ -264,7 +306,10 @@ export class EffectCraftRenderer implements MotionRenderer {
           '--json'],
         run,
       ); // prettier-ignore
-      const { header, warnings } = await checkProjectFile(cli, tmp, run);
+      const { header, warnings } = await checkProjectFile(cli, tmp, {
+        ...run,
+        ...(await this.running()),
+      });
       const bytes = await readFile(tmp);
       await mkdir(dirname(dest), { recursive: true });
       await moveInto(tmp, dest);
@@ -277,13 +322,15 @@ export class EffectCraftRenderer implements MotionRenderer {
     });
   }
 
+  private async running(): Promise<{ runningVersion?: string }> {
+    const a = await this.available();
+    return a.ok ? { runningVersion: a.version } : {};
+  }
+
   private async ready(): Promise<EffectCraftCli> {
     const a = await this.available();
     if (!a.ok)
-      throw new EffectCraftError(
-        /not the pinned|did not report/.test(a.reason) ? 'version' : 'missing',
-        a.reason,
-      );
+      throw new EffectCraftError(a.kind === 'incompatible' ? 'version' : 'missing', a.reason);
     return this.cli!;
   }
 

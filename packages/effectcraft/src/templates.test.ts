@@ -62,19 +62,23 @@ describe('shipped templates', () => {
     });
   });
 
-  it('builds the files and a manifest; changed, missing or other-version files are not offered', async () => {
+  it('builds the files and a manifest; changed, missing or newer-version files are not offered', async () => {
     const m = JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8'));
     expect(Object.keys(m.templates)).toHaveLength(3);
-    expect(loadTemplateFiles(dir, '0.9.2')).toMatchObject({ problems: [] });
-    expect(Object.keys(loadTemplateFiles(dir, '0.9.2').files)).toHaveLength(3);
-    expect(loadTemplateFiles(dir, '0.9.3').problems[0]).toMatch(/not 0\.9\.3/);
+    expect(m.effectcraft).toBe('0.22.0');
+    expect(loadTemplateFiles(dir, '0.22.0')).toMatchObject({ problems: [] });
+    // Made with 0.22.0: a later EffectCraft reads them, an earlier one is not trusted to.
+    expect(Object.keys(loadTemplateFiles(dir, '0.30.0').files)).toHaveLength(3);
+    expect(loadTemplateFiles(dir, '0.21.0').problems[0]).toMatch(
+      /newer than the installed 0\.21\.0/,
+    );
     await writeFile(join(dir, 'logo-sting.ectemplate'), 'tampered');
-    const r = loadTemplateFiles(dir, '0.9.2');
+    const r = loadTemplateFiles(dir, '0.22.0');
     expect(Object.keys(r.files)).toEqual(['effectcraft/title-reveal', 'effectcraft/kinetic-text']);
     expect(r.problems).toEqual([
       'template effectcraft/logo-sting does not match its recorded hash',
     ]);
-    expect(loadTemplateFiles(join(root, 'none'), '0.9.2').problems[0]).toMatch(
+    expect(loadTemplateFiles(join(root, 'none'), '0.22.0').problems[0]).toMatch(
       /no EffectCraft templates/,
     );
   });
@@ -109,7 +113,7 @@ describe('shipped templates', () => {
   });
 
   it('renders with the slot text on the template controls, and at draft size', async () => {
-    const { files } = loadTemplateFiles(dir, '0.9.2');
+    const { files } = loadTemplateFiles(dir, '0.22.0');
     const r = new EffectCraftRenderer({ cli: loc, workRoot: join(root, 'work'), templates: files });
     expect(r.supports('effectcraft/kinetic-text')).toBe(true);
     const job = {

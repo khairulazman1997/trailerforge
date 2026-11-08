@@ -54,6 +54,12 @@ export const Approval = z.strictObject({
   planHash: ContentHash,
   approvedAt: IsoDateTime,
   note: z.string().max(500).optional(),
+  /**
+   * Versions of the outside renderers that drew part of what was approved, by name (e.g.
+   * `{ "EffectCraft": "0.22.0" }`). Their versions are in the plan hash, so an update makes the
+   * approval stale; this says why.
+   */
+  renderers: z.record(z.string().min(1).max(80), z.string().min(1).max(80)).optional(),
 });
 export type Approval = z.infer<typeof Approval>;
 

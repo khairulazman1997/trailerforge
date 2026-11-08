@@ -14,7 +14,7 @@ import {
   importExample,
   PROJECT_TEMPLATE_ID,
   EC_TEMPLATES,
-  EFFECTCRAFT_VERSION,
+  EFFECTCRAFT_TESTED_VERSION,
   authorEffect,
   effectWire,
   cachedMotionFrames,
@@ -75,7 +75,7 @@ const Stored = z.object({
 const PROPOSAL_ID = /^fx_[0-9a-f]{12}$/;
 const proposalsDir = (store: ProjectStore) => join(store.paths.cache, 'effectcraft', 'proposals');
 
-/** The bundled EffectCraft, ready, or why not. */
+/** The installed EffectCraft, ready, or why not. */
 export async function effectcraftRenderer(engine: Engine): Promise<EffectCraftRenderer> {
   const r = engine.plugins.registries.motionRenderers.get('effectcraft/cli');
   if (!(r instanceof EffectCraftRenderer))
@@ -542,39 +542,39 @@ export async function shownReferenceStills(
 }
 
 export interface EffectCraftStatus {
-  /** `ready`; `not-bundled` (no CLI in this build); `missing` (the file is gone); `wrong-version`; `broken` (does not start). */
-  state: 'ready' | 'not-bundled' | 'missing' | 'wrong-version' | 'broken';
-  /** The version the app is built for. */
-  pinned: string;
+  /**
+   * `ready`; `not-installed` (no EffectCraft found); `missing` (the file named is gone);
+   * `incompatible` (too old, or lacks a command this app sends); `broken` (does not start).
+   */
+  state: 'ready' | 'not-installed' | 'missing' | 'incompatible' | 'broken';
+  /** The version this app was tested with. */
+  tested: string;
   /** The version found, when it started. */
   version?: string;
+  /** The CLI used (from `TFORGE_EFFECTCRAFT` or the installed copy). */
+  path?: string;
+  /** Ready but not the tested version: says so. */
+  note?: string;
   /** Why it is not ready, in plain words. */
   reason?: string;
   /** The shipped templates: usable ids (listed in the pickers) and what is wrong with the others. */
   templates: { available: string[]; problems: string[] };
 }
 
-/** Is the bundled EffectCraft usable, and which of its templates? Reads only; starts the CLI once. */
+/** Is the installed EffectCraft usable, and which of its templates? Reads only; starts the CLI once. */
 export async function effectcraftStatusOp(engine: Engine): Promise<EffectCraftStatus> {
   const r = engine.plugins.registries.motionRenderers.get('effectcraft/cli');
   const reg = engine.plugins.registries.graphicTemplates;
   const available = EC_TEMPLATES.filter((d) => reg.get(d.id)).map((d) => d.id);
-  const base = { pinned: EFFECTCRAFT_VERSION };
+  const base = { tested: EFFECTCRAFT_TESTED_VERSION };
   if (!(r instanceof EffectCraftRenderer))
-    return { ...base, state: 'not-bundled', reason: 'EffectCraft is not part of this build', templates: { available, problems: [] } }; // prettier-ignore
+    return { ...base, state: 'not-installed', reason: 'EffectCraft is not installed', templates: { available, problems: [] } }; // prettier-ignore
   const a = await r.available();
-  const problems = r.templateProblems();
+  const path = r.cliPath();
+  const where = path ? { path } : {};
   if (a.ok)
-    return { ...base, state: 'ready', version: a.version ?? EFFECTCRAFT_VERSION, templates: { available, problems } }; // prettier-ignore
-  const state = /not bundled/.test(a.reason)
-    ? 'not-bundled'
-    : /is missing at/.test(a.reason)
-      ? 'missing'
-      : /not the pinned/.test(a.reason)
-        ? 'wrong-version'
-        : 'broken';
-  const found = /effectcraft-cli (\d+\.\d+\.\d+\S*) is not the pinned/.exec(a.reason)?.[1];
-  return { ...base, state, ...(found ? { version: found } : {}), reason: a.reason, templates: { available, problems } }; // prettier-ignore
+    return { ...base, ...where, state: 'ready', version: a.version, ...(a.note ? { note: a.note } : {}), templates: { available, problems: r.templateProblems() } }; // prettier-ignore
+  return { ...base, ...where, state: a.kind, ...(a.version ? { version: a.version } : {}), reason: a.reason, templates: { available, problems: [] } }; // prettier-ignore
 }
 
 /** The PNG of one preview frame of a proposal (for the app to show), or null when it is not there. */
@@ -725,7 +725,7 @@ export async function exportEffectOp(
 }
 
 /**
- * Bring a polished copy back: EffectCraft must open it cleanly with the pinned schema and it must
+ * Bring a polished copy back: EffectCraft must open it cleanly and it must
  * still hold the effect's `tf-effect` composition. It is stored as `media/<sha256>.ecproj` and the
  * effect draws it from then on, as one undoable step with a decision record; the old project stays.
  */

@@ -82,6 +82,11 @@ export function EffectsPanel({ id }: { id: string }) {
             Describe a motion graphic in your own words and the AI writes it for EffectCraft. You
             see a preview first; nothing is added until you accept it.
           </p>
+          {status.note && (
+            <p className="hint" data-testid="effectcraft-note">
+              {status.note}.
+            </p>
+          )}
           <div className="row">
             <button type="button" onClick={() => setOpen(true)} disabled={running}>
               Describe an effect…

@@ -1,8 +1,9 @@
-// A stand-in for `effectcraft-cli` 0.9.2 for the adapter's contract tests:
+// A stand-in for `effectcraft-cli` 0.22.0 for the adapter's contract tests:
 // `node stub-cli.mjs <mode> <effectcraft-cli args…>`. It speaks the subset TrailerForge uses
-// (`--version`, `run`, `info`, `render` of a project or a template) with the real CLI's shapes:
-// `{"error": …}` on stdout and exit 1 on failure, numbered PNG frames plus a render log.
-// Modes: ok | old (reports 0.8.0) | slow (frames take 150 ms each) | no-alpha | wrong-size |
+// (`--version`, `commands --json`, `run`, `info`, `render` of a project or a template) with the
+// real CLI's shapes: `{"error": …}` on stdout and exit 1 on failure, numbered PNG frames plus a
+// render log. Modes: ok | old (reports 0.8.0) | newer (reports 0.30.0) | lacking (has no
+// keys.toggleHold) | slow (frames take 150 ms each) | no-alpha | wrong-size |
 // fail-render | drift (different frames every run) | env:<file> (writes its environment to <file>).
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
@@ -37,9 +38,23 @@ const opt = (name) => {
   return i >= 0 ? argv[i + 1] : undefined;
 };
 
+const V = mode === 'old' ? '0.8.0' : mode === 'newer' ? '0.30.0' : '0.22.0';
+// Everything TrailerForge sends, plus a few it never uses (as the real list has hundreds).
+const LISTED = [
+  ...KNOWN,
+  ...['layer.newShape', 'layer.newAdjustment', 'layer.rename', 'layer.setSwitch'],
+  ...['layer.addShapeItem', 'layer.setParent', 'keys.easyEaseIn', 'keys.easyEaseOut'],
+  ...['effect.apply', 'layer.newNull', 'file.newProject', 'file.save'],
+].filter((id) => !(mode === 'lacking' && id === 'keys.toggleHold'));
+
 if (mode.startsWith('env:')) writeFileSync(mode.slice(4), JSON.stringify(process.env));
 if (argv[0] === '--version') {
-  process.stdout.write(`effectcraft-cli ${mode === 'old' ? '0.8.0' : '0.9.2'}\n`);
+  process.stdout.write(`effectcraft-cli ${V}\n`);
+  process.exit(0);
+}
+if (argv[0] === 'commands') {
+  const list = [...new Set(LISTED)].map((id) => ({ enabled: true, id, label: id }));
+  process.stdout.write(JSON.stringify(list) + '\n');
   process.exit(0);
 }
 
@@ -68,7 +83,7 @@ const load = (path) => {
 
 if (cmd === 'run') {
   const project = argv.includes('--empty')
-    ? { savedBy: '0.9.2', schema: 2, comps: [], log: [] }
+    ? { savedBy: V, schema: 2, comps: [], log: [] }
     : load(opt('--project'));
   const results = [];
   for (let i = 0; i < pos.length; i++) {
@@ -91,7 +106,7 @@ if (cmd === 'run') {
         .map(([, p]) => p.name);
       writeFileSync(
         params.path,
-        JSON.stringify({ savedBy: '0.9.2', schema: 2, controls, comps: project.comps.slice(-1) }),
+        JSON.stringify({ savedBy: V, schema: 2, controls, comps: project.comps.slice(-1) }),
       );
     }
     results.push({ command: id, result });
@@ -104,7 +119,7 @@ if (cmd === 'run') {
 
 if (cmd === 'info') {
   const p = load(pos[0]);
-  process.stdout.write(JSON.stringify({ version: '0.9.2', mode: 'headless', project: p }) + '\n');
+  process.stdout.write(JSON.stringify({ version: V, mode: 'headless', project: p }) + '\n');
   process.exit(0);
 }
 

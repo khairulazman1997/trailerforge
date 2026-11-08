@@ -10,7 +10,13 @@ import { sampleProject } from '@trailerforge/schema/fixtures';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { EffectCraftCli, buildTemplateFiles } from '@trailerforge/effectcraft';
 import { Engine } from './engine.js';
-import { buildVersion, renderGraphics } from './render-ops.js';
+import {
+  approveVersionOp,
+  buildVersion,
+  rendererChange,
+  renderGraphics,
+  reviewViewOp,
+} from './render-ops.js';
 
 /** M10 10.3: EffectCraft graphics through the build, the frame cache and the compiler (stub CLI). */
 
@@ -157,7 +163,7 @@ describe('EffectCraft graphics in a render', { timeout: 120_000 }, () => {
       const b = await buildVersion(bare, s, null);
       expect(b.motion).toEqual([]);
       expect(b.warnings.join('\n')).toMatch(
-        /"it_title" needs EffectCraft, which is not available: EffectCraft is not bundled/,
+        /"it_title" needs EffectCraft, which is not available: EffectCraft is not installed/,
       );
     } finally {
       await bare.close();
@@ -247,6 +253,51 @@ describe('shipped EffectCraft templates', { timeout: 120_000 }, () => {
     ).toEqual([]);
   });
 
+  it('an EffectCraft update makes the approval stale, and Review says why', async () => {
+    const first = await open('upd', {
+      effectcraft: { bin: process.execPath, prefixArgs: [STUB, 'ok'] },
+      effectcraftTemplates: templatesDir,
+    });
+    const dir = join(root, 'upd.tforge');
+    try {
+      first.s.dispatch('core/timeline.set', {
+        timeline: cardTimeline(ids[0]!, { width: 1920, height: 1080 }, 2),
+      });
+      expect((await buildVersion(first.eng, first.s, null)).renderers).toEqual({ EffectCraft: '0.22.0' }); // prettier-ignore
+      await approveVersionOp(first.eng, first.s, { variantId: null });
+      expect(first.s.state.review.approvals[0]).toMatchObject({ renderers: { EffectCraft: '0.22.0' } }); // prettier-ignore
+      expect((await reviewViewOp(first.eng, first.s))[0]).toMatchObject({ approval: 'approved' });
+      await first.s.save();
+    } finally {
+      await first.eng.close();
+    }
+    const eng = await Engine.start({
+      home: join(root, 'upd-2'),
+      autosaveMs: 0,
+      loadUserPlugins: false,
+      effectcraft: { bin: process.execPath, prefixArgs: [STUB, 'newer'] },
+      effectcraftTemplates: templatesDir,
+    });
+    try {
+      const s = await eng.openProject(dir);
+      expect((await reviewViewOp(eng, s))[0]).toMatchObject({
+        approval: 'stale',
+        staleBecause: 'EffectCraft was updated (0.22.0 → 0.30.0) since this was approved',
+      });
+    } finally {
+      await eng.close();
+    }
+  });
+
+  it('rendererChange names only renderers whose version changed', () => {
+    expect(rendererChange(undefined, { EffectCraft: '1.0.0' })).toBeUndefined();
+    expect(rendererChange({ EffectCraft: '1.0.0' }, { EffectCraft: '1.0.0' })).toBeUndefined();
+    expect(rendererChange({ EffectCraft: '1.0.0' }, {})).toBeUndefined();
+    expect(rendererChange({ EffectCraft: '1.0.0' }, { EffectCraft: '1.1.0' })).toBe(
+      'EffectCraft was updated (1.0.0 → 1.1.0) since this was approved',
+    );
+  });
+
   it('draw with EffectCraft at the template size and scaled down, fall back otherwise', async () => {
     const { eng, s } = await open('tpl', {
       effectcraft: { bin: process.execPath, prefixArgs: [STUB, 'ok'] },
@@ -298,7 +349,7 @@ describe('shipped EffectCraft templates', { timeout: 120_000 }, () => {
       expect(b.motion).toEqual([]);
       expect(b.scenes.map((x) => x.templateId)).toEqual(['core/logo-card']);
       expect(b.warnings.join('\n')).toMatch(
-        /Logo sting \(EffectCraft\) needs EffectCraft, which is not available \(EffectCraft is not bundled with this build\); drawn with core\/logo-card instead/,
+        /Logo sting \(EffectCraft\) needs EffectCraft, which is not available \(EffectCraft is not installed\); drawn with core\/logo-card instead/,
       );
       const { frames } = await renderGraphics(s, b, undefined);
       expect(frames.get('it_card')!.frames).toBe(60);
