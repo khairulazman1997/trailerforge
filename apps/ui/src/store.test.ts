@@ -250,6 +250,7 @@ class Fake {
       ({ id: 'd', status: 'succeeded', result: { projectId: 'p1', dir: '/p' } }) as never,
     setupAnalysis: async () => ({ id: 't', kind: 'analysis-setup', status: 'running' }) as never,
     critiqueFacts: async () => ({ variantId: null, summary: ['x'], wire: {}, excluded: 0 }),
+    applyCritiqueFix: async () => ({ rebuilt: false, warnings: [] }),
     secrets: async () =>
       ({
         anthropicApiKey: { set: this.keySet, source: this.keySet ? 'stored' : null },

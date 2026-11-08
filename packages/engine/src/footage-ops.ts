@@ -38,7 +38,9 @@ import {
   type LibraryAsset,
   type Project,
   type ShotSlot,
+  type Storyboard,
   type TakeOrigin,
+  type Timeline,
 } from '@trailerforge/schema';
 import type { Engine } from './engine.js';
 import { OpError } from './ops.js';
@@ -410,7 +412,37 @@ export async function generateCutOp(
   store: ProjectStore,
   opts: { leadFrames?: number | undefined; signal?: AbortSignal | undefined } = {},
 ): Promise<CutOutcome> {
-  const sb = requireStoryboard(store);
+  const r = await buildCutTimeline(engine, store, opts);
+  store.dispatch('core/timeline.set', { timeline: r.timeline });
+  await appendDecisions(store.paths.decisions, r.decisions);
+  const items = r.timeline.tracks.flatMap((t) => t.items);
+  const attached = [...attachedAssets(store.state).keys()];
+  return {
+    timelineId: ROUGH_CUT_TIMELINE_ID,
+    items: items.length,
+    placeholders: items.filter((i) => i.kind === 'placeholder').length,
+    keptEdits: r.kept,
+    warnings: r.warnings,
+    unanalysed: attached.filter((id) => r.sources.has(id) && !r.sources.get(id)!.footage).length,
+  };
+}
+
+/**
+ * The rough cut built from a storyboard (the project's own unless given) and merged over the
+ * previous cut (the stored one unless given), without storing it. Sounds the cut uses are added to
+ * the library and the project, as for a rebuild.
+ */
+export async function buildCutTimeline(
+  engine: Engine,
+  store: ProjectStore,
+  opts: {
+    leadFrames?: number | undefined;
+    signal?: AbortSignal | undefined;
+    storyboard?: Storyboard | undefined;
+    previous?: Timeline | undefined;
+  } = {},
+) {
+  const sb = opts.storyboard ?? requireStoryboard(store);
   await engine.library.reload();
   const trackId = sb.music.trackAssetId;
   if (!trackId) throw new OpError('usage', 'choose a music track first (core/music.set-track)');
@@ -447,23 +479,18 @@ export async function generateCutOp(
   const assetIds = await attachSounds(engine, store, catalog.files, first.soundOptions);
   const built = first.soundOptions.length ? run({ catalog: catalog.catalog, assetIds }) : first;
   built.warnings.push(...catalog.warnings);
-  const previous = store.state.timelines.find((t) => t.id === ROUGH_CUT_TIMELINE_ID);
+  const previous =
+    opts.previous ?? store.state.timelines.find((t) => t.id === ROUGH_CUT_TIMELINE_ID);
   const merged = mergeRoughCut(previous, built.timeline, sources);
   // Captions follow their shot to wherever the merge put it.
   const captioned = placeCaptions(merged.timeline, sb);
-  store.dispatch('core/timeline.set', { timeline: captioned.timeline });
-  await appendDecisions(store.paths.decisions, built.decisions);
-
-  const items = captioned.timeline.tracks.flatMap((t) => t.items);
-  const attached = [...attachedAssets(store.state).keys()];
   return {
-    timelineId: ROUGH_CUT_TIMELINE_ID,
-    items: items.length,
-    placeholders: items.filter((i) => i.kind === 'placeholder').length,
-    keptEdits: merged.kept,
+    timeline: captioned.timeline,
+    decisions: built.decisions,
+    kept: merged.kept,
+    sources,
     // Caption notes are already in the built cut's warnings; the re-placement repeats them.
     warnings: [...new Set([...built.warnings, ...merged.warnings, ...captioned.warnings])],
-    unanalysed: attached.filter((id) => sources.has(id) && !sources.get(id)!.footage).length,
   };
 }
 

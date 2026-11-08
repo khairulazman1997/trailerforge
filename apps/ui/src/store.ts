@@ -104,6 +104,7 @@ export type ClientLike = Pick<
   | 'approveVersion'
   | 'quality'
   | 'critiqueFacts'
+  | 'applyCritiqueFix'
   | 'draft'
   | 'createDefaultVariants'
   | 'brand'
@@ -1114,6 +1115,17 @@ export class AppStore {
     } catch {
       // No storyboard yet, or the engine is busy: the page shows what it can.
     }
+  }
+
+  /**
+   * Applies a critique note's fix and rebuilds the rough cut with it, so drafts and exports show
+   * the change (one undo step). Returns false on failure.
+   */
+  async applyCritiqueFix(projectId: string, commentId: string): Promise<boolean> {
+    const r = await this.run((c) => c.applyCritiqueFix(projectId, commentId));
+    if (!r) return false;
+    if (r.warnings.length) this.toast('info', r.warnings.join(' '));
+    return true;
   }
 
   /** Builds or rebuilds the rough cut (one undo step); returns what happened, or null on failure. */

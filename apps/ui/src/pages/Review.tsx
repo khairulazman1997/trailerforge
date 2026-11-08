@@ -401,9 +401,7 @@ function CommentList({
                   className="primary"
                   disabled={disabled}
                   aria-label={`Apply the suggestion at ${formatTime(seconds(c.at))} seconds: ${c.fix.summary}`}
-                  onClick={() =>
-                    void store.command(id, 'core/critique.apply-fix', { commentId: c.id })
-                  }
+                  onClick={() => void store.applyCritiqueFix(id, c.id)}
                 >
                   Apply
                 </button>

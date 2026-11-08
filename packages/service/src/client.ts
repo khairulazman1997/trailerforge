@@ -27,6 +27,7 @@ export type {
   WatchedFoldersView,
 } from '@trailerforge/engine';
 import type {
+  ApplyFixOutcome,
   CritiqueFactsView,
   HealthReport,
   LlmPreview,
@@ -588,6 +589,14 @@ export class ServiceClient {
       'POST',
       `/v1/projects/${encodeURIComponent(id)}/review/approve`,
       { variantId, ...(note ? { note } : {}) },
+    );
+  }
+  /** Applies a critique note's fix and rebuilds the rough cut with it (one undo step). */
+  applyCritiqueFix(id: string, commentId: string) {
+    return this.request<ApplyFixOutcome>(
+      'POST',
+      `/v1/projects/${encodeURIComponent(id)}/review/critique/${encodeURIComponent(commentId)}/apply`,
+      {},
     );
   }
   /** What a critique of this version would send, in words and as data. Sends nothing. */

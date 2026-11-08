@@ -1,5 +1,5 @@
 import { CommandError, defineCommand, type CommandDef } from '@trailerforge/core';
-import { CritiqueFix, Flicks, Id, IsoDateTime, mintId } from '@trailerforge/schema';
+import { CritiqueFix, Flicks, Id, IsoDateTime, Timeline, mintId } from '@trailerforge/schema';
 import { removeSlot, updateSlot } from '@trailerforge/storyboard';
 import { z } from 'zod';
 
@@ -60,12 +60,16 @@ export const addCritique = defineCommand({
   },
 });
 
-/** Do what a critique note suggests, and mark the note resolved: one undo step. */
+/**
+ * Do what a critique note suggests, and mark the note resolved: one undo step. `timeline` is the
+ * rough cut rebuilt for the changed storyboard (`applyCritiqueFixOp` makes it), stored in the same
+ * step so drafts and exports show the change.
+ */
 export const applyCritiqueFix = defineCommand({
   type: 'core/critique.apply-fix',
-  payload: z.strictObject({ commentId: Id }),
+  payload: z.strictObject({ commentId: Id, timeline: Timeline.optional() }),
   label: () => 'Apply a critique suggestion',
-  apply: (d, { commentId }) => {
+  apply: (d, { commentId, timeline }) => {
     const type = 'core/critique.apply-fix';
     const c = d.review.comments.find((x) => x.id === commentId);
     if (!c) throw new CommandError(type, `no comment "${commentId}"`);
@@ -91,6 +95,11 @@ export const applyCritiqueFix = defineCommand({
     }
     const note = d.review.comments.find((x) => x.id === commentId);
     if (note) note.resolved = true;
+    if (timeline) {
+      const i = d.timelines.findIndex((t) => t.id === timeline.id);
+      if (i >= 0) d.timelines[i] = timeline;
+      else d.timelines.push(timeline);
+    }
   },
 });
 

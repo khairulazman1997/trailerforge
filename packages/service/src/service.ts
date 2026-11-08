@@ -62,6 +62,7 @@ import {
   presetsViewOp,
   createDemoOp,
   critiqueFactsOp,
+  applyCritiqueFixOp,
   healthOp,
   setupSidecarOp,
   critiqueOp,
@@ -891,6 +892,15 @@ export async function startService(opts: ServiceOptions): Promise<RunningService
           .default({})
           .parse(await body().catch(() => ({})));
         return qualityOp(engine, storeById(params.id!), versionParam(params.version!), o.overrides);
+      },
+    ],
+    [
+      'POST',
+      /^\/v1\/projects\/(?<id>[^/]+)\/review\/critique\/(?<comment>[^/]+)\/apply$/,
+      async ({ params }) => {
+        const store = storeById(params.id!);
+        notBusy(store);
+        return applyCritiqueFixOp(engine, store, decodeURIComponent(params.comment!));
       },
     ],
     [
