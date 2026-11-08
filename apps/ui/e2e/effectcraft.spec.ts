@@ -91,7 +91,9 @@ test('describe an effect: see what is sent, preview it, add it to the cut, undo,
 
   await card.getByRole('button', { name: 'Add it to the cut' }).click();
   await expect.poll(() => effects().length).toBe(1);
-  await expect(page.getByRole('article', { name: 'Effect Ember burst' })).toBeVisible();
+  await expect(
+    page.getByRole('article', { name: 'Effect Ember burst', exact: true }),
+  ).toBeVisible();
   await undo(page).click();
   await expect.poll(() => effects().length).toBe(0);
 
@@ -152,7 +154,7 @@ test('open an accepted effect in EffectCraft and bring the edited copy back (one
   await expect(card).toBeVisible({ timeout: 30_000 });
   await card.getByLabel(/Start at/).fill('0');
   await card.getByRole('button', { name: 'Add it to the cut' }).click();
-  const item = page.getByRole('article', { name: 'Effect Ember burst' });
+  const item = page.getByRole('article', { name: 'Effect Ember burst', exact: true });
   await expect(item).toBeVisible();
   const before = projectOf();
 
