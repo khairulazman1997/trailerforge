@@ -81,6 +81,19 @@ function isImageSchema(p: Record<string, unknown>): boolean {
   return p.type === 'object' && !!props && 'hash' in props && 'ext' in props;
 }
 
+const CHOICE_LABELS: Record<string, Record<string, string>> = {
+  imagePlacement: {
+    background: 'Behind the text (darkened)',
+    above: 'Above the text',
+    only: 'Picture only (no text)',
+  },
+};
+
+/** What a choice is called in a select: a friendly name where one is known, else the value. */
+export function choiceLabel(field: string, value: string): string {
+  return CHOICE_LABELS[field]?.[value] ?? value;
+}
+
 /** The defaults an effect or transition gets when picked: every field that has one. */
 export function defaultsOf(schema: unknown): Record<string, string | number | boolean> {
   return Object.fromEntries(

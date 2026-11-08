@@ -5,7 +5,7 @@ import { GraphicPreview } from '../components/GraphicPreview.js';
 import { Link, projectPath } from '../router.js';
 import { busyTask, type Catalog } from '../store.js';
 import { FileImport } from '../components/FileImport.js';
-import { fieldsOf, previewFrame, type Field } from '../graphics-view.js';
+import { choiceLabel, fieldsOf, previewFrame, type Field } from '../graphics-view.js';
 
 type Template = Catalog['templates'][number];
 type Value = string | number | boolean;
@@ -197,6 +197,8 @@ function Editor({
     params?: Record<string, unknown>;
   }) => (item.kind === 'card' ? update(change) : setOverlay(change));
 
+  // A card showing only its picture draws none of its text, so its text fields are hidden.
+  const pictureOnly = !!params.image && params.imagePlacement === 'only';
   const merged = { ...params, ...(hasText ? { text } : {}) };
   const preview = previewFrame({
     templateId: item.templateId,
@@ -236,7 +238,10 @@ function Editor({
             ))}
           </select>
         </label>
-        {hasText && (
+        {pictureOnly && (
+          <p>Only the picture is shown; the card&apos;s text is kept but not drawn.</p>
+        )}
+        {hasText && !pictureOnly && (
           <label>
             Text
             <input
@@ -249,6 +254,7 @@ function Editor({
         )}
         {fields
           .filter((f) => f.name !== 'imagePlacement' || params.image)
+          .filter((f) => !pictureOnly || f.name === 'image' || f.name === 'imagePlacement')
           .map((f) =>
             f.kind === 'image' ? (
               <ImageInput
@@ -369,7 +375,7 @@ function ImageInput({
       <p>{value ? `Using ${value.name}.` : 'No picture.'}</p>
       <FileImport
         label="Picture file (PNG, JPEG or SVG)"
-        hint="It is copied into the project. Behind the text it is darkened so the words stay readable."
+        hint="It is copied into the project. Behind the text it is darkened so the words stay readable; choose Picture only to show it as it is."
         disabled={disabled}
         onImport={onPick}
       />
@@ -421,7 +427,7 @@ function FieldInput({
         >
           {f.choices!.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {choiceLabel(f.name, c)}
             </option>
           ))}
         </select>

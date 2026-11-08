@@ -210,6 +210,17 @@ describe('built-in templates', () => {
       expect(top).toMatchObject({ kind: 'image' });
       for (const l of above.scene.layers.filter((x) => x.kind === 'text'))
         expect(l.box.y).toBeGreaterThanOrEqual(top.box.y + top.box.h);
+
+      // On its own: the whole frame, no shade, none of the card's text.
+      const only = build(t.id, HD, {
+        ...(SAMPLE[t.id] as object),
+        image,
+        imagePlacement: 'only',
+      });
+      expect(only.scene.layers).toHaveLength(1);
+      expect(only.scene.layers[0]).toMatchObject({ kind: 'image', fit: 'cover' });
+      expect(only.scene.layers[0]!.box).toEqual({ x: 0, y: 0, w: HD.width, h: HD.height });
+      expect(checkScene(only.scene, only.safe)).toEqual([]);
     }
     // Without a picture nothing changes (the goldens hold that too).
     expect(build('core/title-card', HD, SAMPLE['core/title-card']).scene.layers[0]!.kind).toBe(

@@ -21,12 +21,17 @@ export const CardImage = z.strictObject({
 });
 export type CardImage = z.infer<typeof CardImage>;
 
-/** Every card can show a picture: behind the text (darkened so the text reads), or above it. */
+/**
+ * Every card can show a picture: behind the text (darkened so the text reads), above it, or on
+ * its own (`only`: the picture fills the frame as it is, the card's text is not drawn).
+ */
+export const IMAGE_PLACEMENTS = ['background', 'above', 'only'] as const;
+export type ImagePlacement = (typeof IMAGE_PLACEMENTS)[number];
 const ImageParams = {
   image: CardImage.optional(),
-  imagePlacement: z.enum(['background', 'above']).default('background'),
+  imagePlacement: z.enum(IMAGE_PLACEMENTS).default('background'),
 };
-type ImageParams = { image?: CardImage | undefined; imagePlacement: 'background' | 'above' };
+type ImageParams = { image?: CardImage | undefined; imagePlacement: ImagePlacement };
 
 /** How much of the background colour lies over a background picture, so text stays readable. */
 export const IMAGE_SHADE = 0.6;
@@ -57,6 +62,12 @@ function card<P extends Params>(def: {
       if (!image) return scene(ctx as TemplateContext<unknown>, def.build(ctx));
       const href = `media/${image.hash}.${image.ext}`;
       const opacity = fade(ctx.duration);
+      if (imagePlacement === 'only') {
+        const full = { x: 0, y: 0, w: ctx.size.width, h: ctx.size.height };
+        return scene(ctx as TemplateContext<unknown>, [
+          { id: 'image', kind: 'image', href, fit: 'cover', box: full, animation: { opacity } },
+        ]);
+      }
       if (imagePlacement === 'background') {
         const full = { x: 0, y: 0, w: ctx.size.width, h: ctx.size.height };
         return scene(ctx as TemplateContext<unknown>, [

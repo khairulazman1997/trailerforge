@@ -232,8 +232,14 @@ test('graphics: a card gets a picture, behind the text or above it, and undo rem
   await expect(frame.locator('image[href^="data:image/png"]')).toHaveCount(1);
   await expect(frame.locator('image')).toHaveAttribute('preserveAspectRatio', 'xMidYMid slice');
 
+  await page.getByLabel('Image placement').selectOption('only');
+  await expect(frame.locator('image')).toHaveAttribute('preserveAspectRatio', 'xMidYMid slice');
+  await expect(frame.locator('text')).toHaveCount(0);
+  await expect(page.getByLabel('Text', { exact: true })).toHaveCount(0);
+
   await page.getByLabel('Image placement').selectOption('above');
   await expect(frame.locator('image')).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
+  await expect(page.getByLabel('Text', { exact: true })).toBeVisible();
   expect(await axe(page)).toEqual([]);
 
   // The card in the project carries it; undo walks it back.
