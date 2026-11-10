@@ -56,7 +56,7 @@ export const BASIC_EFFECT_COMMANDS: readonly string[] = [
 /**
  * The compositing and type commands that make an effect look like trailer motion graphics rather
  * than a plain card: blend modes, track mattes, masks, text animators and presets, the built-in
- * animation presets, layer styles and gradients. All work inside the project and touch no file.
+ * animation presets and layer styles. All work inside the project and touch no file.
  * They are optional: a build without one of them is still usable, and the model is offered only
  * those the installed build lists (`offeredEffectCommands`).
  */
@@ -72,7 +72,6 @@ export const RICH_EFFECT_COMMANDS: readonly string[] = [
   'layer.style.gradientOverlay',
   'layer.style.stroke',
   'shape.fillStroke',
-  'prop.editGradient',
 ];
 
 /**

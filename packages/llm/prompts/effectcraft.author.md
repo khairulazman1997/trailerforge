@@ -43,12 +43,12 @@ Give every layer a "name" when you create it and refer to it by that name. Never
 
 Layers:
 
-- layer.newText {name, text, position [x, y], font (family), style ("Regular" | "Bold"), size (px), fill (hex), justify (left | center | right), tracking, leading}. Keep text short and inside the middle 80% of the picture. Text must come from the words or the brand.
+- layer.newText {name, text, position [x, y], font (family), style ("Regular" | "Bold"), size (px), fill (hex), justify (left | center | right), tracking, leading, stroke (hex), strokeWidth (px), applyFill (true | false), applyStroke (true | false)}. For an outline-only title set applyFill false, applyStroke true, a stroke colour and strokeWidth. Keep text short and inside the middle 80% of the picture. Text must come from the words or the brand.
 - layer.newSolid {name, color (hex), width, height}: centred in the composition; move it with transform/position.
-- layer.newShape {name, kind (rectangle | ellipse | polygon)}, layer.addShapeItem, shape.fillStroke {layer, fill?, stroke?, strokeWidth?}: thin lines and bars only.
-- layer.newNull {name}, layer.setParent {layer, parent}: move several layers together.
+- layer.newShape {name, kind (rect | rounded | ellipse | polygon), size [w, h], position [x, y], fill?, stroke?, strokeWidth?}, layer.addShapeItem {layer, kind}, shape.fillStroke {layers: [names], fillType? (none | solid | linear | radial), strokeType?, fill?, stroke?, strokeWidth?}: thin lines and bars only.
+- layer.newNull {name}, layer.setParent {layers: [names], parent}: move several layers together.
 - layer.newAdjustment {name}: effects on it apply to every layer below.
-- layer.rename {layer, name}, layer.setSwitch {layer, switch, value}.
+- layer.rename {layer, name}, layer.setSwitch {layers: [names], switch, value}.
 
 Properties and keyframes:
 
@@ -61,7 +61,7 @@ Compositing:
 - layer.setBlendMode {layers: [names], mode}: mode "Normal", "Screen", "Add", "Overlay", "Soft Light", "Multiply" and the rest of After Effects' list. Use Screen or Add for light, Overlay or Soft Light for colour washes. It mixes only with the effect's own layers below.
 - layer.setTrackMatte {layer, matte: name of the matte layer or null, kind: "alpha" | "alphaInverted" | "luma" | "lumaInverted" | "preserve"}: the layer shows only where the matte layer is opaque ("alpha") or bright ("luma"). Create the matte layer right after the layer it mattes (directly above it); the matte itself is not drawn. Animate the matte (position, scale, opacity) to animate the reveal.
 - layer.addMask {layer, shape: "rect" | "ellipse" | "rounded" | "polygon", rect [x, y, w, h] in the layer's pixels, roundness?, mode?}, then feather it with prop.set "masks/#1/feather" or the layer.mask.* / mask.featherPoint.* commands listed above.
-- layer.style.gradientOverlay {layers, colors [hex, …], angle?, opacity?}, layer.style.stroke {layers, color, size}: layer styles. prop.editGradient {layer, path, stops: [{at 0..1, color}]}: the colours of a gradient property.
+- layer.style.gradientOverlay {layers: [names]}, layer.style.stroke {layers: [names]}: add the layer style with its default settings; they take no colour or size. For an outlined title use layer.newText's stroke parameters instead.
 
 Type animation:
 
@@ -73,7 +73,7 @@ Type animation:
 Presets and effects:
 
 - anim.applyBuiltinPreset {preset, layers: [names]}. Transitions: "fadeIn", "wipeInFromLeft", "diagonalSweepIn", "lineSweepIn", "lensPopIn", "clockReveal" … Backgrounds (apply to a full-frame black solid): "emberHaze", "darkSmoke", "slowFog", "sweepingLight", "bokehDrift", "auroraVeil", "grainyWash" … Behaviours: "floatUpDown", "breathe", "wiggleSoft" (slow drift only). Refused: strobe, shake, flicker, blink, jitterScale, bouncingBall, rubberBand, wobble, heartbeat.
-- effect.apply {layer, effect}: "Gaussian Blur", "Glow", "Fill", "Drop Shadow", … then prop.set {layer, path: "effects/#1/<parameter>", value}.
+- effect.apply {layers: [names], effect}: "Gaussian Blur", "Glow", "Fill", "Drop Shadow", … then prop.set {layer, path: "effects/#1/<parameter>", value}.
 
 {{reported}}
 
@@ -83,7 +83,7 @@ Presets and effects:
 - Per-letter reveal: a text animator with opacity 0, blur and extra tracking (or a small position offset), its range selector's start keyframed 0 → 100 and eased; letters resolve one after another. Add a slow scale of the whole layer from 103% to 100% under it.
 - Feathered wipe: a solid larger than the thing it reveals, blurred (Gaussian Blur 40 to 120: the blur is the feather), keyframed sideways, used as the alpha matte; or an animated mask with feather.
 - Atmosphere: a full-frame black solid with emberHaze, darkSmoke, slowFog, bokehDrift or auroraVeil; a second identical solid directly above as its luma matte, so the black disappears and only the light shows over the video; opacity 25 to 50, faded in and out. Mask it (ellipse, feathered) to keep it to part of the frame.
-- Stroke then fill: an outline copy of the title (layer.style.stroke 1 to 3 px, its own opacity low) appears first; the filled title is revealed over it a moment later by a feathered wipe or a per-letter reveal.
+- Stroke then fill: an outline copy of the title (layer.newText with applyFill false, applyStroke true, strokeWidth 1 to 3 px; its own opacity low) appears first; the filled title is revealed over it a moment later by a feathered wipe or a per-letter reveal.
 - Glint or glow on the hit: Glow on the title, its intensity or the layer's opacity keyframed up and back once, eased.
 
 ## Worked examples

@@ -4,9 +4,8 @@ import type { AuthoredEffect } from './effect-spec.js';
  * Worked examples of trailer-grade effects, written for a 1920×1080, 30 fps, 3 s effect. They go
  * into the author prompt verbatim (`effectExamplesText`), the tests check them against the
  * allowlist, and `scripts/showcase.mjs` renders them with the installed EffectCraft so the looks
- * can be checked by eye. Property paths beyond `transform/*`, `text/sourceText` and
- * `effects/#n/<parameter>` follow EffectCraft's After Effects naming and are unverified until
- * the showcase has run on a real build.
+ * can be checked by eye. Verified with the showcase on EffectCraft 0.22.0 (2026-11-10): every
+ * example builds and renders identically twice.
  */
 export const EXAMPLE_SIZE = { width: 1920, height: 1080 } as const;
 export const EXAMPLE_FRAME_RATE = 30;
@@ -30,7 +29,11 @@ const keys = (layer: string, path: string, pairs: [number, Value][]): Cmd[] => [
     pairs.map(([t]) => t),
   ),
 ];
-const title = (name: string, text: string, extra: Record<string, string | Value> = {}): Cmd => ({
+const title = (
+  name: string,
+  text: string,
+  extra: Record<string, string | boolean | Value> = {},
+): Cmd => ({
   command: 'layer.newText',
   params: {
     name,
@@ -66,7 +69,7 @@ const lightSweep: AuthoredEffect = {
     { command: 'layer.newSolid', params: { name: 'Sweep', color: '#FFF6E0', width: 240, height: 1400 } }, // prettier-ignore
     { command: 'prop.set', params: { layer: 'Sweep', path: 'transform/rotation', value: 18 } },
     { command: 'prop.set', params: { layer: 'Sweep', path: 'transform/opacity', value: 80 } },
-    { command: 'effect.apply', params: { layer: 'Sweep', effect: 'Gaussian Blur' } },
+    { command: 'effect.apply', params: { layers: ['Sweep'], effect: 'Gaussian Blur' } },
     { command: 'prop.set', params: { layer: 'Sweep', path: 'effects/#1/Blurriness', value: 70 } },
     ...keys('Sweep', 'transform/position', [
       [0.9, [-240, 540]],
@@ -119,7 +122,7 @@ const letterReveal: AuthoredEffect = {
     ]),
     // A blurred solid sliding in from the left: its soft edge is the feathered wipe.
     { command: 'layer.newSolid', params: { name: 'Wipe', color: '#FFFFFF', width: 700, height: 200 } }, // prettier-ignore
-    { command: 'effect.apply', params: { layer: 'Wipe', effect: 'Gaussian Blur' } },
+    { command: 'effect.apply', params: { layers: ['Wipe'], effect: 'Gaussian Blur' } },
     { command: 'prop.set', params: { layer: 'Wipe', path: 'effects/#1/Blurriness', value: 60 } },
     ...keys('Wipe', 'transform/position', [
       [0.6, [180, 600]],
@@ -148,9 +151,14 @@ const emberOutline: AuthoredEffect = {
     { command: 'layer.newSolid', params: { name: 'Haze Luma', color: '#000000', width: 1920, height: 1080 } }, // prettier-ignore
     { command: 'anim.applyBuiltinPreset', params: { preset: 'emberHaze', layers: ['Haze Luma'] } },
     { command: 'layer.setTrackMatte', params: { layer: 'Haze', matte: 'Haze Luma', kind: 'luma' } },
-    // The outline: the title with a thin stroke, its own fill kept dim.
-    title('Outline', 'RISE OF EMBERS', { tracking: 260 }),
-    { command: 'layer.style.stroke', params: { layers: ['Outline'], color: '#F4F1EA', size: 2 } },
+    // The outline: the title drawn as a thin stroke only, no fill.
+    title('Outline', 'RISE OF EMBERS', {
+      tracking: 260,
+      applyFill: false,
+      applyStroke: true,
+      stroke: '#F4F1EA',
+      strokeWidth: 2,
+    }),
     ...keys('Outline', 'transform/opacity', [
       [0.2, 0],
       [0.8, 35],
@@ -164,7 +172,7 @@ const emberOutline: AuthoredEffect = {
       [2.95, 0],
     ]),
     { command: 'layer.newSolid', params: { name: 'Fill Wipe', color: '#FFFFFF', width: 1700, height: 400 } }, // prettier-ignore
-    { command: 'effect.apply', params: { layer: 'Fill Wipe', effect: 'Gaussian Blur' } },
+    { command: 'effect.apply', params: { layers: ['Fill Wipe'], effect: 'Gaussian Blur' } },
     { command: 'prop.set', params: { layer: 'Fill Wipe', path: 'effects/#1/Blurriness', value: 120 } }, // prettier-ignore
     ...keys('Fill Wipe', 'transform/position', [
       [1.0, [-900, 540]],
