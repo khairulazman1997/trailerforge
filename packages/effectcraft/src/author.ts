@@ -91,6 +91,8 @@ export async function authorEffect(
     base?: { project: string; comps: string[] };
     /** Stills the user agreed to send, PNG base64; with the first request only. */
     images?: { mediaType: 'image/png'; data: string }[];
+    /** Font files (the brand's) EffectCraft is given while it builds the project. */
+    fonts?: readonly string[];
   },
 ): Promise<AuthorEffectResult> {
   const signal = o.signal ?? new AbortController().signal;
@@ -115,12 +117,13 @@ export async function authorEffect(
             })),
             o.dest,
             signal,
-            { base: o.base.project },
+            { base: o.base.project, ...(o.fonts ? { fonts: o.fonts } : {}) },
           )
         : await deps.renderer.authorProject(
             effectCommands(effect, { ...req.size, frameRate: req.frameRate, seconds: req.seconds }),
             o.dest,
             signal,
+            o.fonts ? { fonts: o.fonts } : {},
           );
     } catch (e) {
       if (e instanceof EffectCraftError && (e.code === 'failed' || e.code === 'bad-project'))

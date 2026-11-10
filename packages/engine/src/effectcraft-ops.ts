@@ -4,6 +4,7 @@ import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promis
 import { basename, join, relative, resolve } from 'node:path';
 import { analyzeReference } from '@trailerforge/analysis';
 import { probe, runTool } from '@trailerforge/media';
+import { fontFamilyName } from '@trailerforge/render';
 import { appendDecisions, type ProjectStore } from '@trailerforge/core';
 import {
   AuthoredEffect,
@@ -21,7 +22,13 @@ import {
   type EffectRequest,
 } from '@trailerforge/effectcraft';
 import { excludedTerms } from '@trailerforge/pack-game-trailer';
-import { FLICKS_PER_SECOND, flicksPerFrame, type Slot, type Timeline } from '@trailerforge/schema';
+import {
+  brandFilePath,
+  FLICKS_PER_SECOND,
+  flicksPerFrame,
+  type Slot,
+  type Timeline,
+} from '@trailerforge/schema';
 import { effectBriefOf } from '@trailerforge/storyboard';
 import { z } from 'zod';
 import type { Engine } from './engine.js';
@@ -85,6 +92,27 @@ export async function effectcraftRenderer(engine: Engine): Promise<EffectCraftRe
   return r;
 }
 
+/**
+ * The brand's font files (those present in the project) and the family names EffectCraft knows
+ * them by: the name inside the file, else the one the brand declares. EffectCraft runs in an
+ * isolated environment and never sees fonts the user installed for themselves, so these files go
+ * with every run that may draw text.
+ */
+export async function brandFontsForEffectCraft(
+  store: ProjectStore,
+): Promise<{ files: string[]; families: string[] }> {
+  const files: string[] = [];
+  const families: string[] = [];
+  for (const f of store.state.brand?.fonts ?? []) {
+    const path = join(store.paths.dir, brandFilePath(f.file));
+    const bytes = await readFile(path).catch(() => null);
+    if (bytes) files.push(path);
+    const family = (bytes && f.file.ext !== 'woff2' && fontFamilyName(bytes)) || f.family;
+    if (!families.includes(family)) families.push(family);
+  }
+  return { files, families };
+}
+
 export function masterTimeline(store: ProjectStore): Timeline {
   const tl =
     store.state.timelines.find((t) => t.id === 'tl_rough') ??
@@ -135,13 +163,14 @@ export async function authorEffectOp(
   const tl = masterTimeline(store);
   const rate = tl.frameRate.num / tl.frameRate.den;
   const brand = store.state.brand;
+  const fonts = await brandFontsForEffectCraft(store);
   const req: EffectRequest = {
     words: words || input.effect?.summary || '',
     seconds,
     ...(landAt !== undefined ? { landAt } : {}),
     size: tl.resolution,
     frameRate: rate,
-    brand: brand ? { colors: brand.colors, fonts: brand.fonts.map((f) => f.family) } : null,
+    brand: brand ? { colors: brand.colors, fonts: fonts.families } : null,
   };
   const id = `fx_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
   const dir = join(proposalsDir(store), id);
@@ -199,6 +228,7 @@ export async function authorEffectOp(
       terms: excludedTerms(store.state.knowledge),
       dest: join(dir, 'effect.ecproj'),
       signal,
+      fonts: fonts.files,
       ...(input.effect ? { given: input.effect } : {}),
       ...(base ? { base } : {}),
       ...(images ? { images } : {}),
@@ -213,6 +243,7 @@ export async function authorEffectOp(
         duration,
         resolution: tl.resolution,
         frameRate: tl.frameRate,
+        ...(fonts.files.length ? { fonts: fonts.files } : {}),
       },
       { cacheRoot: join(store.paths.cache, 'render-frames'), signal },
     );
@@ -627,6 +658,7 @@ export async function effectRequestPreviewOp(
 ): Promise<EffectRequestPreview> {
   const tl = masterTimeline(store);
   const brand = store.state.brand;
+  const { families } = await brandFontsForEffectCraft(store);
   const wire = effectWire(
     {
       words: input.words,
@@ -634,7 +666,7 @@ export async function effectRequestPreviewOp(
       ...(input.landAt !== undefined ? { landAt: input.landAt } : {}),
       size: tl.resolution,
       frameRate: tl.frameRate.num / tl.frameRate.den,
-      brand: brand ? { colors: brand.colors, fonts: brand.fonts.map((f) => f.family) } : null,
+      brand: brand ? { colors: brand.colors, fonts: families } : null,
     },
     excludedTerms(store.state.knowledge),
   );
@@ -745,7 +777,9 @@ export async function reimportEffectOp(
     throw new OpError('usage', `the project has no "${comp}" composition; keep it when you edit`);
   let checked;
   try {
-    checked = await renderer.checkFile(file, opts.signal ?? new AbortController().signal);
+    checked = await renderer.checkFile(file, opts.signal ?? new AbortController().signal, {
+      fonts: (await brandFontsForEffectCraft(store)).files,
+    });
   } catch (e) {
     if (e instanceof EffectCraftError && e.code !== 'cancelled')
       throw new OpError('usage', `EffectCraft cannot use that project: ${e.message}`);

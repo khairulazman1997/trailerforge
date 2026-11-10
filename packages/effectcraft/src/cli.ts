@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
-import { delimiter, join } from 'node:path';
+import { copyFile, mkdir } from 'node:fs/promises';
+import { basename, delimiter, join } from 'node:path';
 import { parseCliVersion, parseCommandIds } from './compat.js';
 
 export type EffectCraftErrorCode =
@@ -124,6 +124,32 @@ export function isolatedEnv(cwd: string, parent: NodeJS.ProcessEnv = process.env
     TMP: tmp,
   });
   return env;
+}
+
+/**
+ * Where EffectCraft looks for a user's own fonts, inside a run folder whose environment is
+ * `isolatedEnv`: the per-user font folder of each platform, relative to the run's home/config.
+ */
+export function runFontDir(cwd: string, platform: NodeJS.Platform = process.platform): string {
+  if (platform === 'win32') return join(cwd, 'config', 'Microsoft', 'Windows', 'Fonts');
+  if (platform === 'darwin') return join(cwd, 'Library', 'Fonts');
+  return join(cwd, '.local', 'share', 'fonts');
+}
+
+/**
+ * Makes font files (the project's brand fonts) visible to EffectCraft runs in `cwd`. The isolated
+ * environment hides the fonts the user installed for themselves, so these are copied into the
+ * run's own per-user font folder; system-wide fonts stay visible as they are.
+ */
+export async function installRunFonts(
+  cwd: string,
+  files: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): Promise<void> {
+  if (!files.length) return;
+  const dir = runFontDir(cwd, platform);
+  await mkdir(dir, { recursive: true });
+  for (const [i, f] of files.entries()) await copyFile(f, join(dir, `tf${i}-${basename(f)}`));
 }
 
 /** One headless CLI call. Never uses `--gpu` (decision 7) and never a shell. */

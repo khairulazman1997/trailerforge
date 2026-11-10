@@ -62,6 +62,7 @@ import {
 } from '@trailerforge/schema';
 import { readFootageAnalysis } from '@trailerforge/analysis';
 import type { Engine } from './engine.js';
+import { brandFontsForEffectCraft } from './effectcraft-ops.js';
 import { deriveVariantOp } from './graphics-ops.js';
 import { OpError } from './ops.js';
 
@@ -135,6 +136,7 @@ async function motionItems(
   warnings: string[],
 ): Promise<{ items: MotionItem[]; swaps: Map<string, string> }> {
   const renderers = engine.plugins.registries.motionRenderers.list();
+  const fontFiles = (await brandFontsForEffectCraft(store)).files;
   const items: MotionItem[] = [];
   const swaps = new Map<string, string>();
   for (const track of timeline.tracks)
@@ -184,6 +186,7 @@ async function motionItems(
         duration: item.duration,
         resolution: timeline.resolution,
         frameRate: timeline.frameRate,
+        ...(fontFiles.length ? { fonts: fontFiles } : {}),
       };
       try {
         items.push({

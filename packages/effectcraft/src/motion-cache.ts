@@ -32,20 +32,12 @@ export function motionContentHash(o: {
   resolution: MotionRenderJob['resolution'];
   frameRate: MotionRenderJob['frameRate'];
   duration: number;
+  /** Content hashes of the font files the run is given; left out of the hash when there are none. */
+  fontSha256?: readonly string[];
 }): string {
-  return sha256(
-    canonicalJson([
-      'effectcraft',
-      'cpu',
-      o.version,
-      o.templateId,
-      o.sourceSha256,
-      o.params,
-      o.resolution,
-      o.frameRate,
-      o.duration,
-    ]),
-  );
+  const parts: unknown[] = ['effectcraft', 'cpu', o.version, o.templateId, o.sourceSha256, o.params, o.resolution, o.frameRate, o.duration]; // prettier-ignore
+  if (o.fontSha256?.length) parts.push({ fonts: o.fontSha256 });
+  return sha256(canonicalJson(parts));
 }
 
 export interface CachedMotionFrames {

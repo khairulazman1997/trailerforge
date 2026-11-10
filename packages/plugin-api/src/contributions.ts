@@ -197,6 +197,11 @@ export interface MotionRenderJob {
   resolution: z.infer<typeof Resolution>;
   frameRate: z.infer<typeof Rate>;
   /**
+   * Font files the drawing may use (the project's brand fonts), for renderers that do not see the
+   * user's own installed fonts. They count towards the render's fingerprint.
+   */
+  fonts?: string[];
+  /**
    * Folder for the frames: transparent RGBA PNGs `frame_%06d.png` from 0, plus a `SEQUENCE_DONE` marker
    * written last (the same layout as the built-in renderer's sequences). Renderers never write
    * video: the compiler encodes (plan decision M10-2).

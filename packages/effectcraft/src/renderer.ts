@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import type { Scene } from '@trailerforge/graphics';
 import type { MotionRenderJob, MotionRenderResult, MotionRenderer } from '@trailerforge/plugin-api';
 import { FLICKS_PER_SECOND, flicksPerFrame, type Rate } from '@trailerforge/schema';
-import { EffectCraftCli, EffectCraftError, type CliLocation } from './cli.js';
+import { EffectCraftCli, EffectCraftError, installRunFonts, type CliLocation } from './cli.js';
 import { compatProblem, describeCommands, untestedNote } from './compat.js';
 import { offeredEffectCommands } from './effect-spec.js';
 import { checkProjectFile, type ProjectHeader } from './project-file.js';
@@ -83,9 +83,13 @@ export class EffectCraftRenderer implements MotionRenderer {
   }
 
   /** Opens a `.ecproj` with the installed EffectCraft: it must be an EffectCraft project that loads cleanly. */
-  async checkFile(file: string, signal: AbortSignal): Promise<{ warnings: string[] }> {
+  async checkFile(
+    file: string,
+    signal: AbortSignal,
+    opts: { fonts?: readonly string[] } = {},
+  ): Promise<{ warnings: string[] }> {
     const cli = await this.ready();
-    return this.work(async (cwd) => {
+    return this.work(opts.fonts, async (cwd) => {
       const r = await checkProjectFile(cli, file, { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000, ...(await this.running()) }); // prettier-ignore
       return { warnings: r.warnings };
     });
@@ -127,7 +131,7 @@ export class EffectCraftRenderer implements MotionRenderer {
     let version: string | null;
     let commands: Set<string> | null;
     try {
-      [version, commands] = await this.work(async (cwd) => {
+      [version, commands] = await this.work(undefined, async (cwd) => {
         const v = await this.cli!.version({ cwd, timeoutMs: 30_000 });
         if (v === null) return [v, null] as const;
         this.listing = await this.cli!.commandList({ cwd, timeoutMs: 30_000 });
@@ -200,13 +204,20 @@ export class EffectCraftRenderer implements MotionRenderer {
       resolution: job.resolution,
       frameRate: job.frameRate,
       duration: job.duration,
+      fontSha256: await Promise.all(
+        (job.fonts ?? []).map(async (p) =>
+          createHash('sha256')
+            .update(await readFile(p))
+            .digest('hex'),
+        ),
+      ),
     });
   }
 
   async render(job: MotionRenderJob, signal: AbortSignal): Promise<MotionRenderResult> {
     const cli = await this.ready();
     const warnings: string[] = [];
-    return this.work(async (cwd) => {
+    return this.work(job.fonts, async (cwd) => {
       let source: string[];
       const run = { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000 };
       if (job.templateId === PROJECT_TEMPLATE_ID) {
@@ -271,10 +282,10 @@ export class EffectCraftRenderer implements MotionRenderer {
     commands: EcCommand[],
     dest: string,
     signal: AbortSignal,
-    opts: { base?: string } = {},
+    opts: { base?: string; fonts?: readonly string[] } = {},
   ): Promise<AuthoredProject> {
     const cli = await this.ready();
-    return this.work(async (cwd) => {
+    return this.work(opts.fonts, async (cwd) => {
       const run = { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000 };
       const tmp = join(cwd, 'project.ecproj');
       // With a base project (an imported example) the commands edit a copy of it.
@@ -316,7 +327,7 @@ export class EffectCraftRenderer implements MotionRenderer {
     o: { comp: Record<string, unknown> & { name: string; width: number; height: number }; layerName: string; scale: number }, // prettier-ignore
   ): Promise<AuthoredProject> {
     const cli = await this.ready();
-    return this.work(async (cwd) => {
+    return this.work(undefined, async (cwd) => {
       const run = { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000 };
       const tmp = join(cwd, 'project.ecproj');
       const r = await cli.run(['--empty', 'run', 'file.importLottie', JSON.stringify({ path: lottie }), '--save-as', tmp, '--json'], run); // prettier-ignore
@@ -424,12 +435,19 @@ export class EffectCraftRenderer implements MotionRenderer {
     return { dir: job.outDir, pattern: 'frame_%06d.png', frames, warnings };
   }
 
-  /** A run folder `ec-<pid>-<uuid>`, always removed afterwards; dead runs' folders are swept. */
-  private async work<T>(fn: (cwd: string) => Promise<T>): Promise<T> {
+  /**
+   * A run folder `ec-<pid>-<uuid>`, always removed afterwards; dead runs' folders are swept.
+   * `fonts` (font files) are made visible to every EffectCraft call in it.
+   */
+  private async work<T>(
+    fonts: readonly string[] | undefined,
+    fn: (cwd: string) => Promise<T>,
+  ): Promise<T> {
     await sweepWorkRoot(this.opts.workRoot);
     const cwd = join(this.opts.workRoot, `${WORK_PREFIX}${process.pid}-${randomUUID()}`);
     await mkdir(cwd, { recursive: true });
     try {
+      await installRunFonts(cwd, fonts ?? []);
       return await fn(cwd);
     } finally {
       await rm(cwd, { recursive: true, force: true });
