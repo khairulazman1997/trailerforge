@@ -201,6 +201,18 @@ describe('built-in templates', () => {
       expect(renderSvg(bg.scene, at)).toContain('preserveAspectRatio="xMidYMid slice"');
       expect(checkScene(bg.scene, bg.safe)).toEqual([]);
 
+      // Behind the text as it is: the picture, then the card's own layers, no shade.
+      const plain = build(t.id, HD, {
+        ...(SAMPLE[t.id] as object),
+        image,
+        imagePlacement: 'background-plain',
+      });
+      expect(plain.scene.layers[0]).toMatchObject({ kind: 'image', fit: 'cover' });
+      expect(plain.scene.layers[0]!.box).toEqual({ x: 0, y: 0, w: HD.width, h: HD.height });
+      expect(plain.scene.layers.some((l) => l.id === 'image-shade')).toBe(false);
+      expect(plain.scene.layers.length).toBe(bg.scene.layers.length - 1);
+      expect(checkScene(plain.scene, plain.safe)).toEqual([]);
+
       const above = build(t.id, HD, {
         ...(SAMPLE[t.id] as object),
         image,

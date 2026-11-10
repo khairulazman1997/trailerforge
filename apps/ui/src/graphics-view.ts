@@ -84,6 +84,7 @@ function isImageSchema(p: Record<string, unknown>): boolean {
 const CHOICE_LABELS: Record<string, Record<string, string>> = {
   imagePlacement: {
     background: 'Behind the text (darkened)',
+    'background-plain': 'Behind the text (not darkened)',
     above: 'Above the text',
     only: 'Picture only (no text)',
   },
