@@ -8,6 +8,37 @@ export interface ProjectHeader {
   schema: number;
 }
 
+/**
+ * The size of the composition `comp` in a project file's text (the `items` map's Comp entries),
+ * or null when the file has no such composition or another layout.
+ */
+export function projectCompSize(
+  text: string,
+  comp: string,
+): { width: number; height: number } | null {
+  try {
+    const items = (JSON.parse(text) as { items?: unknown }).items;
+    if (!items || typeof items !== 'object') return null;
+    for (const it of Object.values(items as Record<string, unknown>)) {
+      const o = it as {
+        name?: unknown;
+        kind?: { type?: unknown; width?: unknown; height?: unknown };
+      };
+      const k = o?.kind;
+      if (
+        o?.name === comp &&
+        k?.type === 'Comp' &&
+        typeof k.width === 'number' &&
+        typeof k.height === 'number'
+      )
+        return { width: k.width, height: k.height };
+    }
+  } catch {
+    /* not JSON: the project check reports it */
+  }
+  return null;
+}
+
 /** The `savedBy` and `schema` fields every `.ecproj` starts with. */
 export function readProjectHeader(text: string): ProjectHeader {
   let v: unknown;

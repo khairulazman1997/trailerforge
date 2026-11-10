@@ -17,7 +17,7 @@ import { FLICKS_PER_SECOND, flicksPerFrame, type Rate } from '@trailerforge/sche
 import { EffectCraftCli, EffectCraftError, installRunFonts, type CliLocation } from './cli.js';
 import { compatProblem, describeCommands, untestedNote } from './compat.js';
 import { offeredEffectCommands } from './effect-spec.js';
-import { checkProjectFile, type ProjectHeader } from './project-file.js';
+import { checkProjectFile, projectCompSize, type ProjectHeader } from './project-file.js';
 import { motionContentHash } from './motion-cache.js';
 import { chunkCommands, sceneCommands, type EcCommand } from './scene-commands.js';
 
@@ -219,6 +219,7 @@ export class EffectCraftRenderer implements MotionRenderer {
     const warnings: string[] = [];
     return this.work(job.fonts, async (cwd) => {
       let source: string[];
+      let scale = scaleFor(this.templateOf(job.templateId), job);
       const run = { cwd, signal, timeoutMs: this.opts.timeoutMs ?? 600_000 };
       if (job.templateId === PROJECT_TEMPLATE_ID) {
         const project = job.params.project;
@@ -228,6 +229,10 @@ export class EffectCraftRenderer implements MotionRenderer {
         );
         const comp = job.params.comp;
         source = [project, ...(typeof comp === 'string' ? ['--comp', comp] : [])];
+        // A project is drawn at its composition's size; a smaller job (a draft) scales it down.
+        const size =
+          typeof comp === 'string' ? projectCompSize(await readFile(project, 'utf8'), comp) : null;
+        if (size) scale = scaleFor({ size }, job);
       } else {
         const template = this.templateOf(job.templateId);
         if (!template) throw new Error(`EffectCraft has no template ${job.templateId}`);
@@ -235,14 +240,7 @@ export class EffectCraftRenderer implements MotionRenderer {
         await writeFile(values, JSON.stringify(valuesFor(template, job.params)));
         source = ['--template', template.file, '--values', values];
       }
-      return this.renderFrames(
-        cli,
-        source,
-        job,
-        run,
-        warnings,
-        scaleFor(this.templateOf(job.templateId), job),
-      );
+      return this.renderFrames(cli, source, job, run, warnings, scale);
     });
   }
 
